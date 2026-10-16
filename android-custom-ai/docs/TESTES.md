@@ -39,7 +39,8 @@ autenticação quando a resposta chegava perto de 5 s (teste de regressão `slow
 | Execução: 4 telas abrem, sem crash | ✅ | capturas em `docs/screenshots/android11-*.jpg`; logcat sem `FATAL` |
 | Configuração: salvar chave | ✅ armazenada só cifrada (`turboio_secrets_v1.xml` contém IV+ciphertext; o texto da chave não aparece) | `run-as … cat shared_prefs/…` |
 | Chamada ao provedor de dentro do app | ⚠️ o emulador deste sandbox não tem internet direta; o app mostrou corretamente “Sem internet ou servidor do provedor inacessível” | `android11-diag-ai.jpg` |
-| Android 16 (API 36) | ver seção abaixo | |
+| Android 16 (API 36), emulador | ⚠️ não concluído: sem KVM, o boot por emulação de CPU passou de 50 min e o watchdog reiniciou o `system_server` em ciclo; o app não chegou a ser instalado. **Teste em Android 16 real pendente** (seu Galaxy) | log do emulador |
+| Compatibilidade Android 15/16 (análise) | ✅ targetSdk 35 roda no Android 16; edge-to-edge forçado desativado pelo opt-out `windowOptOutEdgeToEdgeEnforcement` (válido para apps com target 35 também no Android 16), mantendo barra de ação, navegação inferior e teclado (`adjustResize`) como no Android 8–14; APIs BLE do Android 13+ (`writeCharacteristic/writeDescriptor` com `BluetoothStatusCodes`) já usadas | `themes.xml`, `AndroidBle.kt` |
 | Samsung Galaxy real | ⏳ | roteiro abaixo |
 
 Os emuladores deste ambiente não têm Bluetooth nem aceleração de hardware; servem para instalação/UI, não para BLE.
