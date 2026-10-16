@@ -1,0 +1,87 @@
+# Resultados dos testes e limitações
+
+Data: 2026-10-16 · Versão do app: 0.1.0-mvp (versionCode 1).
+
+Legenda: ✅ executado e aprovado · ⚠️ executado com ressalva · ⏳ pendente (depende de hardware) · ❌ reprovado.
+
+## Teste A — Ambiente de desenvolvimento
+
+| Item | Resultado | Evidência / como reproduzir |
+| --- | --- | --- |
+| Compilação (AGP 8.13.2, Kotlin 2.2.21, compileSdk/targetSdk 35, minSdk 26) | ✅ | `./gradlew assembleDebug` |
+| Lint Android | ✅ 0 erros (avisos cosméticos: i18n/KTX/versões) | `./gradlew lintDebug` |
+| Testes unitários | ✅ **58 testes** executados, 0 falhas (+ 3 testes de rede ao vivo, opcionais) | `./gradlew testDebugUnitTest` |
+| Protocolo = referência HarmonyOS | ✅ vetores de ouro + vetores gerados executando o TypeScript original (`tools/harmony-vectors.mjs`) | `HarmonyCrossTest`, `ProtocolTest` |
+| Referência HarmonyOS em si | ✅ 48 testes do `harmony-sdk` (protocolo, autenticação, voz) passam neste ambiente | `node --test harmony-sdk/tests/{protocol-codec,auth-calculations,guest-exchange,business-commands,version-exchange,voice-session,launcher-status}.test.mjs` |
+| Sessão BLE completa contra óculos emulados | ✅ handshake em 2 links, bond após prova, status/bateria, conta vinculada recusada, prova falsa recusada, troca de identidade bloqueada, reconexão automática, timeout | `GlassesSessionTest` |
+| Sem OTA | ✅ negócios 9 e 18 recusados; nenhuma string de OTA/firmware no DEX | `outboundPolicyAndDelivery`; `strings classes*.dex \| grep -ci fota` = 0 |
+| Decodificador Opus (microfone dos óculos) | ✅ SNR **205 dB** contra libopus 1.5.2 do repositório (praticamente bit-exato) | `OpusAndEndpointTest` + `tools/opus_reference.c` |
+| Rodada de voz (negócio 13) | ✅ sequência rc1 → áudio → rc2 → transcrição final → blocos ≤ 24 → EOF → saída, com áudio Opus sintético; sem áudio / só silêncio / “pode fechar” / saída pelos óculos | `VoiceAndLensTest` |
+| Display (negócio 19) | ✅ abrir → ack → páginas ≤ 90 → fechar; ausência de ack tratada | `VoiceAndLensTest` |
+| Provedores (formato) | ✅ OpenAI, Gemini, Anthropic, compatível: URL, cabeçalhos, corpo, parsing, truncamento, erros 401/429/503 | `ProviderTest` |
+| Provedores (rede real) | ✅ endpoints oficiais alcançados via TLS; chave inválida → OpenAI HTTP 401, Gemini HTTP 400 “API key not valid”, Anthropic HTTP 401 — mensagens pt-BR corretas | `RUN_LIVE_PROVIDER_TESTS=1 ./gradlew testDebugUnitTest --tests '*LiveProviderTest*'` |
+| Pergunta real em pt-BR com chave válida | ⏳ sem credenciais neste ambiente — rode o teste acima com `OPENAI_API_KEY`/`GEMINI_API_KEY`/`ANTHROPIC_API_KEY` | `LiveProviderTest` |
+| Tempo máximo de resposta | ✅ cancelamento em 5 s com servidor lento | `clientEnforcesTimeout` |
+| Segurança das credenciais | ✅ chave nunca no log/descrição da requisição/erro; redator cobre `Bearer`, `sk-`, `AIza`, `x-api-key`, `?key=`, MAC | `ProviderTest`, `DisplayTextTest.redactorMasksSecrets` |
+
+Bugs encontrados pelos testes e corrigidos antes da entrega: (1) transcrição parcial atrasada podia sobrescrever a resposta
+nas lentes (modo microfone do telefone); (2) o prazo da sonda de versão podia derrubar a conexão na pausa antes da
+autenticação quando a resposta chegava perto de 5 s (teste de regressão `slowButInTimeRepliesStillConnect` falha sem a correção);
+(3) constantes de status BLE do Android 13+ (`BluetoothStatusCodes`), apontadas pelo lint.
+
+## Teste B — Android
+
+| Item | Resultado | Evidência |
+| --- | --- | --- |
+| Integridade do APK | ✅ ver tabela abaixo | `sha256sum`, `apksigner verify --print-certs` |
+| Permissões | ✅ apenas as listadas em [PERMISSOES_E_RISCOS.md](PERMISSOES_E_RISCOS.md) | `aapt2 dump permissions` |
+| Instalação (emulador Android 11 / API 30, x86_64) | ✅ `adb install` → Success | — |
+| Execução: 4 telas abrem, sem crash | ✅ | capturas em `docs/screenshots/android11-*.jpg`; logcat sem `FATAL` |
+| Configuração: salvar chave | ✅ armazenada só cifrada (`turboio_secrets_v1.xml` contém IV+ciphertext; o texto da chave não aparece) | `run-as … cat shared_prefs/…` |
+| Chamada ao provedor de dentro do app | ⚠️ o emulador deste sandbox não tem internet direta; o app mostrou corretamente “Sem internet ou servidor do provedor inacessível” | `android11-diag-ai.jpg` |
+| Android 16 (API 36) | ver seção abaixo | |
+| Samsung Galaxy real | ⏳ | roteiro abaixo |
+
+Os emuladores deste ambiente não têm Bluetooth nem aceleração de hardware; servem para instalação/UI, não para BLE.
+
+## Teste C — RayNeo iO (hardware real)
+
+**Status: ⏳ NÃO executado — não aprovado.** Não há óculos neste ambiente. Nenhuma afirmação de funcionamento nas lentes é
+feita sem evidência em hardware.
+
+### Roteiro para executar no seu aparelho
+
+Ative “Copiar log” na aba Diagnóstico após cada etapa e guarde o texto (não contém chaves/endereços).
+
+| # | Passo | Critério de aprovação |
+| --- | --- | --- |
+| C1 | Desvincular no app oficial, esquecer no Bluetooth, modo pareamento, **Procurar óculos** | o RayNeo aparece (de preferência “serviço RayNeo”) |
+| C2 | Selecionar → aguardar | fases Conectando → Autenticando → Pareando (aceitar diálogo) → Inicializando → **Conectado**, bateria exibida |
+| C3 | Diagnóstico → **Teste BLE** | “✓ Óculos responderam” |
+| C4 | Testes → **Enviar texto de teste** | o texto aparece nas lentes; anotar se acentos aparecem (senão ativar “Remover acentos”) |
+| C5 | Testes → pergunta “Qual é a capital do Brasil?” → **Executar** → **Transmitir** | resposta em português nas lentes, paginada |
+| C6 | Voz (Android nativo): acionar o assistente nos óculos e falar | transcrição e resposta aparecem nas lentes |
+| C7 | Voz (OpenAI/Google, microfone dos óculos) | contador “Áudio dos óculos: N pacotes” sobe; resposta nas lentes |
+| C8 | Estabilidade: tela desligada 15 min com serviço ativo; afastar/aproximar | reconexão automática, sem travar |
+| C9 | Reversão ([REVERSAO.md](REVERSAO.md)) e revinculação no app oficial | app oficial volta a funcionar |
+
+Em caso de falha em C2, o campo “motivo” do Diagnóstico identifica a etapa (`account-bound-peer`, `version-timeout`,
+`proof-mismatch`, `service-missing`, `system-pair-failed`, `status-timeout`…).
+
+## APK de teste
+
+| Campo | Valor |
+| --- | --- |
+| Arquivo | `TurboIO-CustomAI-0.1.0-mvp-debug.apk` |
+| SHA-256 | ver `TurboIO-CustomAI-0.1.0-mvp-debug.apk.sha256` publicado junto |
+| Assinatura | certificado *Android Debug* (APK de teste; não é build de loja) |
+| Pacote / alvo | `org.turboio.customai`, minSdk 26, targetSdk 35 |
+| Conteúdo proprietário | nenhum (sem `.so`, sem classes/recursos RayNeo) |
+
+## Limitações conhecidas
+
+* Compatibilidade do handshake com **Strix OS 1.0.5.5** não comprovada (Teste C).
+* Um cliente por vez: o app oficial precisa estar desvinculado enquanto este app é usado.
+* VAD por energia no microfone dos óculos (limiar 450 RMS) pode precisar de ajuste.
+* Reconhecimento pelo microfone do telefone com o app em segundo plano depende do serviço de voz do sistema.
+* Sem streaming de resposta; textos longos são cortados em ~600 caracteres nas lentes (completos no telefone).

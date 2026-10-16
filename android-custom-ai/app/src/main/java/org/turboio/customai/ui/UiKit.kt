@@ -73,7 +73,10 @@ class Column(val context: Context) {
                 else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             }
             if (multiline) { minLines = 3; maxLines = 12; isSingleLine = false }
-            if (password) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+            if (password) {
+                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+                typeface = Typeface.DEFAULT // password inputType switches to monospace otherwise
+            }
         }
         layout.addView(edit)
         add(layout)
