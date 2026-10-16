@@ -16,6 +16,10 @@ The root PolyForm Noncommercial 1.0.0 license covers original Turbo IO material 
 
 Before publication, check the actual dependency inventory and retain each supplied component's original notices. The presence of a component in a local development environment is not recorded here as a license grant. IPA/App distribution, signing certificates, private service credentials and user data are outside this source release.
 
+## Android custom AI (`android-custom-ai/`)
+
+The independent Android client is original Kotlin code (a port of the `harmony-sdk/turbo_core` protocol) and contains no RayNeo application, SDK or firmware component. Gradle resolves these third-party libraries at build time; they keep their own licenses: AndroidX Core/AppCompat/Fragment/Lifecycle and Material Components for Android (Apache-2.0), kotlinx-coroutines (Apache-2.0), Concentus 1.0.2 pure-Java Opus decoder (BSD-3-Clause, derived from libopus), and, for unit tests only, JUnit 4 (EPL-1.0) and org.json (public domain). The Gradle wrapper is Apache-2.0. The test fixture `opus-reference.json` is generated with the vendored Opus 1.5.2 source (BSD-3-Clause) by `android-custom-ai/tools/opus_reference.c`.
+
 ## Experimental Strix OS 1.0.4.12 firmware artifacts
 
 The `firmware-strix-1.0.4.12-turbophoto-r3` prerelease contains an experimental modified OTA archive, its AP image, and a locally repacked original-content baseline. Original firmware code, libraries, and resources remain copyrighted by RayNeo, Bestechnic, and their respective rights holders. These binaries are not original firmware source code and are not relicensed under the repository's PolyForm license. No official endorsement or guaranteed recovery is implied. Original research code follows the repository license. The embedded Turbo portrait was explicitly authorized for publication by its owner.

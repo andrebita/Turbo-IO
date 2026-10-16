@@ -1,0 +1,125 @@
+{
+ "frames": [
+  {
+   "packet": {
+    "messageNumber": 4660,
+    "flags": 0,
+    "address": null,
+    "slices": "",
+    "businessID": 42,
+    "payload": "0102fe"
+   },
+   "encoded": "aa5500071234002a0102fe7ed3"
+  },
+  {
+   "packet": {
+    "messageNumber": 48879,
+    "flags": 2,
+    "address": 33,
+    "slices": "a0b0c0",
+    "businessID": 225,
+    "payload": "00ff55"
+   },
+   "encoded": "aa55000bbeef6221a0b0c0e100ff552816"
+  },
+  {
+   "packet": {
+    "messageNumber": 7,
+    "flags": 0,
+    "address": null,
+    "slices": "",
+    "businessID": 13,
+    "payload": "080110021a087b227263223a317d"
+   },
+   "encoded": "aa5500120007000d080110021a087b227263223a317d605e"
+  }
+ ],
+ "guestProof": "481bb79704a8523c1e86ae93cfb2bd7204b76984d2d2c3684799d70b58839c84",
+ "peerProof": "164e40978bcc1ebb99c575f1b128c7886ecf8fc065c949e753e7d873a0420aee",
+ "guestSessionKey": "2609dc2dadbf4726c0b251b77c233016a23a2fdf63b91877b6f6f8dce974fcec",
+ "authRequest": "18002a10000401020304110020481bb79704a8523c1e86ae93cfb2bd7204b76984d2d2c3684799d70b58839c84",
+ "versionRequest": "11003110000101110006001122334455120008547572626f20494f1300010216000773616d73756e67170008534d2d5339323142",
+ "generalStatusQuery": "080110011a497b22636d64223a22726571756573745f67656e6572616c5f737461747573222c227061796c6f6164223a7b2264617461223a22222c226d6f6465223a302c2276616c7565223a307d7d2200",
+ "envelopes": [
+  {
+   "type": 2,
+   "json": "{\"rc\":1}",
+   "sequence": 0,
+   "encoded": "080110021a087b227263223a317d"
+  },
+  {
+   "type": 32,
+   "json": "{\"a\":1}",
+   "sequence": 1001,
+   "encoded": "080110201a077b2261223a317d28e907"
+  },
+  {
+   "type": 300,
+   "json": "{\"x\":\"yy\"}",
+   "sequence": 2147483647,
+   "encoded": "080110ac021a0a7b2278223a227979227d28ffffffff07"
+  }
+ ],
+ "displayStart": "{\"sid\":\"0123456789abcdef0123456789abcdef\",\"force\":false,\"scope\":\"temporary\",\"config\":{\"font_size\":2,\"content_width\":100,\"max_lines\":5,\"position\":\"center\",\"is_display\":true,\"straight_view\":\"original\"}}",
+ "displayText": [
+  {
+   "text": "Olá, mundo! Ação e coração.",
+   "json": "{\"sid\":\"0123456789abcdef0123456789abcdef\",\"mode\":3,\"status\":0,\"content\":{\"source_transcript\":\"Olá, mundo! Ação e coração.\"}}"
+  },
+  {
+   "text": "Linha 1\nLinha \"2\" \\ fim",
+   "json": "{\"sid\":\"0123456789abcdef0123456789abcdef\",\"mode\":3,\"status\":0,\"content\":{\"source_transcript\":\"Linha 1\\nLinha \\\"2\\\" \\\\ fim\"}}"
+  },
+  {
+   "text": "emoji 😀 ok",
+   "json": "{\"sid\":\"0123456789abcdef0123456789abcdef\",\"mode\":3,\"status\":0,\"content\":{\"source_transcript\":\"emoji 😀 ok\"}}"
+  },
+  {
+   "text": "Café",
+   "json": "{\"sid\":\"0123456789abcdef0123456789abcdef\",\"mode\":3,\"status\":0,\"content\":{\"source_transcript\":\"Café\"}}"
+  },
+  {
+   "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "json": "{\"sid\":\"0123456789abcdef0123456789abcdef\",\"mode\":3,\"status\":0,\"content\":{\"source_transcript\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}"
+  }
+ ],
+ "displayStop": "{\"sid\":\"0123456789abcdef0123456789abcdef\",\"reason_code\":10,\"text\":\"\"}",
+ "transcript": [
+  {
+   "text": "Olá, mundo! Ação e coração.",
+   "json": "{\"text\":\"Olá, mundo! Ação e coração.\",\"final\":true}"
+  },
+  {
+   "text": "Linha 1\nLinha \"2\" \\ fim",
+   "json": "{\"text\":\"Linha 1\\nLinha \\\"2\\\" \\\\ fim\",\"final\":true}"
+  },
+  {
+   "text": "emoji 😀 ok",
+   "json": "{\"text\":\"emoji 😀 ok\",\"final\":true}"
+  },
+  {
+   "text": "Café",
+   "json": "{\"text\":\"Café\",\"final\":true}"
+  }
+ ],
+ "answerChunk": "{\"sub\":\"workflow\",\"vendor\":\"turboio\",\"uuid\":\"0123456789abcdef0123456789abcdef\",\"sid\":\"0123456789abcdef0123456789abcdef\",\"round\":-1,\"timestamp\":1700000000123,\"query\":\"Qual é a capital\",\"domain\":\"chat\",\"intent\":\"chat\",\"payload\":{},\"offline\":false,\"answer\":{\"text\":\"Resposta curta: ação!\",\"isFinal\":false}}",
+ "chunks": [
+  {
+   "text": "Olá 😀 mundo, tudo bem com você? 😀😀",
+   "limit": 24,
+   "out": [
+    "Olá 😀 mundo, tudo bem c",
+    "om você? 😀😀"
+   ]
+  },
+  {
+   "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "limit": 24,
+   "out": [
+    "xxxxxxxxxxxxxxxxxxxxxxxx",
+    "xxxxxxxxxxxxxxxxxxxxxxxx",
+    "xx"
+   ]
+  }
+ ]
+}

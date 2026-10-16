@@ -14,6 +14,8 @@
 
 **[Android APK / 固件下载](https://github.com/Turbo1123/Turbo-IO/releases/tag/android-105-guard07-tap1-test01) · [Android 安装与刷机](android-addon/docs/INSTALL_AND_FLASH.md) · [iOS 源码与构建](official-addon/README.md) · [☕ 自愿支持项目](#support)**
 
+**Android 独立客户端 · 原厂固件 · 自有 AI（pt-BR 文档）：[android-custom-ai](android-custom-ai/README.md)**。基于鸿蒙 `turbo_core` 协议移植的 Kotlin 应用，不刷固件、不修改官方 APK、无 OTA 代码；单元测试/构建已通过，**RayNeo iO + Strix OS 1.0.5.5 真机验收待完成**。
+
 ## 使用前必读
 
 - **小白不要刷，日常使用请保留官方固件。** 本轮新增的眼镜端原生应用、自定义图形仪表盘与小应用运行时，都需要对应的实验固件；仅安装手机插件不会把这些能力加进原厂固件。已有模型接入、部分字幕等手机侧功能不因此要求刷机。已有匹配运行时后，导入兼容卡片/应用包不必每次重刷。

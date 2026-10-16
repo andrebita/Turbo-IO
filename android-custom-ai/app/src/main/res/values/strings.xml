@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Turbo IO IA</string>
+    <string name="tab_connection">Conexão</string>
+    <string name="tab_ai">IA</string>
+    <string name="tab_test">Testes</string>
+    <string name="tab_diag">Diagnóstico</string>
+</resources>
