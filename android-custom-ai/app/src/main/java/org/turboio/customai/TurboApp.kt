@@ -62,6 +62,8 @@ class TurboApp : Application() {
     lateinit var nativeNotifier: org.turboio.customai.device.NativeNotifier; private set
     lateinit var weather: org.turboio.customai.device.GlassesWeather; private set
     lateinit var teleprompter: org.turboio.customai.device.Teleprompter; private set
+    lateinit var dashboard: org.turboio.customai.device.Dashboard; private set
+    lateinit var suggestions: org.turboio.customai.device.SuggestionCards; private set
     val mirrorPolicy by lazy { org.turboio.customai.device.MirrorPolicy(packageName, { settings.mirrorApps }, { settings.navOn }) }
     val probeFiles by lazy { org.turboio.customai.probe.ProbeFiles(this) }
     lateinit var scope: CoroutineScope; private set
@@ -101,6 +103,9 @@ class TurboApp : Application() {
         glassesSettings = org.turboio.customai.device.GlassesSettings(session, scope, settings.originalGlassesSettings)
         nativeNotifier = org.turboio.customai.device.NativeNotifier(session, scope, random)
         weather = org.turboio.customai.device.GlassesWeather(session)
+        dashboard = org.turboio.customai.device.Dashboard(session, random)
+        suggestions = org.turboio.customai.device.SuggestionCards(session, random)
+        nativeNotifier.suggestionListener = suggestions::onAnswer
         teleprompter = org.turboio.customai.device.Teleprompter(session, scope, random, busy = {
             when {
                 voice.busy -> "O assistente de voz está em uso"
@@ -341,7 +346,31 @@ class TurboApp : Application() {
     }
 
     /** Pending items changed somewhere (screen, voice, notification, analysis): mirror to the glasses' To-do. */
-    fun memoryChanged() { runCatching { glassesTodo.sync() } }
+    fun memoryChanged() {
+        runCatching { glassesTodo.sync() }
+        if (settings.dashboardCard && session.isReady) scope.launch { refreshDashboardCard() }
+    }
+
+    @Volatile private var lastCard = ""
+    @Volatile private var lastCardAt = 0L
+
+    suspend fun dashboardCardText(): String = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val open = memoryStore.openItems()
+        val next = open.firstOrNull { it.dueAt != null && it.dueAt >= now - 3600_000L }
+        org.turboio.customai.device.DashboardWire.summary(open.size, next?.dueAt, next?.text.orEmpty(), now)
+    }
+
+    /** Re-installs the dashboard card only when its text changed, at most every 2 minutes unless [force]. */
+    suspend fun refreshDashboardCard(force: Boolean = false): String {
+        val text = dashboardCardText()
+        val now = System.currentTimeMillis()
+        if (!force && (text == lastCard || now - lastCardAt < 120_000)) return "Cartão já atualizado"
+        lastCardAt = now
+        val outcome = dashboard.showCard(text)
+        if (outcome.startsWith("Cartão no painel")) lastCard = text
+        return "\"$text\": $outcome"
+    }
 
     /** Ids of the last numbered list read out (for "marca a 2 como feita"). */
     @Volatile var lastListed: List<Long> = emptyList()

@@ -41,10 +41,34 @@ grava firmware.
   nas lentes.
 * Qualquer outro comando, valor ou campo é recusado pela regra de envio e coberto por testes.
 
-## 3. O que não dá
+## 3. Painel dos óculos (negócio 15/18) — experimental
 
-* **Tipo de painel (dashboard)**: há leitura (`dashboard_config`) e símbolos no firmware (`applySimpleMode`,
-  `processSetDashboardMode`), mas o comando de troca não aparece em nenhum cliente. Para trocar, use o app oficial.
-* **Cartões próprios no painel** (`widget_install`): exigem regravar a configuração inteira do painel ou têm formato
-  validado só em pesquisa. Ficam fora por segurança. O widget **To-do** nativo, se estiver no seu painel, mostra as
-  pendências enviadas no item 1.
+Conexão → “Painel dos óculos”. Toda mudança segue: **ler → mudar só o pedido → ler de novo e comparar**. Se algo não
+confere, o app para e avisa (não repete).
+
+| Ação | Comando | O que muda |
+| --- | --- | --- |
+| Ler painel | `dashboard_config` | nada; mostra os cartões e o tipo |
+| Mostrar cartão | `widget_install` (cartão de texto `turbo_ui_io`, até 20 caracteres) | só o cartão deste app |
+| Remover cartão | `widget_uninstall` | só o cartão deste app |
+| Painel simples / completo | `dashboard_update` com a configuração lida e só `simple_mode` trocado | o tipo do painel |
+| Restaurar tipo | idem, com o valor lido antes da primeira mudança | volta ao original |
+
+* O cartão mostra, por exemplo, “3 pend · 15:00 Ligar” e pode ser atualizado sozinho quando as pendências mudam (no
+  máximo a cada 2 minutos, só se o texto mudar).
+* Se já houver no painel um cartão com o mesmo id que não seja deste app, nada é alterado.
+* Evidência: cartão de texto visto na lente com o cliente HarmonyOS; fluxo ler → mudar → reler do add-on do app
+  oficial. A troca de tipo é **hipótese**: o firmware tem `applySimpleMode` e a configuração traz `simple_mode`, mas
+  nenhum cliente trocou esse campo. Se os óculos aceitarem e a releitura não mudar, o app avisa.
+
+## 4. Cartões de aceno (negócio 21/33–35) — experimental
+
+Diário → Pendências → Configurações: “Confirmar pendências novas nos óculos”. Para cada pendência achada nas conversas
+(até 3 por vez), os óculos mostram “Anotar pendência?”. **Acenar** mantém; **balançar** descarta; sem resposta em 30 s,
+a pendência fica. O cartão é removido depois, e a resposta é confirmada aos óculos (21/35). Formato da página de teste
+do cliente iOS; não confirmado nos seus óculos.
+
+## 5. O que não dá
+
+* **Ordem dos cartões do painel**: possível com `dashboard_update`, mas fica fora para não mexer no que é seu.
+* **Desligar “Hey RayNeo”** pelo app: o comando de desligar não é conhecido. Use o app oficial.

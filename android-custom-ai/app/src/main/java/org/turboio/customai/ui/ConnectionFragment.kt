@@ -119,6 +119,28 @@ class ConnectionFragment : Fragment() {
             }
         }
         c.hint("Dados do Open-Meteo (grátis, sem chave). O ícone segue a numeração usada pelos outros clientes; confira nas lentes se combina com o tempo.")
+        c.title("Painel dos óculos (experimental)")
+        c.hint("Lê o painel, muda só o que você pedir e lê de novo para conferir. O cartão do app tem até 20 caracteres " +
+            "(ex.: “3 pend · 15:00 Ligar”). O tipo de painel é trocado reenviando a configuração lida com simple_mode alterado.")
+        lateinit var boardStatus: TextView
+        fun board(action: suspend () -> String) {
+            boardStatus.text = "Aguardando os óculos…"
+            viewLifecycleOwner.lifecycleScope.launch { boardStatus.text = action() }
+        }
+        c.buttons("Ler painel" to { board { app.dashboard.read().let { (snap, why) -> snap?.describe() ?: why } } },
+            "Mostrar cartão" to { board { app.refreshDashboardCard(force = true) } },
+            "Remover cartão" to { board { app.dashboard.removeCard() } })
+        c.switch("Atualizar o cartão quando as pendências mudarem", app.settings.dashboardCard) { on ->
+            app.settings.dashboardCard = on; if (on) app.memoryChanged()
+        }
+        c.buttons("Painel simples" to { board { app.dashboard.setSimpleMode(true) { if (app.settings.dashboardSimpleOriginal == null) app.settings.dashboardSimpleOriginal = it } } },
+            "Painel completo" to { board { app.dashboard.setSimpleMode(false) { if (app.settings.dashboardSimpleOriginal == null) app.settings.dashboardSimpleOriginal = it } } },
+            "Restaurar tipo" to {
+                val original = app.settings.dashboardSimpleOriginal
+                if (original == null) done("O app ainda não mudou o tipo do painel")
+                else board { app.dashboard.setSimpleMode(original).also { r -> if (r.startsWith("Painel agora") || r.startsWith("O painel já")) app.settings.dashboardSimpleOriginal = null } }
+            })
+        boardStatus = c.text(size = 13f)
         c.title("“Hey RayNeo”")
         c.hint("Liga a palavra de ativação com o mesmo comando do app oficial. Ao dizer “Hey RayNeo”, o assistente dos óculos " +
             "é atendido por este app (com a sua IA). Não há comando conhecido para desligar pelo app: use o menu dos óculos ou o app oficial.")

@@ -69,15 +69,16 @@ class MemoryWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val today = Days.of(now)
         return try {
             val run = app.memory.process(listOf(Days.shift(today, -1), today), now)
-            if (run.newItems.isNotEmpty()) {
+            val fresh = confirmOnGlasses(app, s, run.newItems, now)
+            if (fresh.isNotEmpty()) {
                 val q = app.memoryQueries
-                val text = run.newItems.take(5).joinToString("\n") { "• " + q.line(it, now) }
-                val single = run.newItems.singleOrNull()
+                val text = fresh.take(5).joinToString("\n") { "• " + q.line(it, now) }
+                val single = fresh.singleOrNull()
                 if (s.notifyNew) MemoryNotifier.show(app, "memory_new", "Novas pendências", 7400,
                     if (single != null) "Nova pendência" else "${run.newItems.size} novas pendências", text,
                     actions = if (single == null) emptyList() else listOf(MemoryNotifier.Action("Feita", ItemActionReceiver.DONE, single.id),
                         MemoryNotifier.Action("Descartar", ItemActionReceiver.DISMISS, single.id)))
-                if (s.lensNew) MemoryNotifier.lens(app, run.newItems.take(2).joinToString("; ") { q.line(it, now) }, "Anotado")
+                if (s.lensNew) MemoryNotifier.lens(app, fresh.take(2).joinToString("; ") { q.line(it, now) }, "Anotado")
             }
             Reminders.sync(app)
             app.memoryChanged()
@@ -86,6 +87,19 @@ class MemoryWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             DiagnosticLog.w("MEMORIA", "análise falhou: ${TurboApp.friendly(e)}")
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
+    }
+
+    /** Nod = keep, shake = discard (up to 3 cards, one at a time); unanswered items are kept. */
+    private suspend fun confirmOnGlasses(app: TurboApp, s: MemorySettings, items: List<Item>, now: Long): List<Item> {
+        if (!s.nodConfirm || items.isEmpty() || !app.session.isReady) return items
+        val kept = ArrayList<Item>()
+        items.forEachIndexed { i, item ->
+            if (i >= 3) { kept.add(item); return@forEachIndexed }
+            val answer = app.suggestions.ask("Anotar pendência?", app.memoryQueries.line(item, now), "Memória")
+            if (answer == org.turboio.customai.device.SuggestionCards.Answer.NO) app.memoryStore.setStatus(item.id, ItemStatus.DISMISSED, System.currentTimeMillis(), "recusada nos óculos")
+            else kept.add(item)
+        }
+        return kept
     }
 
     companion object {

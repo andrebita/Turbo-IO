@@ -78,15 +78,31 @@ app:    após 12–45 s: type2 {"rc":2}, type7 {"rc":1} (saída)
 `type7` abrir sessão temporária (`sid` aleatório) → aguarda `type8` com `code` 1/2 (10 s) → páginas `type5` (≤ 90 caracteres,
 intervalo configurável) → `type3` encerrar. `type3`/`type4` vindos dos óculos interrompem.
 
+## Teleprompter (negócios 20 e 18)
+
+20/2 preparar (`did` UUID, total, checksum FNV-1a) → óculos 20/2 código 1 → 18 informação do arquivo (MD5) → óculos pedem
+pedaços (18/3 → 18/4) → 18/5 sucesso + 20/2 código 7 → pronto → 20/3 iniciar, 20/4 pausar, 20/5 continuar, 20/7
+velocidade (cada um espera a confirmação igual) → 20/6 sair (cancela o arquivo antes). Prazos: 30 s preparo, 2 min
+transferência, 10 s comando.
+
+## Painel (15/18 com sequência)
+
+Pedidos com `sequence` aleatória e campo 6 = 1 (como o app oficial); resposta 15/19 com a mesma sequência. Fluxo:
+ler `dashboard_config` → `widget_install`/`widget_uninstall` ou `dashboard_update` → ler de novo e comparar.
+
 ## Segurança
 
-* **Sem OTA:** negócios 9 (MARS_FOTA) e 18 (transferência de arquivos) não existem no código de envio. A allow-list
-  `Business.OUTBOUND` só permite 13/{2,5,7,12,32,162,166,168}, 14/{1,4,8,9,11,14}, 15/{1,4,5,20}, 19/{3,5,7} e 22/{2}.
+* **Sem OTA:** o negócio 9 (MARS_FOTA) não existe no código de envio. A allow-list `Business.OUTBOUND` permite:
+  13/{2,5,7,12,32,162,166,168}, 14/{1,4,8,9,11,14}, 15/{1,4,5,16,18,20}, 19/{3,5,7}, 20/{2–8}, 21/{2,18,33,35} e 22/{2}.
   Há ainda uma segunda trava no conteúdo (`contentAllowed`):
-  * 15/20 só aceita os comandos do LifeLog;
-  * 15/4 só aceita a leitura de ajustes;
+  * 15/20 só aceita os comandos do LifeLog; 15/4 só a leitura de ajustes; 15/16 só o comando exato de ligar “Hey RayNeo”;
   * 15/5 só aceita `display_config` e `crown_config`, com os valores observados no app oficial;
-  * 22/2 só aceita uma pendência por mensagem.
+  * 15/18 só aceita tempo, leitura do painel, instalar/remover cartão `turbo_ui_*` e atualização do painel com `widgets_v2`;
+  * 21 só aceita cartão de notificação deste app, a chave geral e cartões de aceno com limites de tamanho;
+  * 20 exige id de sessão UUID; 22/2 só aceita uma pendência por mensagem.
+* **Negócio 18 (arquivo):** não usa envelopes e só passa por `GlassesSession.sendFile`, aberto apenas durante uma
+  sessão de teleprompter (`fileLease`) e filtrado por `FileTransfer.outboundProblem` (tipos 1, 4 e 6; nome = id da
+  sessão; ≤ 48 KB). Mensagens maiores que uma escrita BLE vão como um quadro dividido em escritas seguidas.
 
   Testes automatizados comprovam as recusas.
 * **Chaves de API:** cifradas no Android Keystore; nunca em código-fonte, `BuildConfig`, log, backup (`allowBackup=false`,

@@ -123,6 +123,8 @@ class MemoryViews(private val context: Context, private val scope: () -> Lifecyc
         pending.switch("Enviar pendências ao app To-do dos óculos (experimental)", s.glassesTodo) { v -> save { it.copy(glassesTodo = v) }; if (v) app.memoryChanged() }
         pending.hint("Com os óculos conectados, as pendências abertas (até 30) aparecem no To-do nativo dos óculos e no widget do painel, " +
             "se ele estiver no seu painel. Concluir lá conclui aqui. Não há como apagar itens pelo Bluetooth: concluídas e descartadas são marcadas como feitas.")
+        pending.switch("Confirmar pendências novas nos óculos (acenar = sim, balançar = não; experimental)", s.nodConfirm) { v -> save { it.copy(nodConfirm = v) } }
+        pending.hint("Para cada pendência achada nas conversas (até 3 por vez), os óculos mostram um cartão. Sem resposta em 30 s, a pendência fica.")
         pending.switch("Lembrete antes do prazo (notificação e lentes)", s.reminders) { v -> save { it.copy(reminders = v) } }
         pending.switch("Resumo da manhã", s.morning) { v -> save { it.copy(morning = v) } }
         val morning = pending.field("Horário do resumo da manhã (HH:MM)", "%02d:%02d".format(s.morningHour, s.morningMinute))

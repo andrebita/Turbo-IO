@@ -114,9 +114,14 @@ class GlassesSession(
         if (reason != null) { DiagnosticLog.w(tag, "arquivo recusado: $reason"); done(reason); return@post }
         val frame = FrameCodec.encode(FramePacket(messageNumber, 0, null, ByteArray(0), Business.FILE, payload))
         messageNumber = (messageNumber + 1) and 0xffff
+        enqueueSplit(frame, 128, done)
+    }
+
+    /** One frame across consecutive ATT writes, queued together; a failed part drops the rest of that frame. */
+    private fun enqueueSplit(frame: ByteArray, maxParts: Int, done: (String?) -> Unit) {
         val size = status.mtu - 3
         val parts = (0 until frame.size step size).map { frame.copyOfRange(it, minOf(frame.size, it + size)) }
-        if (parts.size > 128 || txQueue.size + parts.size > 200) { done("Arquivo grande demais para o MTU atual (${status.mtu})"); return@post }
+        if (parts.size > maxParts || txQueue.size + parts.size > 200) { done("Conteúdo grande demais para o MTU atual (${status.mtu})"); return }
         val group = Any(); var failed = false
         parts.forEachIndexed { i, part ->
             val partDone: (String?) -> Unit = partDone@{ error ->
@@ -181,7 +186,11 @@ class GlassesSession(
         if (reason != null) { DiagnosticLog.w(tag, "envio recusado business=$business: $reason"); done(reason); return@post }
         val frame = FrameCodec.encode(FramePacket(messageNumber, 0, null, ByteArray(0), business, envelope))
         messageNumber = (messageNumber + 1) and 0xffff
-        if (frame.size > status.mtu - 3) { done("Conteúdo excede o quadro BLE atual (MTU ${status.mtu}); encurte o texto"); return@post }
+        if (frame.size > status.mtu - 3) {
+            // Home-screen configuration (15/18, e.g. a dashboard snapshot) may exceed one write: split like file frames.
+            if (business == Business.LAUNCHER && EnvelopeCodec.decode(envelope).type == 18) { enqueueSplit(frame, 16, done); return@post }
+            done("Conteúdo excede o quadro BLE atual (MTU ${status.mtu}); encurte o texto"); return@post
+        }
         if (txQueue.size >= 32) { done("Fila de envio cheia; tente novamente"); return@post }
         txQueue.addLast(Pending(frame, done))
         pump()

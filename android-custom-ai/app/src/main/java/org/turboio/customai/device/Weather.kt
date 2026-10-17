@@ -19,7 +19,9 @@ import org.turboio.customai.TurboApp
 import org.turboio.customai.ble.BusinessListener
 import org.turboio.customai.ble.GlassesPort
 import org.turboio.customai.diag.DiagnosticLog
-import org.turboio.customai.display.sendEnvelope
+import kotlinx.coroutines.suspendCancellableCoroutine
+import org.turboio.customai.protocol.EnvelopeCodec
+import kotlin.coroutines.resume
 import org.turboio.customai.protocol.Business
 import org.turboio.customai.protocol.Envelope
 import org.turboio.customai.protocol.Json
@@ -94,7 +96,11 @@ class GlassesWeather(private val port: GlassesPort) : BusinessListener {
         if (!port.isReady) return "Conecte os óculos"
         val icon = WeatherWire.icon(w.wmo, w.isDay)
         val waiter = CompletableDeferred<Int>().also { reply = it }
-        port.sendEnvelope(Business.LAUNCHER, 18, WeatherWire.update(w.location, w.temp, icon, now / 1000))?.let { reply = null; return "Falha ao enviar: $it" }
+        // Sequenced request (mode 1), as the official app does for launcher 15/18, so the 15/19 answer is correlated.
+        val seq = 0x40000000L + (now and 0x3fffffffL)
+        val bytes = EnvelopeCodec.encode(18, WeatherWire.update(w.location, w.temp, icon, now / 1000), seq, 1)
+        val error = suspendCancellableCoroutine<String?> { cont -> port.send(Business.LAUNCHER, bytes) { e -> if (cont.isActive) cont.resume(e) } }
+        if (error != null) { reply = null; return "Falha ao enviar: $error" }
         val value = withTimeoutOrNull(8000) { waiter.await() }
         reply = null
         val text = "${w.location} ${w.temp}° (código ${w.wmo} → ícone $icon): " +

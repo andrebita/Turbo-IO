@@ -15,6 +15,9 @@ Nada deste app altera o firmware, o app oficial ou dados de outros apps. Reverte
    deixa nos óculos a marca de “LifeLog configurado no telefone” (`life_log_guide`); desligar a opção a remove.
    (“Apagar todos os dados deste app” também a remove, se os óculos estiverem conectados.) Sem isso, o menu dos
    óculos ligaria o LifeLog sem nenhum app para receber o áudio; o próprio app oficial redefine essa marca.
+0b. Com os óculos conectados, se usou: **Conexão → Painel → Remover cartão** e **Restaurar tipo**; **Ajustes →
+   Restaurar ajustes originais**. Itens enviados ao To-do dos óculos ficam lá (não há como apagar pelo Bluetooth);
+   apague pelo app oficial se quiser. “Hey RayNeo” e a chave geral de notificações se desligam pelo app oficial.
 1. (Opcional) **Diagnóstico → Apagar todos os dados deste app** — remove chaves de API, configurações e óculos salvo.
 2. Execute os passos 2–4 acima, se quiser voltar ao app oficial.
 3. Android → Configurações → Apps → **Turbo IO IA → Desinstalar** (ou `adb uninstall org.turboio.customai`).

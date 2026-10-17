@@ -24,7 +24,8 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 | [docs/DESIGN_DIARIO_E_GRAVACAO.md](docs/DESIGN_DIARIO_E_GRAVACAO.md) | Arquitetura do diário, insights, gravação ambiente e sondas |
 | [docs/MEMORIA_E_ASSISTENTE.md](docs/MEMORIA_E_ASSISTENTE.md) | Memória: pessoas, pendências, proatividade, busca por sentido, revisão semanal |
 | [docs/FEATURES_POSSIVEIS.md](docs/FEATURES_POSSIVEIS.md) | O que mais é possível com o firmware original (revisado após a autorização do usuário) |
-| [docs/AJUSTES_DOS_OCULOS.md](docs/AJUSTES_DOS_OCULOS.md) | Pendências no To-do nativo dos óculos; altura do texto, distância e duplo toque |
+| [docs/AJUSTES_DOS_OCULOS.md](docs/AJUSTES_DOS_OCULOS.md) | Pendências no To-do nativo dos óculos; altura do texto, distância e duplo toque; painel (cartão e tipo); cartões de aceno |
+| [docs/FEATURES_POSSIVEIS.md](docs/FEATURES_POSSIVEIS.md) | Mapa do que é possível com o firmware original e o que já está no app |
 
 ## Funcionalidades
 
@@ -50,6 +51,10 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 | **Sondas de hardware** do LifeLog e da gravação pelo menu (fase 3), com desligamento garantido e pacote de diagnóstico | implementado · **executadas nos óculos**: LifeLog liga sem conta e o áudio (Opus 60 ms, mono) é inteligível; entrega em lotes de 20 s; canal 14 sem áudio — ver [TESTES.md](docs/TESTES.md) |
 | **Bateria de testes guiada** (6 etapas em sequência, instruções na tela, exportação única em ZIP) e teste de **ligar o LifeLog pelos óculos** (G7) | implementado · testado contra óculos emulados · aguardando execução nos óculos |
 | Pendências no **To-do nativo dos óculos** (mão dupla) e **ajustes da tela** (altura do texto, distância, duplo toque abre To-do) | implementado · testado contra óculos emulados · hardware pendente |
+| **Alertas como notificação nativa**, **notificações do Android** (apps escolhidos) e **navegação do Google Maps** nas lentes | implementado · testado contra óculos emulados · hardware pendente |
+| **Teleprompter** dos óculos controlado pelo celular (roteiro como arquivo temporário, iniciar/pausar/velocidade) | implementado · bytes conferidos com a referência HarmonyOS · hardware pendente |
+| **Painel**: cartão curto de pendências e tipo simples/completo (lê, muda, relê); **aceno/balanço** confirma pendências novas | implementado · testado contra painel simulado · hardware pendente |
+| **Tempo** na tela inicial (Open-Meteo), **“Hey RayNeo”**, tarefa por frase livre, tamanho/posição do texto | implementado · hardware pendente |
 | Atualização de firmware / OTA / transferência de arquivos | **excluído por design** (allow-list testada) |
 
 ### Pendente / próximas fases

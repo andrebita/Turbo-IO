@@ -88,7 +88,7 @@ object Business {
                 j.optString("title").length in 1..80 && j.optString("content").length in 1..500 && j.optInt("type") == 1 && !j.optBoolean("reply")
             18 -> j.keys().asSequence().toSet() == setOf("notification") && j.get("notification") is Boolean
             33 -> j.optInt("type") in 1..2 && j.optInt("suggestType") in 1..2 && Regex("^[A-Za-z0-9-]{8,64}$").matches(j.optString("suggestUID")) &&
-                j.optString("title").length <= 40 && j.optString("content").length <= 120
+                j.optString("title").length <= 40 && j.optString("source").length <= 40 && j.optString("content").length <= 120
             35 -> j.optInt("code", -1) in 0..3 && j.optInt("suggestType") in 1..2 && Regex("^[A-Za-z0-9-]{8,64}$").matches(j.optString("suggestUID"))
             else -> false
         }

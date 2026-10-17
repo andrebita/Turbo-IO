@@ -22,6 +22,10 @@ Legenda de evidência:
 * Memória (pessoas, pendências, lembretes, resumos).
 * To-do nativo (22/2, mão dupla).
 * Altura/distância do texto e duplo toque (15/5).
+* **Na 0.4.0 (aguardando teste nos óculos):** itens 1–10, 13 e 15 da tabela abaixo — alertas como notificação nativa,
+  notificações do Android e navegação do Maps, “Hey RayNeo”, tarefa por frase livre, teleprompter, cartões de aceno,
+  tempo, cartão no painel, tipo de painel, fonte/posição do texto e reação ao que você abre nos óculos; e as sondas
+  G8 (apps nativos) e G14 (Gravador) na bateria.
 
 ## 2. Novos recursos possíveis
 
@@ -74,6 +78,7 @@ Legenda de evidência:
 
 ## 7. Ordem sugerida
 
-1. **Rápidos e de alto valor:** 1, 3, 4, 7, 10, 15 e a sonda dos apps nativos (seção 3), tudo na bateria de testes.
-2. **Médios:** 2, 5, 6, 8, 9, 13.
-3. **Grande:** 14, ou atender o app nativo de Legendas se a sonda mostrar que é viável.
+1. ✅ (no app) **Rápidos e de alto valor:** 1, 3, 4, 7, 10, 15 e a sonda dos apps nativos (seção 3).
+2. ✅ (no app) **Médios:** 2, 5, 6, 8, 9, 13.
+3. **Grande (próximo):** 14, ou atender o app nativo de Legendas se a sonda G8 mostrar que é viável.
+4. Fora por enquanto: 11 (substitui tudo sem leitura) e 12.

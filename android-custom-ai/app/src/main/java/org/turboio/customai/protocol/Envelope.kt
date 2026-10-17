@@ -9,7 +9,8 @@ class Envelope(val type: Int, val sequence: Long, val json: ByteArray, val binar
 }
 
 object EnvelopeCodec {
-    fun encode(type: Int, json: ByteArray, sequence: Long = 0): ByteArray {
+    /** [mode] 1 marks a request that expects a correlated reply (type 19, same sequence, mode 2), as dashboard commands do. */
+    fun encode(type: Int, json: ByteArray, sequence: Long = 0, mode: Int = 0): ByteArray {
         if (type < 1 || type > 65535 || sequence < 0 || sequence > 2147483647L) throw ProtocolException("invalid-value")
         if (json.size < 2 || json.size > 7500) throw ProtocolException("business-size")
         val out = java.io.ByteArrayOutputStream(json.size + 16)
@@ -23,10 +24,11 @@ object EnvelopeCodec {
         out.write(8); out.write(1); out.write(16); varint(type.toLong()); out.write(26); varint(json.size.toLong())
         out.write(json)
         if (sequence != 0L) { out.write(40); varint(sequence) }
+        if (mode != 0) { out.write(48); varint(mode.toLong()) }
         return out.toByteArray()
     }
 
-    fun encode(type: Int, json: String, sequence: Long = 0): ByteArray = encode(type, json.toByteArray(Charsets.UTF_8), sequence)
+    fun encode(type: Int, json: String, sequence: Long = 0, mode: Int = 0): ByteArray = encode(type, json.toByteArray(Charsets.UTF_8), sequence, mode)
 
     fun decode(bytes: ByteArray): Envelope {
         if (bytes.size > 16384) throw ProtocolException("launcher-size")

@@ -10,11 +10,11 @@ Legenda: ✅ executado e aprovado · ⚠️ executado com ressalva · ⏳ penden
 | --- | --- | --- |
 | Compilação (AGP 8.13.2, Kotlin 2.2.21, compileSdk/targetSdk 35, minSdk 26) | ✅ | `./gradlew assembleDebug` |
 | Lint Android | ✅ 0 erros (avisos cosméticos: i18n/KTX/versões) | `./gradlew lintDebug` |
-| Testes unitários | ✅ **87 testes** executados, 0 falhas (+ 4 testes de rede ao vivo, opcionais) | `./gradlew testDebugUnitTest` |
+| Testes unitários | ✅ **139 testes** executados, 0 falhas (+ 4 testes de rede ao vivo, opcionais) | `./gradlew testDebugUnitTest` |
 | Protocolo = referência HarmonyOS | ✅ vetores de ouro + vetores gerados executando o TypeScript original (`tools/harmony-vectors.mjs`) | `HarmonyCrossTest`, `ProtocolTest` |
 | Referência HarmonyOS em si | ✅ 48 testes do `harmony-sdk` (protocolo, autenticação, voz) passam neste ambiente | `node --test harmony-sdk/tests/{protocol-codec,auth-calculations,guest-exchange,business-commands,version-exchange,voice-session,launcher-status}.test.mjs` |
 | Sessão BLE completa contra óculos emulados | ✅ handshake em 2 links, bond após prova, status/bateria, conta vinculada recusada, prova falsa recusada, troca de identidade bloqueada, reconexão automática, timeout | `GlassesSessionTest` |
-| Sem OTA | ✅ negócios 9 e 18 recusados; nenhuma string de OTA/firmware no DEX | `outboundPolicyAndDelivery`; `strings classes*.dex \| grep -ci fota` = 0 |
+| Sem OTA | ✅ negócio 9 recusado; envelope no negócio 18 recusado; arquivo só com a trava do teleprompter e só informação/pedaço/cancelar; nenhuma string de OTA/firmware no DEX | `outboundPolicyAndDelivery`, `fileChannelOnlyUnderLeaseAndSplitAcrossWrites`, `outboundGateOnlyInfoChunkCancel`; `strings classes*.dex \| grep -ci fota` = 0 |
 | Decodificador Opus (microfone dos óculos) | ✅ SNR **205 dB** contra libopus 1.5.2 do repositório (praticamente bit-exato) | `OpusAndEndpointTest` + `tools/opus_reference.c` |
 | Rodada de voz (negócio 13) | ✅ sequência rc1 → áudio → rc2 → transcrição final → blocos ≤ 24 → EOF → saída, com áudio Opus sintético; sem áudio / só silêncio / “pode fechar” / saída pelos óculos | `VoiceAndLensTest` |
 | Display (negócio 19) | ✅ abrir → ack → páginas ≤ 90 → fechar; ausência de ack tratada | `VoiceAndLensTest` |
@@ -42,7 +42,13 @@ autenticação quando a resposta chegava perto de 5 s (teste de regressão `slow
 | “Me lembra de…” cria pendência com prazo (e guarda o pedido se o modelo falhar), sem duplicar; concluir por número da lista, por palavras ou pedir para escolher | ✅ | `voiceRemindersAndCompletionByNumberOrWords`, `JournalTest.intents` |
 | To-do dos óculos: um item por mensagem, só mudanças, descartada vai como feita, conclusão/reabertura vinda dos óculos, título ≤ 60 com data fixa | ✅ | `GlassesTodoTest` |
 | Ajustes da tela: lê antes, preserva o campo não alterado, guarda originais e restaura; duplo toque só sobre 0/8; regra de conteúdo recusa outros valores | ✅ | `GlassesSettingsTest` |
-| Efeito real dos ajustes e do To-do nas lentes com o firmware 1.0.5.5 | ⏳ hardware | — |
+| Notificação nativa: chave geral uma vez por conexão, cartão, estado devolvido; texto 21/1 de outros apps ignorado | ✅ | `NativeNotifierTest` |
+| Espelhar notificações: só apps escolhidos, sem repetidas/seguidas; Maps: só mudança de manobra/rua, distância a cada 8 s | ✅ | `MirrorPolicyTest` |
+| Tempo, fonte/posição do texto, “Hey RayNeo”, tarefa por frase livre | ✅ | `GroupOneTest`, `ProtocolTest` |
+| Teleprompter: bytes iguais aos do `FileTransfer.ts` de referência; preparo → arquivo → pronto só com as duas confirmações; comandos esperam a resposta igual; recusa, sucesso prematuro e prazo nunca liberam “iniciar”; saída cancela o arquivo | ✅ | `TeleprompterTest` |
+| Painel: pedido com sequência e campo 6 = 1; instalar → reler → demais cartões preservados; recusa para sem repetir; cartão alheio com o mesmo id não é tocado; `simple_mode` trocado mantendo o tipo (número ou booleano); texto ≤ 20 | ✅ | `DashboardTest` |
+| Cartões de aceno: aceno = sim, balanço = não, sem resposta remove; resposta repetida ignorada; confirmação 21/35 | ✅ | `SuggestionCardsTest` |
+| Efeito real nas lentes (ajustes, To-do, notificações, tempo, teleprompter, painel, acenos) com o firmware 1.0.5.5 | ⏳ hardware | roteiro “Recursos novos da 0.4.0” abaixo |
 | Telas Pendências, Pessoas e Semana no Android 11 (emulador), sem erros no log | ✅ | `docs/screenshots/android11-memoria-*.jpg` |
 | Qualidade real da extração com o seu modelo e conversas reais | ⏳ uso real | — |
 
@@ -200,14 +206,37 @@ o tempo a partir do primeiro áudio (os óculos levam de 4 s a 22 s para começa
 | 3 | **G4 · LifeLog 5 min** | óculos no rosto, conversar com pausas | continuidade em tempo real, lacunas, por que os óculos encerram (15/3, 15/24) |
 | 4 | **G5 · fechar à força** | quando aparecer “áudio: 10 s”, forçar a parada do app; reabrir e conectar | o app reenvia o desligamento sozinho; a etapa conclui após a reconexão (o progresso da bateria fica salvo) |
 
-O G14 (gravação pelo menu) saiu da bateria na 0.3.1: no iO o item do menu é o próprio LifeLog, e sem a marca
-`life_log_guide` os óculos só mostram “Please complete LifeLog settings on your phone” (comportamento esperado,
-repetido nas duas baterias). O G4b virou o padrão e continua como botão avulso.
+Na 0.4.0 entram mais duas etapas, ambas só de observação (nada é enviado além de abrir e fechar o canal):
+
+| # | Etapa | O que fazer | O que responde |
+| --- | --- | --- | --- |
+| G8 | **Apps nativos** (170 s) | abrir nos óculos, ~30 s cada: Legendas, Assistente de conversa, Teleprompter, Gravador; falar em cada um | o que cada app dos óculos pede ao telefone (para atender Legendas com a sua IA no grupo 3) |
+| G14 | **Gravador nativo** | abrir o **Gravador** (não o LifeLog), gravar ~20 s e parar pelos óculos | se as gravações feitas nos óculos podem entrar no diário (canal 14) |
+
+Ordem na bateria: G1–G3, G7, G8, G14, G4, G5.
 
 Os botões avulsos continuam disponíveis em “Testes de hardware avulsos”, e “Apagar testes salvos no telefone” remove
 os áudios guardados.
 
 Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar LifeLog nos óculos**.
+
+### Recursos novos da 0.4.0 (conferir nas lentes)
+
+Cada item só conta como aprovado com o efeito visto nos óculos. Exporte o log (Diagnóstico) depois.
+
+| # | Onde | Passo | Aprovado se |
+| --- | --- | --- | --- |
+| N1 | Conexão → Ajustes → “Testar alerta nativo” | tocar | cartão de notificação aparece; estado “exibida” |
+| N2 | Conexão → Notificações | permitir acesso, escolher WhatsApp, ligar; receber uma mensagem | cartão nos óculos com app, título e texto |
+| N3 | idem, “Navegação do Google Maps” | iniciar uma rota no Maps | “200 m · Rua X” nas lentes, atualizando nas manobras |
+| N4 | Conexão → Tempo | cidade, “Enviar o tempo agora” | “aceito pelos óculos” e ícone coerente na tela inicial |
+| N5 | IA → tamanho/posição/linhas | mudar e “Enviar texto de teste” | o texto muda; se recusado, cai no padrão |
+| N6 | Testes → Teleprompter | colar um texto, enviar, Iniciar, Pausar, Continuar, velocidade, Sair | roteiro rola nas lentes; estados confirmados |
+| N7 | Conexão → Painel | Ler painel; Mostrar cartão; Remover | lista de cartões; cartão aparece/some; demais intactos |
+| N8 | idem | Painel simples → conferir → Restaurar tipo | o painel muda e volta |
+| N9 | Pendências → Configurações → “Confirmar… nos óculos”; criar conversa com um compromisso | acenar / balançar | pendência mantida / descartada |
+| N10 | Pendências → “To-do dos óculos” | ligar; abrir o To-do nos óculos | pendências aparecem; concluir lá conclui no telefone |
+| N11 | Conexão → “Hey RayNeo” | ativar; dizer “Hey RayNeo, …” | o assistente responde com a sua IA |
 
 ## APK de teste
 
@@ -221,7 +250,8 @@ Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar Li
 
 ## Limitações conhecidas
 
-* Conexão, autenticação *guest* e LifeLog comprovados em hardware real (Android 16); display nas lentes, voz e reversão ainda sem evidência (Teste C parcial).
+* Conexão, autenticação *guest* e LifeLog comprovados em hardware real (Android 16); display nas lentes, voz, reversão e
+  todos os recursos novos da 0.4.0 (N1–N11) ainda sem evidência (Teste C parcial).
 * Gravação do diário pelos óculos (0.3.0) ainda sem uso real: falta medir bateria e estabilidade em horas (G6).
 * Um cliente por vez: o app oficial precisa estar desvinculado enquanto este app é usado.
 * VAD por energia no microfone dos óculos (limiar 450 RMS) pode precisar de ajuste.

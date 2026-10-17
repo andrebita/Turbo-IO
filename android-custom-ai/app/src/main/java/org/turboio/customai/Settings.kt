@@ -149,6 +149,7 @@ class SettingsRepository(context: Context) {
             weeklyHour = prefs.getInt("memory.weeklyHour", 19).coerceIn(0, 23),
             policies = policies,
             glassesTodo = prefs.getBoolean("memory.glassesTodo", false),
+            nodConfirm = prefs.getBoolean("memory.nodConfirm", false),
         )
     }
 
@@ -158,7 +159,7 @@ class SettingsRepository(context: Context) {
             .putBoolean("memory.reminders", s.reminders).putInt("memory.lead", s.reminderLeadMin).putBoolean("memory.morning", s.morning)
             .putInt("memory.morningHour", s.morningHour).putInt("memory.morningMinute", s.morningMinute).putBoolean("memory.weekly", s.weekly)
             .putInt("memory.weeklyDow", s.weeklyDow).putInt("memory.weeklyHour", s.weeklyHour).putString("memory.policies", policies.toString())
-            .putBoolean("memory.glassesTodo", s.glassesTodo).apply()
+            .putBoolean("memory.glassesTodo", s.glassesTodo).putBoolean("memory.nodConfirm", s.nodConfirm).apply()
     }
 
     /** First display/crown values read from the glasses (restore point). */
@@ -200,6 +201,15 @@ class SettingsRepository(context: Context) {
     var weatherCity: String
         get() = prefs.getString("weather.city", "") ?: ""
         set(v) { prefs.edit().putString("weather.city", v.trim().take(60)).apply() }
+
+    /** Short pending-items card on the glasses' dashboard, refreshed when items change. */
+    var dashboardCard: Boolean
+        get() = prefs.getBoolean("dashboard.card", false)
+        set(v) { prefs.edit().putBoolean("dashboard.card", v).apply() }
+    /** Dashboard type (simple_mode) read before the app first changed it: restore point. */
+    var dashboardSimpleOriginal: Boolean?
+        get() = if (prefs.contains("dashboard.simpleOriginal")) prefs.getBoolean("dashboard.simpleOriginal", false) else null
+        set(v) { prefs.edit().apply { if (v == null) remove("dashboard.simpleOriginal") else putBoolean("dashboard.simpleOriginal", v) }.apply() }
 
     /** Alerts (reminders, new items, morning brief) as the glasses' native notification card. */
     var nativeAlerts: Boolean
