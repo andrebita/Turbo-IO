@@ -58,7 +58,7 @@ The app lives in [`android-custom-ai/`](android-custom-ai/README.md).
 | Providers: OpenAI, Gemini, Anthropic, any OpenAI-compatible endpoint (model, endpoint, instructions, token limit, timeout, conversation context) | implemented · request formats and real endpoints tested |
 | Short pt-BR answers: Markdown/emoji cleanup, paging, optional accent stripping | implemented · tested |
 | Answers on the lenses (text session), with text size, position and line count | implemented · hardware pending |
-| Voice assistant triggered on the glasses. **Glasses mic:** OpenAI (Whisper / gpt-4o-transcribe) or Google Speech-to-Text. **Phone mic:** Android's built-in recognizer, no key needed | implemented · flow tested with synthetic Opus audio · hardware pending |
+| Voice assistant triggered on the glasses. **Glasses mic:** OpenAI (Whisper / gpt-4o-transcribe), Deepgram Nova-3 (same key as ambient recording) or Google Cloud Speech-to-Text. **Phone mic:** Android's built-in recognizer, no key needed | implemented · flow tested with synthetic Opus audio · hardware pending |
 | "Hey RayNeo" wake word, enabled with the official app's command (turning it off requires the official app) | implemented · hardware pending |
 | Free-phrase tasks: "I need to buy bread tomorrow" becomes a dated pending item | implemented · tested |
 
@@ -99,7 +99,8 @@ The app lives in [`android-custom-ai/`](android-custom-ai/README.md).
 
 | Feature | Status |
 | --- | --- |
-| Guided **hardware test suite** with on-screen cues and one-ZIP export. Steps: LifeLog script, start from the glasses' menu, native-app observation, native Recorder, 5-minute run, forced-stop recovery | implemented · LifeLog steps executed on the glasses |
+| Guided **feature test suite** (19 steps, one per feature): the app performs each action, shows what it saw, records the glasses traffic (redacted) and asks whether it worked on the lenses; one-ZIP export | implemented · awaiting execution on the glasses |
+| Guided **hardware test suite** (audio/LifeLog) with on-screen cues and one-ZIP export. Steps: LifeLog script, start from the glasses' menu, native-app observation, native Recorder, 5-minute run, forced-stop recovery | implemented · LifeLog steps executed on the glasses |
 | Diagnostics log (redacted), BLE communication test, "delete all app data" | implemented |
 
 ## Install and use
@@ -122,7 +123,7 @@ export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 139 unit tests with no lint errors.
+Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 145 unit tests with no lint errors.
 
 ## Documentation
 

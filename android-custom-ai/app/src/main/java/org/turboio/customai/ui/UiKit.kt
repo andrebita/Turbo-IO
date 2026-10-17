@@ -112,6 +112,13 @@ class Column(val context: Context) {
     fun clear() = root.removeAllViews()
 }
 
+/** Shows or hides a [Column.field] together with its label box. */
+fun TextInputEditText.showField(on: Boolean) {
+    var v: android.view.ViewParent? = parent
+    while (v != null && v !is TextInputLayout) v = v.parent
+    ((v as? View) ?: this).visibility = if (on) View.VISIBLE else View.GONE
+}
+
 fun statusColor(ok: Boolean?): Int = when (ok) {
     true -> 0xFF2E7D32.toInt()
     false -> 0xFFC62828.toInt()

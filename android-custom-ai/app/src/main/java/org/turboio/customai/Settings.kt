@@ -67,7 +67,11 @@ class SettingsRepository(context: Context) {
     fun sttKey(engine: SttEngine): String {
         val own = secrets.get("key.stt.${engine.id}")
         if (own.isNotEmpty()) return own
-        return if (engine == SttEngine.GLASSES_OPENAI) apiKey(ProviderKind.OPENAI) else ""
+        return when (engine) {
+            SttEngine.GLASSES_OPENAI -> apiKey(ProviderKind.OPENAI)
+            SttEngine.GLASSES_DEEPGRAM -> deepgramKey()
+            else -> ""
+        }
     }
     fun hasSttKey(engine: SttEngine): Boolean = secrets.has("key.stt.${engine.id}")
     fun setSttKey(engine: SttEngine, key: String) = secrets.put("key.stt.${engine.id}", key.trim())

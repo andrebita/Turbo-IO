@@ -35,6 +35,7 @@ class AiFragment : Fragment() {
     private lateinit var sttModel: TextInputEditText
     private lateinit var deepgramKey: TextInputEditText
     private lateinit var ambientModel: TextInputEditText
+    private lateinit var deepgramState: TextView
     private var ambientProvider = org.turboio.customai.ambient.AmbientProvider.DEEPGRAM
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
@@ -82,9 +83,9 @@ class AiFragment : Fragment() {
 
         ui.title("Transcrição do ambiente (gravação contínua)")
         val amb = settings.ambientSettings(); ambientProvider = amb.provider
-        ui.spinner(org.turboio.customai.ambient.AmbientProvider.entries.toList(), org.turboio.customai.ambient.AmbientProvider.entries.indexOf(ambientProvider), { it.label }) { ambientProvider = it }
+        ui.spinner(org.turboio.customai.ambient.AmbientProvider.entries.toList(), org.turboio.customai.ambient.AmbientProvider.entries.indexOf(ambientProvider), { it.label }) { ambientProvider = it; loadAmbient() }
         deepgramKey = ui.field("Chave da Deepgram (vazio = manter)", password = true)
-        ui.hint(if (settings.hasDeepgramKey()) "Chave Deepgram salva: ${Redactor.mask(settings.deepgramKey())}" else "Nenhuma chave Deepgram salva (console.deepgram.com → API Keys)")
+        deepgramState = ui.hint("")
         ambientModel = ui.field("Modelo OpenAI para o ambiente", amb.openAiModel)
         ui.hint("Deepgram Nova-3 pt-BR separa os falantes (até ~5 min de fala por envio). OpenAI usa a chave de transcrição/IA da OpenAI e não separa falantes.")
 
@@ -102,12 +103,24 @@ class AiFragment : Fragment() {
         keyState.text = if (settings.hasApiKey(provider)) "Chave salva: ${Redactor.mask(settings.apiKey(provider))}" else "Nenhuma chave salva para ${provider.label}"
     }
 
+    /** Only the fields of the chosen services are shown. */
+    private fun loadAmbient() {
+        if (!::ambientModel.isInitialized) return
+        val deepgram = ambientProvider == org.turboio.customai.ambient.AmbientProvider.DEEPGRAM || engine == SttEngine.GLASSES_DEEPGRAM
+        deepgramKey.showField(deepgram)
+        deepgramState.visibility = if (deepgram) View.VISIBLE else View.GONE
+        deepgramState.text = if (settings.hasDeepgramKey()) "Chave Deepgram salva: ${Redactor.mask(settings.deepgramKey())}" else "Nenhuma chave Deepgram salva (console.deepgram.com → API Keys)"
+        ambientModel.showField(ambientProvider == org.turboio.customai.ambient.AmbientProvider.OPENAI)
+    }
+
     private fun loadStt() {
-        sttModel.isEnabled = engine == SttEngine.GLASSES_OPENAI
-        sttKey.isEnabled = engine != SttEngine.PHONE_ANDROID
+        sttModel.showField(engine == SttEngine.GLASSES_OPENAI)
+        sttKey.showField(engine == SttEngine.GLASSES_OPENAI || engine == SttEngine.GLASSES_GOOGLE)
         sttKey.setText("")
+        loadAmbient()
         sttKeyState.text = when {
             engine == SttEngine.PHONE_ANDROID -> "Sem chave necessária"
+            engine == SttEngine.GLASSES_DEEPGRAM -> if (settings.hasDeepgramKey()) "Usa a chave Deepgram da transcrição do ambiente (abaixo)" else "Informe a chave Deepgram abaixo, em “Transcrição do ambiente”"
             settings.hasSttKey(engine) -> "Chave salva: ${Redactor.mask(settings.sttKey(engine))}"
             engine == SttEngine.GLASSES_OPENAI && settings.hasApiKey(ProviderKind.OPENAI) -> "Usará a chave OpenAI do provedor de IA"
             else -> "Nenhuma chave salva"
@@ -135,7 +148,7 @@ class AiFragment : Fragment() {
             openAiModel = ambientModel.text.toString().trim().ifEmpty { "gpt-4o-mini-transcribe" }))
         deepgramKey.text.toString().trim().takeIf { it.isNotEmpty() }?.let { settings.setDeepgramKey(it); deepgramKey.setText("") }
         val newStt = sttKey.text.toString().trim()
-        if (newStt.isNotEmpty() && engine != SttEngine.PHONE_ANDROID) settings.setSttKey(engine, newStt)
+        if (newStt.isNotEmpty() && (engine == SttEngine.GLASSES_OPENAI || engine == SttEngine.GLASSES_GOOGLE)) settings.setSttKey(engine, newStt)
         DiagnosticLog.i("CFG", "configuração salva: provedor=${provider.id} modelo=${config.model} stt=${engine.id} chave=${if (effectiveKey.isEmpty()) "ausente" else "presente"}")
         TurboApp.instance.clearHistory()
         loadProvider(); loadStt()

@@ -97,6 +97,9 @@ class GlassesSession(
 
     private class Pending(val frame: ByteArray, val done: (String?) -> Unit, val group: Any? = null)
 
+    /** Sees every message accepted for sending (feature test capture); called on the glasses thread. */
+    @Volatile var outboundTap: ((business: Int, payload: ByteArray) -> Unit)? = null
+
     /** Business 18 is accepted only while this returns true (an active teleprompter session). */
     @Volatile var fileLease: () -> Boolean = { false }
 
@@ -112,6 +115,7 @@ class GlassesSession(
             else -> org.turboio.customai.protocol.FileTransfer.outboundProblem(payload)
         }
         if (reason != null) { DiagnosticLog.w(tag, "arquivo recusado: $reason"); done(reason); return@post }
+        outboundTap?.let { tap -> runCatching { tap(Business.FILE, payload) } }
         val frame = FrameCodec.encode(FramePacket(messageNumber, 0, null, ByteArray(0), Business.FILE, payload))
         messageNumber = (messageNumber + 1) and 0xffff
         enqueueSplit(frame, 128, done)
@@ -184,6 +188,7 @@ class GlassesSession(
     override fun send(business: Int, envelope: ByteArray, done: (String?) -> Unit) = scheduler.post {
         val reason = admit(business, envelope)
         if (reason != null) { DiagnosticLog.w(tag, "envio recusado business=$business: $reason"); done(reason); return@post }
+        outboundTap?.let { tap -> runCatching { tap(business, envelope) } }
         val frame = FrameCodec.encode(FramePacket(messageNumber, 0, null, ByteArray(0), business, envelope))
         messageNumber = (messageNumber + 1) and 0xffff
         if (frame.size > status.mtu - 3) {

@@ -10,7 +10,7 @@ Legenda: ✅ executado e aprovado · ⚠️ executado com ressalva · ⏳ penden
 | --- | --- | --- |
 | Compilação (AGP 8.13.2, Kotlin 2.2.21, compileSdk/targetSdk 35, minSdk 26) | ✅ | `./gradlew assembleDebug` |
 | Lint Android | ✅ 0 erros (avisos cosméticos: i18n/KTX/versões) | `./gradlew lintDebug` |
-| Testes unitários | ✅ **139 testes** executados, 0 falhas (+ 4 testes de rede ao vivo, opcionais) | `./gradlew testDebugUnitTest` |
+| Testes unitários | ✅ **145 testes** executados, 0 falhas (+ 4 testes de rede ao vivo, opcionais) | `./gradlew testDebugUnitTest` |
 | Protocolo = referência HarmonyOS | ✅ vetores de ouro + vetores gerados executando o TypeScript original (`tools/harmony-vectors.mjs`) | `HarmonyCrossTest`, `ProtocolTest` |
 | Referência HarmonyOS em si | ✅ 48 testes do `harmony-sdk` (protocolo, autenticação, voz) passam neste ambiente | `node --test harmony-sdk/tests/{protocol-codec,auth-calculations,guest-exchange,business-commands,version-exchange,voice-session,launcher-status}.test.mjs` |
 | Sessão BLE completa contra óculos emulados | ✅ handshake em 2 links, bond após prova, status/bateria, conta vinculada recusada, prova falsa recusada, troca de identidade bloqueada, reconexão automática, timeout | `GlassesSessionTest` |
@@ -219,6 +219,23 @@ Os botões avulsos continuam disponíveis em “Testes de hardware avulsos”, e
 os áudios guardados.
 
 Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar LifeLog nos óculos**.
+
+### Bateria de recursos (aba Diagnóstico → “Bateria de recursos”)
+
+Desde a 0.4.0 (rev. 6) o app testa sozinho cada função nos óculos, uma etapa por vez: faz a ação, mostra o que viu
+(“resultado do app”) e pergunta se funcionou nas lentes. Só a sua resposta conta como aprovação. Cada etapa grava
+`resultado.txt`, `trafego.txt` (mensagens trocadas com os óculos, sem áudio, sem conteúdo de arquivos e sem texto de
+notificações) e `log.txt`; “Exportar bateria de recursos” junta tudo num ZIP.
+
+| Etapa | Função |
+| --- | --- |
+| F1–F3 | Texto nas lentes; tamanho e posição; pergunta à IA nas lentes |
+| F4–F5 | Assistente de voz pelo gesto; “Hey RayNeo” |
+| F6–F8 | Alerta nativo; notificações do celular (simulada + real); navegação do Maps (simulada + real) |
+| F9–F11 | Tempo; To-do dos óculos (item de teste, marcado como feito no fim); reação ao abrir o To-do |
+| F12–F13 | Teleprompter pelo celular (preparo → iniciar → pausar → continuar → velocidade → sair); teleprompter aberto pelo menu dos óculos (só observação) |
+| F14–F16 | Painel: leitura; cartão (instala, 25 s, remove); tipo simples/completo (troca, 25 s, volta) |
+| F17–F19 | Aceno e balanço; leitura dos ajustes da tela; gravação de 40 s pelos óculos para o diário |
 
 ### Recursos novos da 0.4.0 (conferir nas lentes)
 

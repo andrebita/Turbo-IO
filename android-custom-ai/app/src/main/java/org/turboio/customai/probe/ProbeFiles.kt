@@ -14,10 +14,10 @@ import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-class PrefsSuiteStore(context: Context) : SuiteStore {
+class PrefsSuiteStore(context: Context, private val key: String = "suite") : SuiteStore {
     private val prefs = context.getSharedPreferences("turboio_probe_v1", Context.MODE_PRIVATE)
-    override fun load(): String? = prefs.getString("suite", null)
-    override fun save(json: String) { prefs.edit().putString("suite", json).commit() }
+    override fun load(): String? = prefs.getString(key, null)
+    override fun save(json: String) { prefs.edit().putString(key, json).commit() }
 }
 
 class PrefsPendingFlag(context: Context) : PendingFlag {
@@ -56,18 +56,39 @@ class ProbeFiles(private val context: Context) : ProbeSink {
         return dir.name
     }
 
+    val featuresRoot = File(context.filesDir, "features").apply { mkdirs() }
+
+    /** One feature-test step: result (with the user's verdict), glasses traffic and the log lines of that step. */
+    fun saveFeature(step: FeatureStep, result: FeatureResult, traffic: List<String>, startedAt: Long): String {
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        val dir = File(featuresRoot, "recurso-$stamp-${step.id}").apply { mkdirs() }
+        File(dir, "resultado.txt").writeText(buildString {
+            append("[${step.id}] ${step.title}\n")
+            append("App ${BuildConfig.VERSION_NAME} · Android ${android.os.Build.VERSION.RELEASE} · ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n\n")
+            append("O que o app fez: ${step.instructions}\nPergunta: ${step.question}\n\n")
+            append("Veredito do usuário: ${result.verdict}\nObservação: ${result.note.ifEmpty { "—" }}\n\n")
+            append("Resultado do app:\n${result.outcome}\n")
+        })
+        File(dir, "trafego.txt").writeText(if (traffic.isEmpty()) "(nenhuma mensagem trocada com os óculos)" else traffic.joinToString("\n"))
+        File(dir, "log.txt").writeText(DiagnosticLog.snapshot().filter { it.time >= startedAt - 1000 }.joinToString("\n") { it.format() })
+        return dir.name
+    }
+
+    fun featureDirs(since: Long): List<File> =
+        featuresRoot.listFiles()?.filter { it.isDirectory && it.lastModified() >= since - 1000 }?.sortedBy { it.name } ?: emptyList()
+
     fun latest(): File? = all().lastOrNull()
 
     /** Saved probes, oldest first; [since] (epoch ms) keeps only those saved after a suite started. */
     fun all(since: Long = 0): List<File> = root.listFiles()?.filter { it.isDirectory && it.lastModified() >= since - 1000 }?.sortedBy { it.name } ?: emptyList()
 
-    fun deleteAll() { root.listFiles()?.forEach { it.deleteRecursively() } }
+    fun deleteAll() { root.listFiles()?.forEach { it.deleteRecursively() }; featuresRoot.listFiles()?.forEach { it.deleteRecursively() } }
 
     /** One ZIP with every probe folder (each with its own log) plus a summary and the current log. */
-    fun shareAll(dirs: List<File>, summary: String, log: String): Intent {
+    fun shareAll(dirs: List<File>, summary: String, log: String, prefix: String = "turboio-testes"): Intent {
         val exports = File(context.cacheDir, "exports").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
         val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
-        val zip = File(exports, "turboio-testes-$stamp.zip")
+        val zip = File(exports, "$prefix-$stamp.zip")
         ZipOutputStream(zip.outputStream().buffered()).use { z ->
             for (dir in dirs) dir.listFiles()?.forEach { f ->
                 z.putNextEntry(ZipEntry("${dir.name}/${f.name}")); f.inputStream().use { it.copyTo(z) }; z.closeEntry()

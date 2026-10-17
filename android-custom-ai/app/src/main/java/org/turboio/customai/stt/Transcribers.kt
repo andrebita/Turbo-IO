@@ -18,7 +18,8 @@ import java.util.Base64
 enum class SttEngine(val id: String, val label: String) {
     PHONE_ANDROID("android", "Android nativo · microfone do telefone (sem chave)"),
     GLASSES_OPENAI("openai", "Microfone dos óculos → OpenAI (Whisper / gpt-4o-transcribe)"),
-    GLASSES_GOOGLE("google", "Microfone dos óculos → Google Cloud Speech-to-Text");
+    GLASSES_GOOGLE("google", "Microfone dos óculos → Google Cloud Speech-to-Text"),
+    GLASSES_DEEPGRAM("deepgram", "Microfone dos óculos → Deepgram (usa a chave do ambiente)");
 
     val usesGlassesMic: Boolean get() = this != PHONE_ANDROID
     companion object { fun fromId(id: String?) = entries.firstOrNull { it.id == id } ?: PHONE_ANDROID }
@@ -57,6 +58,9 @@ private suspend fun <T> timed(seconds: Int, block: () -> T): T = try {
 
 private fun error(service: String, status: Int, body: String): SttException {
     val detail = try { JSONObject(body).optJSONObject("error")?.optString("message").orEmpty() } catch (_: Exception) { "" }
+    if (detail.contains("API keys are not supported", ignoreCase = true))
+        return SttException("$service: esta chave não serve para esta API (chave do Gemini/AI Studio?). Use uma chave de API do Google Cloud " +
+            "com o Speech-to-Text ativado, ou escolha “Microfone dos óculos → Deepgram” (HTTP $status)")
     val summary = when (status) { 401 -> "chave inválida"; 403 -> "sem permissão (ative a API)"; 429 -> "cota excedida"; else -> "erro" }
     return SttException("$service: $summary (HTTP $status)" + Redactor.redact(detail).take(120).let { if (it.isNotEmpty()) " · $it" else "" })
 }
@@ -92,6 +96,48 @@ class OpenAiTranscriber(private val config: SttConfig, private val apiKey: Strin
         DiagnosticLog.i("STT", "OpenAI HTTP $status em ${System.currentTimeMillis() - started} ms (${pcm.size / 32} ms de áudio)")
         if (status !in 200..299) throw error("Transcrição OpenAI", status, text)
         return JSONObject(text).optString("text").trim()
+    }
+}
+
+/** Deepgram pre-recorded /v1/listen (Nova-3, pt-BR) with the utterance as WAV; same key as the ambient transcription. */
+class DeepgramSpeechTranscriber(private val config: SttConfig, private val apiKey: String, private val timeoutSeconds: Int = 30) : BatchTranscriber {
+    override suspend fun transcribe(pcm: ByteArray): String {
+        if (apiKey.isBlank()) throw SttException("Informe a chave da Deepgram (aba IA → Transcrição do ambiente)")
+        val started = System.currentTimeMillis()
+        val (status, text) = timed(timeoutSeconds) {
+            val c = URL("https://api.deepgram.com/v1/listen?model=nova-3&language=${config.language}&smart_format=true&punctuate=true").openConnection() as HttpURLConnection
+            try {
+                c.requestMethod = "POST"; c.doOutput = true; c.connectTimeout = 15000; c.readTimeout = timeoutSeconds * 1000
+                c.instanceFollowRedirects = false
+                c.setRequestProperty("Authorization", "Token $apiKey")
+                c.setRequestProperty("Content-Type", "audio/wav")
+                c.outputStream.use { it.write(wav(pcm)) }
+                val code = c.responseCode
+                code to String((if (code >= 400) c.errorStream else c.inputStream)?.use { it.readNBytesCompat(1 shl 20) } ?: ByteArray(0))
+            } finally { c.disconnect() }
+        }
+        DiagnosticLog.i("STT", "Deepgram HTTP $status em ${System.currentTimeMillis() - started} ms")
+        if (status !in 200..299) {
+            val detail = runCatching { JSONObject(text).optString("err_msg").ifEmpty { JSONObject(text).optString("message") } }.getOrDefault("")
+            throw error("Deepgram", status, JSONObject().put("error", JSONObject().put("message", detail)).toString())
+        }
+        return parseDeepgram(text)
+    }
+
+    companion object {
+        fun parseDeepgram(body: String): String = JSONObject(body).optJSONObject("results")?.optJSONArray("channels")?.optJSONObject(0)
+            ?.optJSONArray("alternatives")?.optJSONObject(0)?.optString("transcript")?.trim().orEmpty()
+
+        /** 16 kHz mono PCM16 with a RIFF/WAVE header. */
+        fun wav(pcm: ByteArray): ByteArray {
+            val out = ByteArrayOutputStream(pcm.size + 44)
+            fun i32(v: Int) { out.write(v and 0xff); out.write(v shr 8 and 0xff); out.write(v shr 16 and 0xff); out.write(v shr 24 and 0xff) }
+            fun i16(v: Int) { out.write(v and 0xff); out.write(v shr 8 and 0xff) }
+            out.write("RIFF".toByteArray()); i32(36 + pcm.size); out.write("WAVE".toByteArray())
+            out.write("fmt ".toByteArray()); i32(16); i16(1); i16(1); i32(16000); i32(32000); i16(2); i16(16)
+            out.write("data".toByteArray()); i32(pcm.size); out.write(pcm)
+            return out.toByteArray()
+        }
     }
 }
 

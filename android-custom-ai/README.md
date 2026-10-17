@@ -23,7 +23,7 @@ All paths are under `app/src/main/java/org/turboio/customai/`.
 | `memory` | People and pending items, extraction, queries, reminders and workers, glasses To-do sync |
 | `ambient` | Ambient recording (glasses LifeLog or phone mic), Deepgram / OpenAI transcription, speaker attribution |
 | `device` | Native notifications, notification mirroring policy, weather, glasses settings, teleprompter, dashboard, nod/shake cards |
-| `probe` | Hardware probes and the guided test suite |
+| `probe` | Hardware probes, the guided audio test suite and the feature test suite (with redacted traffic capture) |
 | `service`, `ui`, `security`, `diag` | Foreground and notification-listener services, screens, Keystore secrets, redacted log |
 
 ## Build and test
@@ -33,7 +33,7 @@ export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-* The 139 unit tests include:
+* The 145 unit tests include:
   * the BLE session against emulated glasses;
   * protocol vectors generated from the original TypeScript;
   * the voice round with synthetic Opus;

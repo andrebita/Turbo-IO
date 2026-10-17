@@ -37,6 +37,10 @@ class DiagnosticsFragment : Fragment() {
     private lateinit var btnSkip: View
     private lateinit var btnExportAll: View
     private lateinit var btnEnd: View
+    private lateinit var featText: TextView
+    private lateinit var featCue: TextView
+    private lateinit var featNote: com.google.android.material.textfield.TextInputEditText
+    private val featButtons = HashMap<String, View>()
     private val refresh: () -> Unit = { view?.post { renderLog() } }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
@@ -49,7 +53,24 @@ class DiagnosticsFragment : Fragment() {
         ui.button("Teste do provedor de IA (pergunta curta)", filled = false) { aiTest() }
         test = ui.text(size = 13f)
 
-        ui.title("Bateria de testes nos óculos (recomendado)")
+        ui.title("Bateria de recursos (todas as funções)")
+        ui.hint("Testa cada função nos óculos, uma por vez: o app faz a ação, mostra o que viu e você diz se funcionou nas lentes. " +
+            "O tráfego com os óculos é registrado (sem áudio nem texto de notificações). No fim, exporte um arquivo e me envie.")
+        val fc = ui.card()
+        featText = fc.text(size = 14f)
+        featCue = fc.text(size = 20f).apply { setTypeface(typeface, android.graphics.Typeface.BOLD) }
+        featNote = fc.field("Observação (opcional): o que apareceu, mensagem de erro…", multiline = true)
+        val f = app.features
+        featButtons["begin"] = fc.button("Começar bateria de recursos") { f.begin() }
+        featButtons["start"] = fc.button("Iniciar esta etapa") { f.start()?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show() } }
+        featButtons["stop"] = fc.button("Parar esta etapa", filled = false) { f.stop() }
+        featButtons["verdict"] = fc.buttons("✓ Funcionou" to { verdict(true) }, "✗ Não funcionou" to { verdict(false) })
+        featButtons["unsure"] = fc.buttons("Não deu para ver" to { verdict(null) }, "Repetir" to { f.repeatStep() })
+        featButtons["skip"] = fc.button("Pular etapa", filled = false) { f.skip() }
+        featButtons["export"] = fc.button("Exportar bateria de recursos (1 arquivo)") { exportFeatures() }
+        featButtons["end"] = fc.button("Encerrar bateria de recursos", filled = false) { f.end() }
+
+        ui.title("Bateria de testes nos óculos de áudio (LifeLog)")
         ui.hint("Todos os testes de hardware em sequência (cerca de 10 min), com instruções entre eles, e um único arquivo " +
             "para enviar no final. Nada é gravado no firmware; o LifeLog é desligado ao fim de cada etapa.")
         val suiteCard = ui.card()
@@ -118,6 +139,7 @@ class DiagnosticsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { app.status.collect { info.text = header() } }
+                launch { app.features.state.collect { renderFeatures(it) } }
                 launch { kotlinx.coroutines.flow.combine(app.suite.state, app.probe.state) { a, b -> a to b }.collect { (s, p) -> renderSuite(s, p) } }
                 launch {
                     app.probe.state.collect { p ->
@@ -206,6 +228,56 @@ class DiagnosticsFragment : Fragment() {
         show(btnStopStep, s.active && s.running && p.phase != "inativo")
         show(btnExportAll, s.results.any { it.done })
         show(btnEnd, s.active)
+    }
+
+    private fun verdict(worked: Boolean?) {
+        app.features.verdict(worked, featNote.text.toString()); featNote.setText("")
+    }
+
+    private fun renderFeatures(s: org.turboio.customai.probe.FeatureState) {
+        val f = app.features
+        val step = f.current
+        featText.text = buildString {
+            if (!s.active && s.results.isEmpty()) { append("Toque em “Começar”. Óculos conectados, no rosto e carregados. ${f.steps.size} etapas, cerca de 20 min; pule as que não quiser."); return@buildString }
+            if (s.active && step != null) {
+                append("Etapa ${s.index + 1}/${f.steps.size} · ${step.id} · ${step.title}\n${step.instructions}")
+                when (s.phase) {
+                    org.turboio.customai.probe.FeaturePhase.RUNNING -> append("\n\nEm andamento…")
+                    org.turboio.customai.probe.FeaturePhase.VERDICT -> append("\n\nResultado do app:\n${s.outcome}\n\n${step.question}")
+                    org.turboio.customai.probe.FeaturePhase.IDLE -> Unit
+                }
+            } else if (s.active) append("✓ Bateria concluída. Toque em “Exportar bateria de recursos” e me envie o arquivo.")
+            else append("Bateria de recursos encerrada.")
+            if (s.results.isNotEmpty()) {
+                append("\n\nResultados:")
+                s.results.forEach { r -> append("\n${when (r.verdict) { "funcionou" -> "✓"; "não funcionou" -> "✗"; "pulado" -> "↷"; else -> "?" }} ${r.id} ${r.title}: ${r.verdict}") }
+            }
+        }
+        featCue.text = s.cue
+        featCue.visibility = if (s.cue.isEmpty()) View.GONE else View.VISIBLE
+        fun show(key: String, on: Boolean) { featButtons[key]?.visibility = if (on) View.VISIBLE else View.GONE }
+        val waiting = s.active && step != null
+        show("begin", !s.active)
+        show("start", waiting && s.phase == org.turboio.customai.probe.FeaturePhase.IDLE)
+        show("stop", s.phase == org.turboio.customai.probe.FeaturePhase.RUNNING)
+        show("verdict", s.phase == org.turboio.customai.probe.FeaturePhase.VERDICT); show("unsure", s.phase == org.turboio.customai.probe.FeaturePhase.VERDICT)
+        featNote.showField(s.phase == org.turboio.customai.probe.FeaturePhase.VERDICT)
+        show("skip", waiting && s.phase != org.turboio.customai.probe.FeaturePhase.RUNNING)
+        show("export", s.results.any { it.verdict != "pulado" })
+        show("end", s.active)
+    }
+
+    private fun exportFeatures() {
+        val f = app.features
+        val dirs = app.probeFiles.featureDirs(f.state.value.startedAt)
+        if (dirs.isEmpty()) { Toast.makeText(requireContext(), "Nenhuma etapa concluída desde o início da bateria", Toast.LENGTH_SHORT).show(); return }
+        val summary = header() + "\n\n" + f.summary()
+        viewLifecycleOwner.lifecycleScope.launch {
+            val intent = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                app.probeFiles.shareAll(dirs, summary, DiagnosticLog.export(), prefix = "turboio-recursos")
+            }
+            startActivity(intent)
+        }
     }
 
     private fun exportAll() {

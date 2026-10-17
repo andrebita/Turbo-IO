@@ -63,6 +63,13 @@ class TurboApp : Application() {
     lateinit var weather: org.turboio.customai.device.GlassesWeather; private set
     lateinit var teleprompter: org.turboio.customai.device.Teleprompter; private set
     lateinit var dashboard: org.turboio.customai.device.Dashboard; private set
+    /** Apps opened on the glasses (15/24), for the feature test. */
+    val openedOnGlasses = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 8)
+    /** Delivered mirrored notifications / navigation lines since start (feature test). */
+    @Volatile var mirroredCards = 0
+    @Volatile var navLines = 0
+    val trafficRecorder = org.turboio.customai.probe.TrafficRecorder()
+    lateinit var features: org.turboio.customai.probe.FeatureSuite; private set
     lateinit var suggestions: org.turboio.customai.device.SuggestionCards; private set
     val mirrorPolicy by lazy { org.turboio.customai.device.MirrorPolicy(packageName, { settings.mirrorApps }, { settings.navOn }) }
     val probeFiles by lazy { org.turboio.customai.probe.ProbeFiles(this) }
@@ -100,6 +107,8 @@ class TurboApp : Application() {
         display = LensDisplay(session, scope, random)
         probe = org.turboio.customai.probe.HardwareProbe(session, scope, org.turboio.customai.probe.PrefsPendingFlag(this), random, probeFiles)
         suite = org.turboio.customai.probe.TestSuite(probe, org.turboio.customai.probe.PrefsSuiteStore(this))
+        features = org.turboio.customai.probe.FeatureSuite(org.turboio.customai.probe.FeatureSteps.all(this), scope,
+            org.turboio.customai.probe.PrefsSuiteStore(this, "features"), trafficRecorder, probeFiles::saveFeature)
         glassesSettings = org.turboio.customai.device.GlassesSettings(session, scope, settings.originalGlassesSettings)
         nativeNotifier = org.turboio.customai.device.NativeNotifier(session, scope, random)
         weather = org.turboio.customai.device.GlassesWeather(session)
@@ -114,6 +123,8 @@ class TurboApp : Application() {
                 else -> null
             }
         })
+        session.addRawListener { b, p -> trafficRecorder.inbound(b, p) }
+        session.outboundTap = { b, p -> trafficRecorder.outbound(b, p) }
         // Business 18 (file transfer) is open only while a teleprompter session is active.
         session.fileLease = { teleprompter.active }
         // What the user opens on the glasses (15/24 glass_preview): opening the native To-do refreshes it right away.
@@ -123,6 +134,7 @@ class TurboApp : Application() {
                 ?: return@addBusinessListener
             val opened = data.optJSONObject("app")?.takeIf { it.optInt("action") != 2 }?.optString("name").orEmpty()
             if (opened.isNotEmpty()) DiagnosticLog.i("OCULOS", "aberto nos óculos: $opened")
+            if (opened.isNotEmpty()) openedOnGlasses.tryEmit(opened)
             if (opened == "com.rayneo.liteos.todo") memoryChanged()
         }
         glassesTodo = org.turboio.customai.memory.GlassesTodoSync(session, scope, { memoryStore }, random,
@@ -335,11 +347,14 @@ class TurboApp : Application() {
             when (val a = synchronized(mirrorPolicy) { mirrorPolicy.decide(n) }) {
                 is org.turboio.customai.device.MirrorPolicy.Action.Card -> {
                     val outcome = nativeNotifier.show(a.title, a.text, a.appName)
+                    if (outcome.delivered) mirroredCards++
                     if (outcome == org.turboio.customai.device.NativeNotifier.Outcome.NO_REPLY && !display.active)
                         display.show("${a.appName} · ${a.title}: ${a.text}".take(270), settings.displaySettings())
                 }
-                is org.turboio.customai.device.MirrorPolicy.Action.Nav ->
+                is org.turboio.customai.device.MirrorPolicy.Action.Nav -> {
+                    navLines++
                     display.show(a.text, settings.displaySettings().copy(lingerSeconds = 5, pageSeconds = 5))
+                }
                 is org.turboio.customai.device.MirrorPolicy.Action.Skip -> Unit
             }
         }
@@ -402,11 +417,15 @@ class TurboApp : Application() {
                 }
                 override fun cancel() = recognizer.cancel()
             }
-            SttEngine.GLASSES_OPENAI, SttEngine.GLASSES_GOOGLE -> object : SpeechInput {
+            SttEngine.GLASSES_OPENAI, SttEngine.GLASSES_GOOGLE, SttEngine.GLASSES_DEEPGRAM -> object : SpeechInput {
                 override val usesGlassesMic = true
                 override suspend fun transcribe(pcm: ByteArray): String {
                     val key = settings.sttKey(config.engine)
-                    val transcriber = if (config.engine == SttEngine.GLASSES_OPENAI) OpenAiTranscriber(config, key) else GoogleSpeechTranscriber(config, key)
+                    val transcriber = when (config.engine) {
+                        SttEngine.GLASSES_OPENAI -> OpenAiTranscriber(config, key)
+                        SttEngine.GLASSES_DEEPGRAM -> org.turboio.customai.stt.DeepgramSpeechTranscriber(config, key)
+                        else -> GoogleSpeechTranscriber(config, key)
+                    }
                     return transcriber.transcribe(pcm)
                 }
             }

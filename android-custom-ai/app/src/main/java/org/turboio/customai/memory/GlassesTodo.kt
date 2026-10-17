@@ -63,6 +63,19 @@ class GlassesTodoSync(
         "{\"eventType\":1,\"eventID\":$wireId,\"createTime\":${i.createdAt / 1000},\"title\":${Json.quote(title)}," +
             "\"isImportant\":${important(i, now)},\"status\":$status,\"lastModifiedTime\":${now / 1000}}"
 
+    /** Every status the glasses report for an item id (types 4 and 10), including ids unknown to the store (tests). */
+    @Volatile var wireListener: ((Long, Int) -> Unit)? = null
+
+    /** A stand-alone item (not in the store) for the feature test; [status] 1 marks it done. Null = sent. */
+    suspend fun sendTest(wireId: Long, title: String, status: Int): String? {
+        val now = clock()
+        val body = "{\"eventType\":1,\"eventID\":$wireId,\"createTime\":${now / 1000},\"title\":${Json.quote(title.take(MAX))}," +
+            "\"isImportant\":false,\"status\":$status,\"lastModifiedTime\":${now / 1000}}"
+        return port.sendEnvelope(Business.TODO, 2, body)
+    }
+
+    fun testWireId(): Long = newWireId()
+
     /** Sends what changed since the last sync (safe to call often). */
     fun sync() {
         if (!enabled() || !port.isReady) return
@@ -107,6 +120,7 @@ class GlassesTodoSync(
         if (!e.has("eventID") || !e.has("status")) return
         val wireId = e.optLong("eventID"); val status = e.optInt("status", -1)
         if (status !in 0..1) return
+        wireListener?.let { runCatching { it(wireId, status) } }
         scope.launch {
             val s = store()
             val item = s.itemByWire(wireId) ?: return@launch
