@@ -109,8 +109,8 @@ Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar Li
 
 | Campo | Valor |
 | --- | --- |
-| Arquivo | `TurboIO-CustomAI-0.1.0-mvp-debug.apk` |
-| SHA-256 | ver `TurboIO-CustomAI-0.1.0-mvp-debug.apk.sha256` publicado junto |
+| Arquivo | `TurboIO-CustomAI-0.2.0-diario-debug.apk` (versionCode 2; instala por cima da 0.1.0, mesma assinatura) |
+| SHA-256 | ver `TurboIO-CustomAI-0.2.0-diario-debug.apk.sha256` publicado junto |
 | Assinatura | certificado *Android Debug* (APK de teste; não é build de loja) |
 | Pacote / alvo | `org.turboio.customai`, minSdk 26, targetSdk 35 |
 | Conteúdo proprietário | nenhum (sem `.so`, sem classes/recursos RayNeo) |
