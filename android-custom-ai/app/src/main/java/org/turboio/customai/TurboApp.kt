@@ -109,7 +109,7 @@ class TurboApp : Application() {
         suite = org.turboio.customai.probe.TestSuite(probe, org.turboio.customai.probe.PrefsSuiteStore(this))
         features = org.turboio.customai.probe.FeatureSuite(org.turboio.customai.probe.FeatureSteps.all(this), scope,
             org.turboio.customai.probe.PrefsSuiteStore(this, "features"), trafficRecorder, probeFiles::saveFeature)
-        glassesSettings = org.turboio.customai.device.GlassesSettings(session, scope, settings.originalGlassesSettings)
+        glassesSettings = org.turboio.customai.device.GlassesSettings(session, scope, settings.originalGlassesSettings, learned = settings.learnedDisplay)
         nativeNotifier = org.turboio.customai.device.NativeNotifier(session, scope, random)
         weather = org.turboio.customai.device.GlassesWeather(session)
         dashboard = org.turboio.customai.device.Dashboard(session, random)

@@ -70,20 +70,26 @@ class ConnectionFragment : Fragment() {
     private lateinit var settingsText: TextView
     private var height = 0
     private var distance = 0
+    private lateinit var heightSpinner: android.widget.Spinner
+    private lateinit var distanceSpinner: android.widget.Spinner
+    private var heightChoices: List<Int> = emptyList()
+    private var distanceChoices: List<Int> = emptyList()
 
     /** Settings the official app changes, limited to evidence-backed values (docs/AJUSTES_DOS_OCULOS.md). */
     private fun glassesCard(ui: Column) {
         val c = ui.card()
         c.title("Ajustes da tela dos óculos (experimental)")
-        c.hint("Os mesmos ajustes do app oficial, só com os valores já observados nele. O app lê os valores atuais antes de mudar " +
-            "e guarda os originais para restaurar. Confira o efeito nas lentes.")
+        c.hint("Os mesmos ajustes do app oficial. O app lê os valores atuais antes de mudar, confere depois e guarda os originais " +
+            "para restaurar. Valores que os óculos informarem (por exemplo, um nível escolhido no app oficial) passam a aparecer aqui. " +
+            "“Distância 3 (experimental)”: o app testa e, se os óculos não aplicarem, volta ao valor anterior.")
         settingsText = c.text("", size = 13f)
         fun done(msg: String?) = view?.post { android.widget.Toast.makeText(requireContext(), msg ?: "Feito — confira nas lentes", android.widget.Toast.LENGTH_SHORT).show() }
         c.button("Ler ajustes dos óculos", filled = false) { app.glassesSettings.read { done(it ?: "Ajustes lidos") } }
         c.text("Altura do texto", size = 13f)
-        c.spinner(org.turboio.customai.device.SettingsWire.HEIGHTS, 0, { "Altura $it" }) { height = it }
+        heightSpinner = c.spinner(listOf(0), 0, { "" }) {}
         c.text("Distância", size = 13f)
-        c.spinner(org.turboio.customai.device.SettingsWire.DISTANCES, 0, { "Distância $it" }) { distance = it }
+        distanceSpinner = c.spinner(listOf(0), 0, { "" }) {}
+        refreshDisplayChoices()
         c.button("Aplicar altura e distância") { app.glassesSettings.setDisplay(height, distance) { done(it) } }
         c.buttons("Duplo toque abre To-do" to { app.glassesSettings.setDoubleTapTodo(true) { done(it) } },
             "Desligar" to { app.glassesSettings.setDoubleTapTodo(false) { done(it) } })
@@ -186,8 +192,33 @@ class ConnectionFragment : Fragment() {
             .setNegativeButton("Cancelar", null).show()
     }
 
+    /** Height/distance lists: known levels, levels these glasses reported, and the experimental third depth. */
+    private fun refreshDisplayChoices() {
+        val gs = app.glassesSettings; val c = gs.state.value.config
+        val heights = gs.heights()
+        val distances = (gs.distances() + org.turboio.customai.device.SettingsWire.TRY_DISTANCE).distinct().sorted()
+        if (heights == heightChoices && distances == distanceChoices) return
+        heightChoices = heights; distanceChoices = distances
+        val known = gs.distances()
+        fun bind(spinner: android.widget.Spinner, items: List<Int>, label: (Int) -> String, current: Int?, set: (Int) -> Unit) {
+            spinner.adapter = android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, items.map(label))
+            spinner.setSelection(items.indexOf(current).coerceAtLeast(0))
+            spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) = set(items[pos])
+                override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
+            }
+        }
+        bind(heightSpinner, heights, { "Altura $it" + if (it !in org.turboio.customai.device.SettingsWire.HEIGHTS) " (lida dos óculos)" else "" }, c.height) { height = it }
+        bind(distanceSpinner, distances, { d -> "Distância $d" + when {
+            d in org.turboio.customai.device.SettingsWire.DISTANCES -> ""
+            d in known -> " (lida dos óculos)"
+            else -> " (experimental)"
+        } }, c.distance) { distance = it }
+    }
+
     private fun renderSettings(s: org.turboio.customai.device.SettingsState) {
         if (!::settingsText.isInitialized) return
+        refreshDisplayChoices()
         val c = s.config
         settingsText.text = buildString {
             if (c.readAt > 0) append("Palavra de ativação: ${when (c.wakeup) { true -> "ligada"; false -> "desligada"; null -> "não informada" }}\n")

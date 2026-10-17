@@ -68,12 +68,46 @@ class GlassesSettingsTest {
         s.setDisplay(height = 1) { result = it }; runCurrent(); advanceTimeBy(7000); runCurrent()
         assertEquals("Os óculos não responderam (6 s)", result); assertEquals(listOf("15/4"), port.trace())
         assertTrue(Business.contentAllowed(15, 5, SettingsWire.display(5, 1)))
-        assertFalse(Business.contentAllowed(15, 5, SettingsWire.display(2, 1)))
-        assertFalse(Business.contentAllowed(15, 5, SettingsWire.display(3, 3)))
+        assertTrue(Business.contentAllowed(15, 5, SettingsWire.display(3, 3)))      // experimental third depth
+        assertFalse(Business.contentAllowed(15, 5, SettingsWire.display(3, 4)))
+        assertFalse(Business.contentAllowed(15, 5, SettingsWire.display(6, 1)))
         assertFalse(Business.contentAllowed(15, 5, SettingsWire.crown(4, 1)))
         assertFalse(Business.contentAllowed(15, 5, """{"cmd":"display_config","payload":{"value":0,"mode":0,"data":"{\"height\":3,\"distance\":1,\"x\":1}"}}"""))
         assertFalse(Business.contentAllowed(15, 5, """{"cmd":"factory_reset","payload":{"value":0,"mode":0,"data":"{}"}}"""))
         assertFalse(Business.contentAllowed(15, 4, """{"cmd":"request_general_status","payload":{}}"""))
         assertFalse(Business.outboundAllowed(22, 6)); assertFalse(Business.outboundAllowed(18, 1)); assertFalse(Business.outboundAllowed(9, 1))
+    }
+
+    private class MemLearned : LearnedDisplay {
+        val h = HashSet<Int>(); val d = HashSet<Int>()
+        override fun heights() = h; override fun distances() = d
+        override fun add(height: Int?, distance: Int?) { height?.let(h::add); distance?.let(d::add) }
+    }
+
+    @Test fun experimentalDepthIsVerifiedUndoneOrLearned() = runTest {
+        val learned = MemLearned()
+        val s = GlassesSettings(port, this, MemoryOriginals(), clock = { 1000L }, learned = learned)
+        var result: String? = "?"
+        // Not applied: the glasses report another value → the previous values are written back.
+        s.setDisplay(distance = 3) { result = it }
+        glassesAnswer(3, 1, 0, 5)
+        assertEquals(3, data(1).getInt("distance"))
+        port.glasses(15, 6, """{"cmd":"display_config","payload":{"value":0}}"""); runCurrent()
+        glassesAnswer(3, 2, 0, 5)                                   // read back: changed to something else
+        glassesAnswer(3, 2, 0, 5)                                   // fresh read before restoring
+        assertEquals(1, data(port.sent.lastIndex).getInt("distance"))
+        port.glasses(15, 6, """{"cmd":"display_config","payload":{"value":0}}"""); runCurrent()
+        glassesAnswer(3, 1, 0, 5)
+        assertTrue(result!!, result!!.startsWith("Os óculos não aplicaram") && result!!.contains("restaurados"))
+        assertFalse(3 in s.distances())
+        // Applied: becomes a selectable value.
+        s.setDisplay(distance = 3) { result = it }
+        glassesAnswer(3, 1, 0, 5)
+        port.glasses(15, 6, """{"cmd":"display_config","payload":{"value":0}}"""); runCurrent()
+        glassesAnswer(3, 3, 0, 5)
+        assertNull(result); assertEquals(listOf(1, 2, 3), s.distances())
+        // A level read from the glasses (set in the official app) is offered too.
+        s.read { result = it }; glassesAnswer(4, 0, 0, 5)
+        assertEquals(listOf(1, 3, 4, 5), s.heights()); assertEquals(listOf(0, 1, 2, 3), s.distances())
     }
 }

@@ -29,12 +29,17 @@ grava firmware.
 | Ação | Comando | Valores aceitos |
 | --- | --- | --- |
 | Ler | 15/4 `request_general_settings` | — |
-| Altura do texto e distância | 15/5 `display_config`, `data = {"distance":d,"height":h}` | altura 1, 3 ou 5; distância 1 ou 2 |
+| Altura do texto e distância | 15/5 `display_config`, `data = {"distance":d,"height":h}` | altura 1, 3 ou 5; distância 1 ou 2 (vistos em outros clientes); mais os valores que os seus óculos informarem; distância 3 experimental |
 | Duplo toque abre o To-do | 15/5 `crown_config`, `data = {"double":8\|0,"longPress":<lido>}` | duplo 0 ou 8 |
 
 * Cada gravação lê os valores atuais antes e manda os dois campos: o que não muda vai exatamente como foi lido. Depois
   lê de novo para confirmar.
 * Os primeiros valores lidos ficam guardados. **Restaurar ajustes originais** volta a eles.
+* **Níveis a mais do app oficial** (ex.: a 3ª profundidade): escolha o nível no app oficial, conecte este app e toque
+  em **Ler ajustes dos óculos**. O valor que os óculos informarem passa a aparecer na lista (“lida dos óculos”).
+* **Distância 3 (experimental)**: o app envia, relê e, se os óculos não aplicarem o valor pedido, volta aos valores
+  anteriores. Se aplicarem, o valor passa a ser oferecido normalmente. O firmware tem uma validação própria desse
+  ajuste; qualquer valor enviado fica entre 0 e 5 (altura) e 0 e 3 (distância).
 * Duplo toque: só quando a ação atual é 0 (nenhuma) ou 8 (To-do). Se for outra função, o app recusa, porque não
   conseguiria restaurá-la.
 * Efeito físico na lente **não confirmado** por nenhum cliente (o iOS marca “提交不等于眼镜物理效果已通过”). Confira

@@ -27,8 +27,22 @@ object SettingsWire {
     fun crown(double: Int, longPress: Int) = command("crown_config", """{"double":$double,"longPress":$longPress}""")
     private fun command(cmd: String, data: String) = "{\"cmd\":\"$cmd\",\"payload\":{\"value\":0,\"mode\":0,\"data\":${Json.quote(data)}}}"
 
+    /** Values seen in the official app by other clients. */
     val HEIGHTS = listOf(1, 3, 5)
     val DISTANCES = listOf(1, 2)
+    /** Offered as an experiment (the official app shows a third depth level): written, read back, undone if not applied. */
+    const val TRY_DISTANCE = 3
+    /** Hard bounds for anything sent (also enforced by the outbound content gate). */
+    val HEIGHT_RANGE = 0..5
+    val DISTANCE_RANGE = 0..3
+}
+
+/** Height/distance values these glasses reported themselves (e.g. after the user picked a level in the official app). */
+interface LearnedDisplay {
+    fun heights(): Set<Int>
+    fun distances(): Set<Int>
+    fun add(height: Int?, distance: Int?)
+    object None : LearnedDisplay { override fun heights() = emptySet<Int>(); override fun distances() = emptySet<Int>(); override fun add(height: Int?, distance: Int?) {} }
 }
 
 data class GlassesConfig(val height: Int? = null, val distance: Int? = null, val crownDouble: Int? = null, val crownLongPress: Int? = null, val readAt: Long = 0,
@@ -76,7 +90,12 @@ class GlassesSettings(
     private val scope: CoroutineScope,
     private val originals: OriginalSettings,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val learned: LearnedDisplay = LearnedDisplay.None,
 ) : BusinessListener {
+    /** Selectable values: known from the official app plus those these glasses reported. */
+    fun heights(): List<Int> = (SettingsWire.HEIGHTS + learned.heights()).filter { it in SettingsWire.HEIGHT_RANGE }.distinct().sorted()
+    fun distances(): List<Int> = (SettingsWire.DISTANCES + learned.distances()).filter { it in SettingsWire.DISTANCE_RANGE }.distinct().sorted()
+
     private val _state = MutableStateFlow(SettingsState(original = originals.load()))
     val state: StateFlow<SettingsState> = _state
     private var settingsReply: CompletableDeferred<JSONObject>? = null
@@ -106,6 +125,7 @@ class GlassesSettings(
         settingsReply = null
         if (reply == null) return "Os óculos não responderam (6 s)".also { note(it) }
         val config = GlassesConfig.parse(reply, clock())
+        if (config.hasDisplay) learned.add(config.height?.takeIf { it in SettingsWire.HEIGHT_RANGE }, config.distance?.takeIf { it in SettingsWire.DISTANCE_RANGE })
         var original = _state.value.original
         if (original == null || (!original.hasDisplay && config.hasDisplay) || (!original.hasCrown && config.hasCrown)) {
             original = GlassesConfig(original?.height ?: config.height, original?.distance ?: config.distance,
@@ -118,13 +138,33 @@ class GlassesSettings(
         return null
     }
 
-    /** Height/distance: always both keys, the one not being changed sent back exactly as read. */
+    /**
+     * Height/distance: always both keys, the one not being changed sent back exactly as read. The result is read back;
+     * if the glasses did not apply it (e.g. the experimental depth 3), the previous values are written again.
+     */
     fun setDisplay(height: Int? = null, distance: Int? = null, done: (String?) -> Unit = {}) = scope.launch {
-        done(write("display_config") { c ->
+        var before: GlassesConfig? = null
+        val error = write("display_config") { c ->
             if (!c.hasDisplay) return@write null
+            before = c
             val h = height ?: c.height!!; val d = distance ?: c.distance!!
-            if (h !in SettingsWire.HEIGHTS || d !in SettingsWire.DISTANCES) null else SettingsWire.display(h, d)
-        })
+            val hOk = h in heights() || h == c.height
+            val dOk = d in distances() || d == c.distance || d == SettingsWire.TRY_DISTANCE
+            if (!hOk || !dOk) null else SettingsWire.display(h, d)
+        }
+        if (error != null) return@launch done(error)
+        val after = _state.value.config; val prev = before
+        val applied = (height == null || after.height == height) && (distance == null || after.distance == distance)
+        if (applied || prev == null) {
+            learned.add(height, distance)
+            return@launch done(null)
+        }
+        var msg = "Os óculos não aplicaram esse valor (relido: altura ${after.height ?: "?"}, distância ${after.distance ?: "?"})"
+        if (after.hasDisplay && (after.height != prev.height || after.distance != prev.distance)) {
+            val back = write("display_config") { c -> if (c.hasDisplay) SettingsWire.display(prev.height!!, prev.distance!!) else null }
+            msg += if (back == null) "; valores anteriores restaurados" else "; não foi possível restaurar: $back"
+        }
+        note(msg); done(msg)
     }
 
     /** Crown double-tap opens the native To-do (8); off restores the double-tap action read originally (or 0). */
@@ -159,7 +199,7 @@ class GlassesSettings(
     fun restore(done: (String?) -> Unit = {}) = scope.launch {
         val o = _state.value.original ?: return@launch done("Nada a restaurar: os ajustes originais ainda não foram lidos")
         var error: String? = null
-        if (o.hasDisplay && o.height in SettingsWire.HEIGHTS && o.distance in SettingsWire.DISTANCES)
+        if (o.hasDisplay && o.height in SettingsWire.HEIGHT_RANGE && o.distance in SettingsWire.DISTANCE_RANGE)
             error = write("display_config") { c -> if (c.hasDisplay) SettingsWire.display(o.height!!, o.distance!!) else null }
         if (error == null && o.hasCrown && o.crownDouble in setOf(0, 8))
             error = write("crown_config") { c -> if (c.hasCrown) SettingsWire.crown(o.crownDouble!!, c.crownLongPress!!) else null }

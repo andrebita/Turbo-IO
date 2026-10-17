@@ -33,7 +33,7 @@ export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-* The 145 unit tests include:
+* The 146 unit tests include:
   * the BLE session against emulated glasses;
   * protocol vectors generated from the original TypeScript;
   * the voice round with synthetic Opus;

@@ -99,7 +99,8 @@ object Business {
         val data = runCatching { org.json.JSONObject(org.json.JSONObject(json).getJSONObject("payload").getString("data")) }.getOrNull() ?: return false
         val keys = data.keys().asSequence().toSet()
         return when (cmd) {
-            "display_config" -> keys == setOf("height", "distance") && data.optInt("height") in setOf(1, 3, 5) && data.optInt("distance") in setOf(1, 2)
+            // Known levels plus values the glasses reported themselves and the experimental third depth (0–5 / 0–3).
+            "display_config" -> keys == setOf("height", "distance") && data.optInt("height", -1) in 0..5 && data.optInt("distance", -1) in 0..3
             "crown_config" -> keys == setOf("double", "longPress") && data.optInt("double", -1) in setOf(0, 8) && data.optInt("longPress", -1) in 0..64
             else -> false
         }

@@ -166,6 +166,19 @@ class SettingsRepository(context: Context) {
             .putBoolean("memory.glassesTodo", s.glassesTodo).putBoolean("memory.nodConfirm", s.nodConfirm).apply()
     }
 
+    /** Height/distance values these glasses reported (selectable afterwards). */
+    val learnedDisplay = object : org.turboio.customai.device.LearnedDisplay {
+        private fun set(k: String) = prefs.getStringSet(k, emptySet())?.mapNotNull { it.toIntOrNull() }?.toSet() ?: emptySet()
+        override fun heights() = set("glasses.learned.heights")
+        override fun distances() = set("glasses.learned.distances")
+        override fun add(height: Int?, distance: Int?) {
+            val e = prefs.edit()
+            if (height != null) e.putStringSet("glasses.learned.heights", (heights() + height).map { it.toString() }.toSet())
+            if (distance != null) e.putStringSet("glasses.learned.distances", (distances() + distance).map { it.toString() }.toSet())
+            e.apply()
+        }
+    }
+
     /** First display/crown values read from the glasses (restore point). */
     val originalGlassesSettings = object : org.turboio.customai.device.OriginalSettings {
         override fun load(): org.turboio.customai.device.GlassesConfig? {
