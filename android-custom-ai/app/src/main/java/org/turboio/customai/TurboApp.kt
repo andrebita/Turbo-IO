@@ -27,6 +27,17 @@ import org.turboio.customai.ble.SessionStatus
 import org.turboio.customai.diag.DiagnosticLog
 import org.turboio.customai.display.DisplayText
 import org.turboio.customai.display.LensDisplay
+import org.turboio.customai.insights.InsightEngine
+import org.turboio.customai.insights.JournalIntent
+import org.turboio.customai.insights.JournalIntents
+import org.turboio.customai.journal.AndroidSqlDb
+import org.turboio.customai.journal.Days
+import org.turboio.customai.journal.Entry
+import org.turboio.customai.journal.EntryKind
+import org.turboio.customai.journal.EntrySource
+import org.turboio.customai.journal.JournalStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.turboio.customai.service.ConnectionService
 import org.turboio.customai.stt.GoogleSpeechTranscriber
 import org.turboio.customai.stt.OpenAiTranscriber
@@ -74,13 +85,14 @@ class TurboApp : Application() {
             store = PrefsPeerStore(this),
         )
         display = LensDisplay(session, scope, random)
-        voice = VoiceAssistant(session, scope, random, ::speechInput, { q -> askAi(q).text }, settings::voiceSettings, { !display.active })
+        voice = VoiceAssistant(session, scope, random, ::speechInput, { q -> voiceAnswer(q) }, settings::voiceSettings, { !display.active })
         var wasReady = false
         session.onStatus = { s ->
             _status.value = s
             val ready = s.phase == Phase.READY
             if (ready != wasReady) { wasReady = ready; voice.connectionChanged(ready) }
         }
+        runCatching { org.turboio.customai.insights.DailyInsightWorker.schedule(this) }
         DiagnosticLog.i("APP", "Turbo IO Custom AI ${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
     }
 
@@ -97,19 +109,78 @@ class TurboApp : Application() {
 
     fun disconnect() { session.disconnect(); ConnectionService.stop(this) }
 
-    /** Shared by the test screen and voice turns. Keeps a short history for follow-up questions. */
-    suspend fun askAi(question: String): AiAnswer {
+    /** Journal (SQLite, opened lazily off the main thread) and the insight engine on top of it. */
+    val journal: JournalStore by lazy { JournalStore(AndroidSqlDb(this)) }
+    val insights: InsightEngine by lazy {
+        InsightEngine(journal, { system, user, maxTokens -> completeForInsights(system, user, maxTokens) }, {
+            val c = settings.aiConfig(); c.provider.id to settings.journalSettings().insightsModel.ifBlank { c.model }
+        })
+    }
+
+    /** One-shot completion without chat history (insights, journal search). Optional cheaper insights model. */
+    private suspend fun completeForInsights(system: String, user: String, maxTokens: Int): String {
+        val base = settings.aiConfig()
+        val model = settings.journalSettings().insightsModel.ifBlank { base.model }
+        val config = base.copy(model = model, systemPrompt = system, historyTurns = 0,
+            maxTokens = maxOf(maxTokens, 400), timeoutSeconds = maxOf(base.timeoutSeconds, 60))
+        return ai.ask(config, settings.apiKey(base.provider), emptyList(), user.take(60_000)).text
+    }
+
+    /**
+     * Shared by the test screen and voice turns. Keeps a short history for follow-up questions and records
+     * the exchange in the journal (option 2).
+     */
+    suspend fun askAi(question: String, source: EntrySource = EntrySource.TEXT, record: Boolean = true): AiAnswer {
         val config = settings.aiConfig()
         val key = settings.apiKey(config.provider)
         val snapshot = synchronized(history) { history.toList() }
         val effective = if (DisplayText.wantsDetail(question)) config.copy(maxTokens = maxOf(config.maxTokens, 1500)) else config
+        val started = System.currentTimeMillis()
         val result = ai.ask(effective, key, snapshot, question)
         synchronized(history) {
             history.add(ChatMessage("user", question.take(4000)))
             history.add(ChatMessage("assistant", result.text.take(8000)))
             while (history.size > 20) history.removeAt(0)
         }
+        if (record) recordInteraction(question, result.text, source, started, result.provider.id, result.model, result.latencyMs)
         return result
+    }
+
+    private suspend fun recordInteraction(question: String, answer: String, source: EntrySource, started: Long,
+                                          provider: String, model: String, latency: Long, meta: String = "{}") {
+        if (!settings.journalSettings().recordInteractions) return
+        withContext(Dispatchers.IO) {
+            runCatching {
+                journal.add(Entry(day = Days.of(started), tsStart = started, tsEnd = System.currentTimeMillis(),
+                    kind = EntryKind.INTERACTION, source = source, text = question, answer = answer,
+                    provider = provider, model = model, latencyMs = latency, metaJson = meta))
+            }.onFailure { DiagnosticLog.w("DIARIO", "falha ao registrar interação: ${it.javaClass.simpleName}") }
+        }
+    }
+
+    /** Voice entry point: journal questions are answered from the journal; everything else goes to the model. */
+    suspend fun voiceAnswer(question: String): String {
+        val source = if (settings.sttConfig().engine.usesGlassesMic) EntrySource.VOICE_GLASSES else EntrySource.VOICE_PHONE
+        return journalAnswer(question, source) ?: askAi(question, source).text
+    }
+
+    /** Returns null when [question] is not about the journal. Journal queries are recorded but excluded from insights. */
+    suspend fun journalAnswer(question: String, source: EntrySource): String? {
+        val intent = JournalIntents.detect(question) ?: return null
+        val today = Days.of(System.currentTimeMillis())
+        val started = System.currentTimeMillis()
+        DiagnosticLog.i("DIARIO", "pergunta sobre o diário: ${intent.javaClass.simpleName}")
+        val answer = withContext(Dispatchers.IO) {
+            when (intent) {
+                is JournalIntent.Summary -> insights.day(Days.shift(today, intent.dayOffset.toLong())).insight.lens(400)
+                is JournalIntent.Tasks -> insights.day(Days.shift(today, intent.dayOffset.toLong())).insight.tarefas
+                    .let { if (it.isEmpty()) "Nenhuma tarefa registrada." else "Tarefas: " + it.take(5).joinToString("; ") }
+                is JournalIntent.Search -> insights.ask(question, intent.term, intent.dayOffset?.let { Days.shift(today, it.toLong()) })
+            }
+        }
+        val c = settings.aiConfig()
+        recordInteraction(question, answer, source, started, c.provider.id, c.model, System.currentTimeMillis() - started, "{\"journal_query\":true}")
+        return answer
     }
 
     fun clearHistory() = synchronized(history) { history.clear() }

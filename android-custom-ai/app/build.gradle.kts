@@ -47,8 +47,12 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     // Pure-Java Opus decoder (BSD-3) for the glasses microphone stream; no NDK required.
     implementation("io.github.jaredmdobson:concentus:1.0.2")
+    // Daily insight schedule (and, in phase 2, the transcription queue).
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+    // Real SQLite (incl. FTS4) for journal tests on the JVM.
+    testImplementation("org.xerial:sqlite-jdbc:3.47.1.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }

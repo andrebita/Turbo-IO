@@ -30,13 +30,17 @@ class MainActivity : AppCompatActivity() {
         nav.setOnItemSelectedListener { item ->
             show(when (item.itemId) {
                 R.id.nav_ai -> AiFragment()
+                R.id.nav_journal -> JournalFragment()
                 R.id.nav_test -> TestFragment()
                 R.id.nav_diag -> DiagnosticsFragment()
                 else -> ConnectionFragment()
             }, item.title.toString())
             true
         }
-        if (savedInstanceState == null) show(ConnectionFragment(), getString(R.string.tab_connection))
+        if (savedInstanceState == null) {
+            if (intent?.getStringExtra(EXTRA_TAB) == "journal") nav.selectedItemId = R.id.nav_journal
+            else show(ConnectionFragment(), getString(R.string.tab_connection))
+        }
         requestPermissionsIfNeeded()
     }
 
@@ -64,5 +68,8 @@ class MainActivity : AppCompatActivity() {
         return needed.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
     }
 
-    companion object { private const val CONTAINER = 0x7f0a7392 }
+    companion object {
+        private const val CONTAINER = 0x7f0a7392
+        const val EXTRA_TAB = "tab"
+    }
 }

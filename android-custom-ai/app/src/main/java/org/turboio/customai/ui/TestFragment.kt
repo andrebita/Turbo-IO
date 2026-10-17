@@ -89,6 +89,13 @@ class TestFragment : Fragment() {
         aiStatus.text = "Consultando ${app.settings.aiConfig().provider.label}…"; aiStatus.setTextColor(statusColor(null))
         viewLifecycleOwner.lifecycleScope.launch {
             try {
+                // Questions about the journal ("resumo do meu dia", "o que falei sobre X") are answered from it.
+                app.journalAnswer(q, org.turboio.customai.journal.EntrySource.TEXT)?.let { fromJournal ->
+                    lastAnswer = fromJournal
+                    answer.text = DisplayText.clean(fromJournal, app.settings.displaySettings().stripAccents)
+                    aiStatus.text = "✓ Respondido a partir do diário"; aiStatus.setTextColor(statusColor(true))
+                    return@launch
+                }
                 val result = app.askAi(q)
                 lastAnswer = result.text
                 answer.text = DisplayText.clean(result.text, app.settings.displaySettings().stripAccents)

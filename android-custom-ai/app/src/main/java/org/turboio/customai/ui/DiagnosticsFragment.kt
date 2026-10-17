@@ -55,9 +55,11 @@ class DiagnosticsFragment : Fragment() {
         ui.title("Reversão")
         ui.button("Apagar todos os dados deste app", filled = false) {
             AlertDialog.Builder(requireContext()).setTitle("Apagar dados?")
-                .setMessage("Remove chaves de API, configurações e o óculos salvo deste app. O app oficial e o firmware não são afetados.")
+                .setMessage("Remove chaves de API, configurações, o diário e o óculos salvo deste app. O app oficial e o firmware não são afetados.")
                 .setPositiveButton("Apagar") { _, _ ->
-                    app.session.forget(); app.settings.wipe(); app.clearHistory(); ConnectionService.stop(requireContext())
+                    app.session.forget(); app.settings.wipe(); app.clearHistory()
+                    viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { app.journal.wipe() } }
+                    ConnectionService.stop(requireContext())
                     DiagnosticLog.i("APP", "dados locais apagados pelo usuário")
                 }.setNegativeButton("Cancelar", null).show()
         }
@@ -120,7 +122,7 @@ class DiagnosticsFragment : Fragment() {
         test.text = "Consultando provedor…"; test.setTextColor(statusColor(null))
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val r = app.askAi("Teste de diagnóstico: responda apenas com a palavra OK.")
+                val r = app.askAi("Teste de diagnóstico: responda apenas com a palavra OK.", record = false)
                 test.text = "✓ ${r.provider.label}/${r.model} respondeu em ${r.latencyMs} ms: \"${r.text.take(60)}\""
                 test.setTextColor(statusColor(true))
             } catch (e: Exception) {

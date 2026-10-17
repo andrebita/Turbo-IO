@@ -93,6 +93,32 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean("ble.keep", true)
         set(value) { prefs.edit().putBoolean("ble.keep", value).apply() }
 
+    fun journalSettings(): JournalSettings = JournalSettings(
+        recordInteractions = prefs.getBoolean("journal.record", true),
+        autoDaily = prefs.getBoolean("journal.autoDaily", true),
+        dailyHour = prefs.getInt("journal.hour", 21).coerceIn(0, 23),
+        dailyMinute = prefs.getInt("journal.minute", 0).coerceIn(0, 59),
+        lensDaily = prefs.getBoolean("journal.lens", false),
+        retentionDays = prefs.getInt("journal.retention", 0).coerceIn(0, 3650),
+        insightsModel = prefs.getString("journal.model", "") ?: "",
+    )
+
+    fun saveJournal(s: JournalSettings) {
+        prefs.edit().putBoolean("journal.record", s.recordInteractions).putBoolean("journal.autoDaily", s.autoDaily)
+            .putInt("journal.hour", s.dailyHour).putInt("journal.minute", s.dailyMinute).putBoolean("journal.lens", s.lensDaily)
+            .putInt("journal.retention", s.retentionDays).putString("journal.model", s.insightsModel.trim()).apply()
+    }
+
     /** Removes every stored key and preference (used by "Apagar dados" in diagnostics). */
     fun wipe() { secrets.clearAll(); prefs.edit().clear().apply() }
 }
+
+data class JournalSettings(
+    val recordInteractions: Boolean = true,
+    val autoDaily: Boolean = true,
+    val dailyHour: Int = 21,
+    val dailyMinute: Int = 0,
+    val lensDaily: Boolean = false,
+    val retentionDays: Int = 0,      // 0 = keep everything
+    val insightsModel: String = "",  // empty = same model as the AI tab
+)
