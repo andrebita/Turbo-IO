@@ -164,19 +164,25 @@ class ConnectionFragment : Fragment() {
     }
 
     private fun chooseApps() {
-        val seen = (app.settings.notifyingApps + app.settings.mirrorApps).sorted()
-        if (seen.isEmpty()) {
-            AlertDialog.Builder(requireContext()).setTitle("Nenhum app ainda")
-                .setMessage("Libere o acesso às notificações e aguarde chegar alguma notificação; os apps aparecem aqui.").setPositiveButton("OK", null).show()
+        val pm = requireContext().packageManager
+        fun installed(pkg: String) = runCatching { pm.getApplicationInfo(pkg, 0); true }.getOrDefault(false)
+        val Policy = org.turboio.customai.device.MirrorPolicy
+        val rows = Policy.choices(::installed, app.settings.notifyingApps, app.settings.mirrorApps)
+        if (rows.isEmpty()) {
+            AlertDialog.Builder(requireContext()).setTitle("Nenhum app encontrado")
+                .setMessage("Nenhum dos apps conhecidos está instalado. Libere o acesso às notificações e aguarde chegar alguma; os apps aparecem aqui.")
+                .setPositiveButton("OK", null).show()
             return
         }
-        val pm = requireContext().packageManager
-        val names = seen.map { pkg -> org.turboio.customai.device.MirrorPolicy.name(pkg,
-            runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrNull()) }
-        val chosen = BooleanArray(seen.size) { seen[it] in app.settings.mirrorApps }
-        AlertDialog.Builder(requireContext()).setTitle("Apps que vão para os óculos")
-            .setMultiChoiceItems(names.toTypedArray(), chosen) { _, i, on -> chosen[i] = on }
-            .setPositiveButton("Salvar") { _, _ -> app.settings.mirrorApps = seen.filterIndexed { i, _ -> chosen[i] }.toSet() }
+        val labels = rows.map { r ->
+            val label = runCatching { pm.getApplicationLabel(pm.getApplicationInfo(r.pkg, 0)).toString() }.getOrNull()
+            "${Policy.name(r.pkg, label)} · ${r.category.label}"
+        }
+        val initial = if (app.settings.mirrorAppsChosen) app.settings.mirrorApps else Policy.defaults(rows)
+        val chosen = BooleanArray(rows.size) { rows[it].pkg in initial }
+        AlertDialog.Builder(requireContext()).setTitle(if (app.settings.mirrorAppsChosen) "Apps que vão para os óculos" else "Apps que vão para os óculos (sugestão)")
+            .setMultiChoiceItems(labels.toTypedArray(), chosen) { _, i, on -> chosen[i] = on }
+            .setPositiveButton("Salvar") { _, _ -> app.settings.mirrorApps = rows.filterIndexed { i, _ -> chosen[i] }.map { it.pkg }.toSet() }
             .setNegativeButton("Cancelar", null).show()
     }
 

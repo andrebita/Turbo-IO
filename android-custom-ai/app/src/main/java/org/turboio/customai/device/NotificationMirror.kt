@@ -59,11 +59,50 @@ class MirrorPolicy(
     companion object {
         const val MAPS = "com.google.android.apps.maps"
         private val SKIPPED = setOf("progress", "service", "transport", "sys", "status")
-        private val NAMES = mapOf("com.whatsapp" to "WhatsApp", "com.whatsapp.w4b" to "WhatsApp Business", "org.telegram.messenger" to "Telegram",
-            "com.google.android.gm" to "Gmail", "com.microsoft.office.outlook" to "Outlook", "com.slack" to "Slack",
-            "com.google.android.apps.messaging" to "Mensagens", "com.samsung.android.messaging" to "Mensagens",
-            "com.microsoft.teams" to "Teams", "com.instagram.android" to "Instagram", "com.google.android.calendar" to "Agenda",
-            "com.samsung.android.calendar" to "Agenda", MAPS to "Maps", "com.linkedin.android" to "LinkedIn", "com.facebook.orca" to "Messenger")
+        enum class Category(val label: String, val preselect: Boolean) {
+            MESSAGES("Mensagens", true), EMAIL("E-mail", true), BANKS("Bancos e pagamentos", true),
+            CALENDAR("Agenda", false), WORK("Trabalho", false), OTHER("Outros", false)
+        }
+
+        data class Known(val pkg: String, val name: String, val category: Category)
+
+        /**
+         * Common apps offered in the choice list even before any notification arrived (only the installed ones are shown).
+         * Every package here must also be listed under <queries> in AndroidManifest.xml (Android 11+ package visibility).
+         */
+        val CATALOG = listOf(
+            Known("com.whatsapp", "WhatsApp", Category.MESSAGES), Known("com.whatsapp.w4b", "WhatsApp Business", Category.MESSAGES),
+            Known("org.telegram.messenger", "Telegram", Category.MESSAGES), Known("org.thoughtcrime.securesms", "Signal", Category.MESSAGES),
+            Known("com.google.android.apps.messaging", "Mensagens (Google)", Category.MESSAGES),
+            Known("com.samsung.android.messaging", "Mensagens (Samsung)", Category.MESSAGES),
+            Known("com.facebook.orca", "Messenger", Category.MESSAGES), Known("com.instagram.android", "Instagram", Category.MESSAGES),
+            Known("com.google.android.gm", "Gmail", Category.EMAIL), Known("com.microsoft.office.outlook", "Outlook", Category.EMAIL),
+            Known("com.samsung.android.email.provider", "E-mail (Samsung)", Category.EMAIL),
+            Known("com.nu.production", "Nubank", Category.BANKS), Known("com.itau", "Itaú", Category.BANKS),
+            Known("com.bradesco", "Bradesco", Category.BANKS), Known("br.com.bb.android", "Banco do Brasil", Category.BANKS),
+            Known("br.com.gabba.Caixa", "CAIXA", Category.BANKS), Known("br.gov.caixa.tem", "CAIXA Tem", Category.BANKS),
+            Known("com.santander.app", "Santander", Category.BANKS), Known("br.com.intermedium", "Inter", Category.BANKS),
+            Known("com.c6bank.app", "C6 Bank", Category.BANKS), Known("com.picpay", "PicPay", Category.BANKS),
+            Known("com.mercadopago.wallet", "Mercado Pago", Category.BANKS), Known("br.com.uol.ps.myaccount", "PagBank", Category.BANKS),
+            Known("br.com.neon", "Neon", Category.BANKS),
+            Known("com.google.android.calendar", "Google Agenda", Category.CALENDAR), Known("com.samsung.android.calendar", "Agenda (Samsung)", Category.CALENDAR),
+            Known("com.microsoft.teams", "Teams", Category.WORK), Known("com.Slack", "Slack", Category.WORK),
+            Known("com.linkedin.android", "LinkedIn", Category.WORK),
+            Known("com.ubercab", "Uber", Category.OTHER), Known("com.taxis99", "99", Category.OTHER), Known("br.com.brainweb.ifood", "iFood", Category.OTHER),
+        )
+        private val NAMES = CATALOG.associate { it.pkg to it.name } + (MAPS to "Maps")
+
+        /** Rows of the choice list: installed catalog apps (by category) first, then other apps seen notifying. */
+        fun choices(installed: (String) -> Boolean, seen: Set<String>, chosen: Set<String>): List<Known> {
+            val known = CATALOG.filter { it.pkg in chosen || it.pkg in seen || installed(it.pkg) }
+                .sortedWith(compareBy({ it.category.ordinal }, { it.name.lowercase() }))
+            val catalogued = CATALOG.map { it.pkg }.toSet()
+            val others = (seen + chosen).filter { it !in catalogued && it != MAPS }.sorted().map { Known(it, name(it, null), Category.OTHER) }
+            return known + others
+        }
+
+        /** First-time default: messages, e-mail and banks among the offered apps. */
+        fun defaults(rows: List<Known>): Set<String> = rows.filter { it.category.preselect }.map { it.pkg }.toSet()
 
         /** Display name when the system label is not available. */
         fun name(pkg: String, label: String?): String = label?.takeIf { it.isNotBlank() && it != pkg } ?: NAMES[pkg]

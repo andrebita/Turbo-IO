@@ -42,4 +42,20 @@ class MirrorPolicyTest {
         assertEquals(Action.Nav("20 m · Av. Paulista"), policy.decide(maps("20 m", "Av. Paulista")))
         assertEquals("sem mudança", (policy.decide(maps("20 m", "Av. Paulista")) as Action.Skip).reason)
     }
+
+    @Test fun choiceListOffersInstalledKnownAppsWithDefaults() {
+        val installed = setOf("com.whatsapp", "com.nu.production", "com.google.android.gm", "com.google.android.calendar")
+        val rows = MirrorPolicy.choices({ it in installed }, seen = setOf("com.example.chat"), chosen = emptySet())
+        assertEquals(listOf("com.whatsapp", "com.google.android.gm", "com.nu.production", "com.google.android.calendar", "com.example.chat"), rows.map { it.pkg })
+        // Messages, e-mail and banks are suggested; calendar and unknown apps are not.
+        assertEquals(setOf("com.whatsapp", "com.google.android.gm", "com.nu.production"), MirrorPolicy.defaults(rows))
+        // A saved choice stays listed even if the app can no longer be detected.
+        assertTrue(MirrorPolicy.choices({ false }, emptySet(), setOf("com.itau")).any { it.pkg == "com.itau" })
+    }
+
+    @Test fun everyCatalogAppIsDeclaredForPackageVisibility() {
+        val manifest = java.io.File("src/main/AndroidManifest.xml").readText()
+        MirrorPolicy.CATALOG.forEach { assertTrue(it.pkg, manifest.contains("<package android:name=\"${it.pkg}\" />")) }
+        assertEquals(MirrorPolicy.CATALOG.size, MirrorPolicy.CATALOG.map { it.pkg }.toSet().size)
+    }
 }

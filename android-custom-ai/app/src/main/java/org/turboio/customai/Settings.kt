@@ -184,6 +184,8 @@ class SettingsRepository(context: Context) {
     var navOn: Boolean
         get() = prefs.getBoolean("mirror.nav", false)
         set(v) { prefs.edit().putBoolean("mirror.nav", v).apply() }
+    /** False until the user saves a choice of apps (the list then starts with the suggested apps checked). */
+    val mirrorAppsChosen: Boolean get() = prefs.contains("mirror.apps")
     var mirrorApps: Set<String>
         get() = prefs.getStringSet("mirror.apps", emptySet())?.toSet() ?: emptySet()
         set(v) { prefs.edit().putStringSet("mirror.apps", v.toSet()).apply() }
