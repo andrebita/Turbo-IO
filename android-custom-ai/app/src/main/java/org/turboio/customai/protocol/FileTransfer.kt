@@ -142,7 +142,9 @@ class OutboundFile(val uuid: String, bytes: ByteArray, private val md5: String) 
 
     init { info() }
 
-    fun info(): ByteArray = FileTransfer.encode(FileMessage(1, uuid, fileName = uuid, md5 = md5, fileSize = bytes.size.toLong()))
+    /** [withExtension] names the file "<id>.txt" (the reference accepts both forms; which one the glasses expect is unknown). */
+    fun info(withExtension: Boolean = false): ByteArray =
+        FileTransfer.encode(FileMessage(1, uuid, fileName = if (withExtension) "$uuid.txt" else uuid, md5 = md5, fileSize = bytes.size.toLong()))
 
     /** Handles a glasses message; returns the chunk to send for a request, else null. Throws on protocol errors. */
     fun receive(m: FileMessage): FileMessage? {

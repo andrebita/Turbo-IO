@@ -67,8 +67,18 @@ object DashboardWire {
 
     data class Widget(val id: String, val type: String, val name: String)
 
+    /**
+     * Dashboard items. Two formats are known: `widgets_v2` (rows with id/type, official-app add-on) and, on Strix OS
+     * 1.0.5.5, `widgets` as a list of numbers with `widgets_data` (feature test, 2026-10-17).
+     */
     fun widgets(c: JSONObject): List<Widget>? {
-        val rows = c.optJSONArray("widgets_v2") ?: return null
+        val v2 = c.optJSONArray("widgets_v2")
+        if (v2 == null) {
+            val ids = c.optJSONArray("widgets") ?: return null
+            if (ids.length() > 32) return null
+            return (0 until ids.length()).map { i -> ids.opt(i).toString().let { Widget(it, "nativo", NATIVE_NAMES[it] ?: "") } }
+        }
+        val rows = v2
         if (rows.length() > 32) return null
         val out = ArrayList<Widget>()
         for (i in 0 until rows.length()) {
@@ -79,6 +89,9 @@ object DashboardWire {
         }
         return out
     }
+
+    /** Numeric widget ids are not documented; names are added here once confirmed on the lens. */
+    private val NATIVE_NAMES = emptyMap<String, String>()
 
     /** simple_mode as stored by the glasses (boolean or 0/1); null when absent. */
     fun simpleMode(c: JSONObject): Boolean? = when (val v = c.opt("simple_mode")) {
@@ -160,7 +173,7 @@ class Dashboard(private val port: GlassesPort, private val random: Randomness, p
         val widgets get() = DashboardWire.widgets(config).orEmpty()
         val simple get() = DashboardWire.simpleMode(config)
         val hasCard get() = widgets.any { it.id == DashboardWire.CARD_ID }
-        fun describe(): String = widgets.mapIndexed { i, w -> "${i + 1}. ${w.name.ifBlank { w.id }} [${w.type}]" }.joinToString("\n") +
+        fun describe(): String = widgets.mapIndexed { i, w -> "${i + 1}. ${w.name.ifBlank { "cartão ${w.id}" }} [${w.type}]" }.joinToString("\n").ifEmpty { "(nenhum cartão)" } +
             "\nTipo: " + when (simple) { true -> "simples"; false -> "completo"; null -> "não informado pelos óculos" }
     }
 

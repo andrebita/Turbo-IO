@@ -142,4 +142,18 @@ class DashboardTest {
         assertEquals("4 pendências", DashboardWire.summary(4, at15 + 86_400_000L, "Amanhã", now, zone))
         DashboardWire.install(long)                                                                 // always installable
     }
+
+    /** The exact configuration Strix OS 1.0.5.5 returned in the feature test (2026-10-17). */
+    @Test fun strix1055NumericFormatReadsAndFlipsType() = runTest {
+        config = JSONObject("""{"simple_mode":0,"widgets":[2],"widgets_data":{}}""")
+        val d = Dashboard(port, fixedRandom)
+        val read = async { d.read() }; drive()
+        val snap = read.await().first!!
+        assertEquals(listOf("2"), snap.widgets.map { it.id }); assertEquals(false, snap.simple)
+        assertTrue(snap.describe(), snap.describe().startsWith("1. cartão 2"))
+        val on = async { d.setSimpleMode(true) }; drive()
+        assertTrue(on.await(), on.await().startsWith("Painel agora no tipo simples"))
+        assertEquals(1, config.get("simple_mode")); assertEquals(2, config.getJSONArray("widgets").getInt(0))
+        assertTrue(Business.contentAllowed(15, 18, DashboardWire.update(config)))
+    }
 }

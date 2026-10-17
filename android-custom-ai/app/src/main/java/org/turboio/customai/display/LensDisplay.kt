@@ -31,7 +31,8 @@ suspend fun GlassesPort.sendEnvelope(business: Int, type: Int, json: String): St
 fun newSid(random: Randomness): String = Hex.encode(random.bytes(16))
 
 data class DisplaySettings(val pageSeconds: Int = 5, val lingerSeconds: Int = 6, val stripAccents: Boolean = false, val pageChars: Int = 90,
-                           val fontSize: Int = 2, val position: String = "center", val maxLines: Int = 5) {
+                           val fontSize: Int = 2, val position: String = "center", val maxLines: Int = 5,
+                           val textFormat: String = "official") {
     val standardLayout get() = fontSize == 2 && position == "center" && maxLines == 5
 }
 
@@ -103,9 +104,10 @@ class LensDisplay(
         }
         if (code == -1) { closeSession(); return fail("Os óculos não confirmaram a exibição (10 s)") }
         if (code != 1 && code != 2) { closeSession(); return fail("Os óculos recusaram a exibição (código $code)") }
+        delay(400)   // the glasses open their Subtitles app at the same moment; text sent at once may be lost
         for ((index, page) in pages.withIndex()) {
             if (closedByGlasses) { sid = ""; return fail("Exibição encerrada nos óculos") }
-            port.sendEnvelope(Business.SUBTITLE, 5, Commands.displayText(sid, page))?.let { closeSession(); return fail("Falha ao enviar texto: $it") }
+            port.sendEnvelope(Business.SUBTITLE, 5, Commands.displayText(sid, page, settings.textFormat))?.let { closeSession(); return fail("Falha ao enviar texto: $it") }
             _state.value = DisplayState.Showing(index + 1, pages.size, page)
             delay(if (index == pages.lastIndex) settings.lingerSeconds * 1000L else settings.pageSeconds * 1000L)
         }

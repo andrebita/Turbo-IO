@@ -70,7 +70,9 @@ class TrafficRecorder(private val clock: () -> Long = System::currentTimeMillis,
                 CARD_TEXT.forEach { k -> if (j.has(k)) j.put(k, "«${j.optString(k).length} caracteres»") }
                 j.toString()
             }.getOrDefault("[cartão ilegível]")
-            return "$head " + Redactor.redact(json).take(600)
+            // Device serial numbers are not needed for diagnosis.
+            json = json.replace(Regex("\"(sn|tableSn|cu|bluetoothAddress)\"\\s*:\\s*\"[^\"]*\""), "\"$1\":\"…\"")
+            return "$head " + Redactor.redact(json).take(1500)
         }
     }
 }

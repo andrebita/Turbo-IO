@@ -1,5 +1,7 @@
 package org.turboio.customai
 
+import org.turboio.customai.protocol.Commands
+
 import android.content.Context
 import org.turboio.customai.ai.AiConfig
 import org.turboio.customai.ai.DEFAULT_SYSTEM_PROMPT
@@ -91,7 +93,10 @@ class SettingsRepository(context: Context) {
         fontSize = prefs.getInt("display.fontSize", 2).coerceIn(1, 3),
         position = prefs.getString("display.position", "center")?.takeIf { it in setOf("center", "top", "bottom") } ?: "center",
         maxLines = prefs.getInt("display.maxLines", 5).coerceIn(1, 5),
+        textFormat = prefs.getString("display.textFormat", "official")?.takeIf { it in Commands.TEXT_FORMATS } ?: "official",
     )
+
+    fun setTextFormat(format: String) = prefs.edit().putString("display.textFormat", format).apply()
 
     fun setDisplayLayout(fontSize: Int, position: String, maxLines: Int) =
         prefs.edit().putInt("display.fontSize", fontSize).putString("display.position", position).putInt("display.maxLines", maxLines).apply()

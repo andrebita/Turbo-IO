@@ -76,7 +76,7 @@ object Business {
             "widget_uninstall" -> payload.optJSONObject("data")?.let { d -> OWN_WIDGET.matches(d.optString("id")) } ?: false
             // A full snapshot (value 0) built from a fresh read; the dashboard controller verifies it by reading back.
             "dashboard_update" -> payload.optInt("value", -1) == 0 &&
-                runCatching { org.json.JSONObject(payload.getString("data")).has("widgets_v2") }.getOrDefault(false)
+                runCatching { org.json.JSONObject(payload.getString("data")).let { it.has("widgets_v2") || it.optJSONArray("widgets") != null } }.getOrDefault(false)
             else -> false
         }
     }
@@ -166,8 +166,18 @@ object Commands {
         return "{\"sid\":${sid(sid)},\"force\":false,\"scope\":\"temporary\",\"config\":{\"font_size\":$fontSize,\"content_width\":100,\"max_lines\":$maxLines,\"position\":\"$position\",\"is_display\":true,\"straight_view\":\"original\"}}"
     }
 
-    fun displayText(sid: String, value: String): String =
-        "{\"sid\":${sid(sid)},\"mode\":3,\"status\":0,\"content\":{\"source_transcript\":${text(value, 96)}}}"
+    /** Text formats for 19/5: "legacy" (HarmonyOS client, older firmware), "official" (template of the official app's
+     *  own subtitle preview on 1.0.5.5/1.0.6: final text, mode 0), "bilingual" (official with the translation line). */
+    val TEXT_FORMATS = listOf("official", "bilingual", "legacy")
+
+    fun displayText(sid: String, value: String, format: String = "legacy"): String {
+        val t = text(value, 96)
+        return when (format) {
+            "official" -> "{\"sid\":${sid(sid)},\"mode\":0,\"status\":1,\"content\":{\"source_transcript\":$t}}"
+            "bilingual" -> "{\"sid\":${sid(sid)},\"mode\":0,\"status\":1,\"content\":{\"source_transcript\":$t,\"target_translation\":$t}}"
+            else -> "{\"sid\":${sid(sid)},\"mode\":3,\"status\":0,\"content\":{\"source_transcript\":$t}}"
+        }
+    }
 
     fun displayStop(sid: String): String = "{\"sid\":${sid(sid)},\"reason_code\":10,\"text\":\"\"}"
 

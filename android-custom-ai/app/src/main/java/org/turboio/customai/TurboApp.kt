@@ -71,7 +71,14 @@ class TurboApp : Application() {
     val trafficRecorder = org.turboio.customai.probe.TrafficRecorder()
     lateinit var features: org.turboio.customai.probe.FeatureSuite; private set
     lateinit var suggestions: org.turboio.customai.device.SuggestionCards; private set
-    val mirrorPolicy by lazy { org.turboio.customai.device.MirrorPolicy(packageName, { settings.mirrorApps }, { settings.navOn }) }
+    val mirrorPolicy by lazy { org.turboio.customai.device.MirrorPolicy(packageName, { mirrorAppsInEffect() }, { settings.navOn }) }
+
+    /** Until the user saves a choice, the suggested apps (messages, e-mail, banks that are installed) are used. */
+    fun mirrorAppsInEffect(): Set<String> {
+        if (settings.mirrorAppsChosen) return settings.mirrorApps
+        val M = org.turboio.customai.device.MirrorPolicy
+        return M.defaults(M.choices({ pkg -> runCatching { packageManager.getApplicationInfo(pkg, 0); true }.getOrDefault(false) }, emptySet(), emptySet()))
+    }
     val probeFiles by lazy { org.turboio.customai.probe.ProbeFiles(this) }
     lateinit var scope: CoroutineScope; private set
     lateinit var random: org.turboio.customai.ble.Randomness; private set
@@ -332,7 +339,7 @@ class TurboApp : Application() {
         scope.launch {
             if (settings.nativeAlerts) {
                 val outcome = nativeNotifier.show(title, text)
-                if (outcome != org.turboio.customai.device.NativeNotifier.Outcome.NO_REPLY && outcome != org.turboio.customai.device.NativeNotifier.Outcome.FAILED) return@launch
+                if (outcome != org.turboio.customai.device.NativeNotifier.Outcome.FAILED) return@launch
             }
             if (!display.active) display.show(if (title == "Turbo IO") text else "$title: $text", settings.displaySettings())
         }
@@ -348,7 +355,7 @@ class TurboApp : Application() {
                 is org.turboio.customai.device.MirrorPolicy.Action.Card -> {
                     val outcome = nativeNotifier.show(a.title, a.text, a.appName)
                     if (outcome.delivered) mirroredCards++
-                    if (outcome == org.turboio.customai.device.NativeNotifier.Outcome.NO_REPLY && !display.active)
+                    if (outcome == org.turboio.customai.device.NativeNotifier.Outcome.FAILED && !display.active)
                         display.show("${a.appName} · ${a.title}: ${a.text}".take(270), settings.displaySettings())
                 }
                 is org.turboio.customai.device.MirrorPolicy.Action.Nav -> {

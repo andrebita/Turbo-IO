@@ -72,6 +72,9 @@ class AiFragment : Fragment() {
         val voice = settings.voiceSettings()
         ui.switch("Assistente de voz ativo (ao acionar nos óculos)", voice.enabled) { settings.setVoiceEnabled(it) }
         ui.switch("Remover acentos no display (use se aparecerem quadrados)", voice.stripAccents) { settings.setStripAccents(it) }
+        val formats = listOf("official" to "Formato do app oficial (padrão)", "bilingual" to "Oficial com linha de tradução", "legacy" to "Formato antigo (HarmonyOS)")
+        ui.text("Formato do texto nas lentes (a etapa F1 da bateria mostra os três)", size = 13f)
+        ui.spinner(formats, formats.indexOfFirst { it.first == settings.displaySettings().textFormat }.coerceAtLeast(0), { it.second }) { settings.setTextFormat(it.first) }
         ui.text("Texto nas lentes (experimental; se os óculos recusarem, volta ao padrão)", size = 13f)
         val d = settings.displaySettings()
         var fontSize = d.fontSize; var position = d.position; var lines = d.maxLines

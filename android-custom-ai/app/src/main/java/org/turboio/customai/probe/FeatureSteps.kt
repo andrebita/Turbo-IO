@@ -30,10 +30,16 @@ object FeatureSteps {
         DiagnosticLog.snapshot().filter { it.time >= since && words.any { w -> it.message.contains(w, ignoreCase = true) } }.map { it.message }
 
     fun all(app: TurboApp): List<FeatureStep> = listOf(
-        FeatureStep("F1", "Texto nas lentes",
-            "O app mostra um texto de teste com acentos no layout padrão.",
-            "O texto apareceu nas lentes? Os acentos (ã, ç, é) apareceram certos?") { _ ->
-            ready(app) ?: "Exibição: " + show(app, "Teste Turbo IO: olá! Ação, coração, café, você e pão.", app.settings.displaySettings().copy(fontSize = 2, position = "center", maxLines = 5))
+        FeatureStep("F1", "Texto nas lentes (3 formatos)",
+            "O app mostra o texto de teste em três formatos, um depois do outro: A, B e C. Anote quais apareceram nas lentes.",
+            "Quais letras apareceram (A, B, C)? Os acentos (ã, ç, é) apareceram certos? Escreva na observação.", timeoutSeconds = 120) { run ->
+            ready(app)?.let { return@FeatureStep it }
+            val base = app.settings.displaySettings().copy(fontSize = 2, position = "center", maxLines = 5, lingerSeconds = 6)
+            val results = listOf("A" to "official", "B" to "bilingual", "C" to "legacy").map { (letter, format) ->
+                run.cue("Formato $letter: olhe as lentes")
+                "$letter ($format): " + show(app, "$letter: olá! Ação, coração, café e pão.", base.copy(textFormat = format))
+            }
+            results.joinToString("\n") + "\nFormato em uso no app: ${app.settings.displaySettings().textFormat} (troque na aba IA)"
         },
         FeatureStep("F2", "Tamanho e posição do texto",
             "O app mostra o mesmo texto com letra GRANDE no TOPO e depois com letra PEQUENA na BASE.",
@@ -58,7 +64,8 @@ object FeatureSteps {
             "IA: ${r.provider.label}/${r.model} em ${r.latencyMs} ms: “${r.text.take(120)}”\nExibição: " + show(app, r.text, app.settings.displaySettings())
         },
         FeatureStep("F4", "Assistente de voz (gesto nos óculos)",
-            "Depois de Iniciar, acione o assistente nos óculos (gesto/botão de IA) e pergunte “Qual é a capital da França?”. Até 90 s.",
+            "Depois de Iniciar, acione o assistente nos óculos do jeito que você usa no dia a dia (toque longo no botão, gesto ou “Hey RayNeo”) " +
+                "e pergunte “Qual é a capital da França?”. Até 90 s. Escreva na observação qual gesto você usou. Use a voz pela Deepgram (aba IA).",
             "Os óculos ouviram a pergunta e a resposta da sua IA apareceu nas lentes?", timeoutSeconds = 120) { run ->
             ready(app)?.let { return@FeatureStep it }
             voiceRound(app, run, "Acione o assistente nos óculos e pergunte")
@@ -80,12 +87,12 @@ object FeatureSteps {
             "O cartão simulado apareceu? E a mensagem real (se chegou)?", timeoutSeconds = 120) { run ->
             ready(app)?.let { return@FeatureStep it }
             val access = app.packageName in NotificationManagerCompat.getEnabledListenerPackages(app)
-            val apps = app.settings.mirrorApps
+            val apps = app.mirrorAppsInEffect()
             val simulated = app.nativeNotifier.show("Marina (teste)", "Mensagem simulada do teste do Turbo IO", "WhatsApp").label
             val before = app.mirroredCards
             if (access && app.settings.mirrorOn && apps.isNotEmpty()) run.countdown(60, "Aguardando uma notificação real")
             val real = app.mirroredCards - before
-            "Acesso às notificações: ${if (access) "liberado" else "NÃO liberado"} · envio ligado: ${app.settings.mirrorOn} · apps escolhidos: ${apps.size}\n" +
+            "Acesso às notificações: ${if (access) "liberado" else "NÃO liberado"} · envio ligado: ${app.settings.mirrorOn} · apps em uso: ${apps.size}${if (app.settings.mirrorAppsChosen) "" else " (sugeridos)"}\n" +
                 "Cartão simulado: $simulated\nNotificações reais entregues: $real" +
                 if (!access || !app.settings.mirrorOn || apps.isEmpty()) " (não esperou: falta liberar o acesso, ligar o envio ou escolher apps)" else ""
         },
@@ -190,10 +197,12 @@ object FeatureSteps {
             val error = suspendCancellableCoroutine<String?> { cont -> app.glassesSettings.read { e -> if (cont.isActive) cont.resume(e) } }
             val c = app.glassesSettings.state.value.config
             (error?.let { "Leitura: $it\n" } ?: "") +
-                "Altura ${c.height ?: "?"} · distância ${c.distance ?: "?"} · duplo toque ${c.crownDouble ?: "?"} · palavra de ativação ${c.wakeup ?: "?"}"
+                "Altura ${c.height ?: "?"} · distância ${c.distance ?: "?"} · duplo toque ${c.crownDouble ?: "?"} · toque longo ${c.crownLongPress ?: "?"} · palavra de ativação ${c.wakeup ?: "?"}" +
+                "\nValores lidos: ${app.glassesSettings.state.value.details}"
         },
         FeatureStep("F19", "Diário: gravar pelos óculos",
-            "O app grava 40 s pelos microfones dos óculos para o diário. Converse ou leia algo em voz alta. A transcrição chega ao Diário em alguns minutos.",
+            "O app grava 40 s pelos microfones dos óculos para o diário. Converse ou leia algo em voz alta. A transcrição chega ao Diário em alguns minutos. " +
+                "Antes, aceite o aviso de consentimento em Diário → Gravação ambiente (uma vez só).",
             "No Diário, a conversa apareceu transcrita (confira daqui a uns minutos)?", timeoutSeconds = 120) { run ->
             ready(app)?.let { return@FeatureStep it }
             app.ambient.startGlasses()?.let { return@FeatureStep "Não iniciou: $it" }

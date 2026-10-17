@@ -173,9 +173,13 @@ class VoiceAndLensTest {
         runCurrent()
         assertEquals(listOf("19/7"), port.trace())
         port.glasses(19, 8, "{\"sid\":\"$sid\",\"code\":1}"); runCurrent()
+        assertTrue(display.state.value is DisplayState.Opening)            // short pause while the glasses open Subtitles
+        advanceTimeBy(500); runCurrent()
         assertTrue(display.state.value is DisplayState.Showing)
         advanceTimeBy(20_000); runCurrent()
         assertEquals(null, result)
+        val first = JSONObject(port.sent.first { it.second.type == 5 }.second.jsonText())
+        assertEquals(0, first.getInt("mode")); assertEquals(1, first.getInt("status"))   // official-app template (1.0.5.5)
         val texts = port.sent.filter { it.second.type == 5 }.map { JSONObject(it.second.jsonText()).getJSONObject("content").getString("source_transcript") }
         assertTrue(texts.size >= 2); assertTrue(texts.all { it.length <= 90 }); assertTrue(texts[0].startsWith("Brasília é"))
         assertEquals("19/3", port.trace().last())

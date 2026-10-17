@@ -66,24 +66,30 @@ data class GlassesConfig(val height: Int? = null, val distance: Int? = null, val
                 wakeup(root), root.keys().asSequence().toList().sorted().joinToString(","))
         }
 
-        private val WAKE_KEYS = setOf("voiceWakeup", "voice_wakeup", "ai_voice_wakeup", "voiceWakeUp", "aiVoiceWakeup", "wakeup", "wakeUp")
+        private val WAKE_KEYS = setOf("voiceWakeup", "voice_wakeup", "ai_voice_wakeup", "voiceWakeUp", "aiVoiceWakeup", "wakeup", "wakeUp", "enabled", "enable")
 
         /** First boolean-ish value under a wake-up key, searched one level deep. */
         fun wakeup(o: JSONObject): Boolean? {
             for (k in o.keys()) {
                 val v = o.opt(k)
                 if (k in WAKE_KEYS) when (v) { is Boolean -> return v; is Number -> return v.toInt() != 0 }
-                if (v is JSONObject) wakeup(v)?.let { return it }
+                // Strix OS 1.0.5.5 reports a "wakeupConfig" group; inside it, look for an on/off value.
+                if (v is JSONObject && (k == "wakeupConfig" || k.contains("wake", ignoreCase = true))) wakeup(v)?.let { return it }
+                else if (v is JSONObject && k != "headGestures") WAKE_KEYS.firstOrNull { v.has(it) && it.contains("wake", true) }?.let { wakeup(v)?.let { b -> return b } }
             }
             return null
         }
     }
 }
 
+private val DETAIL_KEYS = listOf("displayConfig", "crownConfig", "headGestures", "wakeupConfig", "privacyConfig", "autoLockTime", "language")
+
 /** Where the first values read from the glasses are kept (for "restore"). */
 interface OriginalSettings { fun load(): GlassesConfig?; fun save(c: GlassesConfig) }
 
-data class SettingsState(val config: GlassesConfig = GlassesConfig(), val original: GlassesConfig? = null, val note: String = "Toque em “Ler ajustes dos óculos”", val busy: Boolean = false)
+data class SettingsState(val config: GlassesConfig = GlassesConfig(), val original: GlassesConfig? = null, val note: String = "Toque em “Ler ajustes dos óculos”", val busy: Boolean = false,
+                         /** Raw setting groups as read (no serial numbers), for diagnosis. */
+                         val details: String = "")
 
 class GlassesSettings(
     private val port: GlassesPort,
@@ -132,8 +138,11 @@ class GlassesSettings(
                 original?.crownDouble ?: config.crownDouble, original?.crownLongPress ?: config.crownLongPress, clock())
             originals.save(original)
         }
-        _state.value = _state.value.copy(config = config, original = original)
+        val root = reply.optJSONObject("generalSettings") ?: reply
+        val details = DETAIL_KEYS.mapNotNull { k -> root.opt(k)?.let { "$k=$it" } }.joinToString(" · ").take(800)
+        _state.value = _state.value.copy(config = config, original = original, details = details)
         DiagnosticLog.i("AJUSTES", "chaves dos ajustes: ${config.keys.take(300)}")
+        DiagnosticLog.i("AJUSTES", "valores: $details")
         note(if (config.hasDisplay || config.hasCrown) "Ajustes lidos" else "Os óculos não informaram altura/distância nem o duplo toque")
         return null
     }

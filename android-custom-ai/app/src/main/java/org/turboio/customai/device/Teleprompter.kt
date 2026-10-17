@@ -41,6 +41,7 @@ class Teleprompter(
     private val prepareMs: Long = 30_000,
     private val transferMs: Long = 120_000,
     private val controlMs: Long = 10_000,
+    private val retryInfoMs: Long = 8_000,
 ) : BusinessListener {
     enum class Phase(val label: String) {
         IDLE("parado"), PREPARING("preparando"), TRANSFERRING("enviando roteiro"), READY("pronto"), CONTROLLING("aguardando óculos"),
@@ -171,6 +172,18 @@ class Teleprompter(
                 val error = sendFile(info); info.fill(0)
                 if (error != null) throw IllegalStateException(error)
                 if (e == epoch) note("Informações do arquivo enviadas; os óculos vão pedir o roteiro em partes")
+                // No acknowledgement in 8 s: one more try naming the file "<id>.txt" (Strix OS 1.0.5.5 ignored the first form).
+                scope.launch {
+                    delay(retryInfoMs)
+                    if (e != epoch || f.acknowledged || _state.value.phase != Phase.TRANSFERRING) return@launch
+                    lock.withLock {
+                        if (e != epoch || f.acknowledged) return@withLock
+                        val again = f.info(withExtension = true)
+                        val err = sendFile(again); again.fill(0)
+                        DiagnosticLog.i(TAG, if (err == null) "sem confirmação do arquivo; reenviado como .txt" else "reenvio do arquivo falhou: $err")
+                        if (e == epoch) note("Sem confirmação dos óculos; informações do arquivo reenviadas (.txt)")
+                    }
+                }
             } else if (code == 7) { businessReady = true; ready() }
         }
         if (type in setOf(3, 4, 5, 7) && action == 2 && phase == Phase.CONTROLLING && type == pendingControl) {

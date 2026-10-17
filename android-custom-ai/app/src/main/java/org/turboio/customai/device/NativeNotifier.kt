@@ -31,8 +31,10 @@ class NativeNotifier(
 ) : BusinessListener {
     enum class Outcome(val label: String) {
         SHOWN("exibida"), IDLE("aceita (sem exibição confirmada)"), NOT_WORN("óculos fora do rosto"), DND("modo não perturbe"),
-        BUSY("óculos ocupados"), NO_REPLY("sem resposta dos óculos"), FAILED("falha no envio");
-        val delivered get() = this == SHOWN || this == IDLE
+        BUSY("óculos ocupados"),
+        /** Strix OS 1.0.5.5 shows the card but sends no state answer (feature test, 2026-10-17). */
+        NO_REPLY("enviado (estes óculos não confirmam a exibição)"), FAILED("falha no envio");
+        val delivered get() = this == SHOWN || this == IDLE || this == NO_REPLY
     }
 
     @Volatile private var switchedOn = false

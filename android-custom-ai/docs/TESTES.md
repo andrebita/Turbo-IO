@@ -10,7 +10,7 @@ Legenda: ✅ executado e aprovado · ⚠️ executado com ressalva · ⏳ penden
 | --- | --- | --- |
 | Compilação (AGP 8.13.2, Kotlin 2.2.21, compileSdk/targetSdk 35, minSdk 26) | ✅ | `./gradlew assembleDebug` |
 | Lint Android | ✅ 0 erros (avisos cosméticos: i18n/KTX/versões) | `./gradlew lintDebug` |
-| Testes unitários | ✅ **146 testes** executados, 0 falhas (+ 4 testes de rede ao vivo, opcionais) | `./gradlew testDebugUnitTest` |
+| Testes unitários | ✅ **147 testes** executados, 0 falhas (+ 4 testes de rede ao vivo, opcionais) | `./gradlew testDebugUnitTest` |
 | Protocolo = referência HarmonyOS | ✅ vetores de ouro + vetores gerados executando o TypeScript original (`tools/harmony-vectors.mjs`) | `HarmonyCrossTest`, `ProtocolTest` |
 | Referência HarmonyOS em si | ✅ 48 testes do `harmony-sdk` (protocolo, autenticação, voz) passam neste ambiente | `node --test harmony-sdk/tests/{protocol-codec,auth-calculations,guest-exchange,business-commands,version-exchange,voice-session,launcher-status}.test.mjs` |
 | Sessão BLE completa contra óculos emulados | ✅ handshake em 2 links, bond após prova, status/bateria, conta vinculada recusada, prova falsa recusada, troca de identidade bloqueada, reconexão automática, timeout | `GlassesSessionTest` |
@@ -236,6 +236,24 @@ notificações) e `log.txt`; “Exportar bateria de recursos” junta tudo num Z
 | F12–F13 | Teleprompter pelo celular (preparo → iniciar → pausar → continuar → velocidade → sair); teleprompter aberto pelo menu dos óculos (só observação) |
 | F14–F16 | Painel: leitura; cartão (instala, 25 s, remove); tipo simples/completo (troca, 25 s, volta) |
 | F17–F19 | Aceno e balanço; leitura dos ajustes da tela; gravação de 40 s pelos óculos para o diário |
+
+#### Resultado da bateria de recursos nos óculos (2026-10-17, 15:27–15:41, rev. 6/7, Strix OS 1.0.5.5)
+
+| Etapa | Veredito | Evidência (tráfego) | Causa e ação |
+| --- | --- | --- | --- |
+| F1–F3, F8 texto nas lentes | ✗ só “Original” e a hora | 19/7 aceito (código 1, abre `aiSubtitle`); o texto 19/5 `mode 3, status 0` não aparece | Formato antigo (HarmonyOS). Rev. 8: padrão = modelo do app oficial (`mode 0, status 1`), pausa de 400 ms após o aceite; F1 mostra os 3 formatos (A/B/C) |
+| F4 voz pelo gesto | ✗ | nenhuma mensagem do canal 13 na etapa (só navegação do menu, 15/24) | O gesto usado não aciona o assistente pelo telefone; às 15:12 uma rodada chegou (67 pacotes) e falhou na chave do Google |
+| F5 “Hey RayNeo” | ✗ abre mas não responde | nenhuma mensagem na janela da etapa | Voz configurada no Google com chave do Gemini (HTTP 401). Rev. 6+: usar Deepgram |
+| F6–F7 notificação nativa | ✓ cartão aparece | 21/2 enviado; os óculos **não** respondem 21/3 | Rev. 8: “sem resposta” conta como entregue e não abre mais o texto de reserva nas lentes; apps sugeridos valem enquanto você não escolher |
+| F9 tempo | ✓ | 15/19 `value 0` | — |
+| F10 To-do | ✓ ida e volta | 22/2 e 22/4 | — |
+| F11 abrir To-do | ✓ (percebido) | 15/24 `com.rayneo.liteos.todo` | — |
+| F12 teleprompter pelo celular | ✗ | 20/2 aceito (`code 1`, com campos novos `countdown, gear, depth, size, width, leading`); 18 informação do arquivo enviada; os óculos não pedem pedaços e encerram após 30 s (20/6 `code 3`) | Formato do arquivo (porta HarmonyOS) nunca confirmado em óculos. Rev. 8 reenvia como `<id>.txt` após 8 s; definitivo exige captura do app oficial |
+| F13 teleprompter pelo menu | ✗ “unknown error” | os óculos enviam 20/1 `{"action":1,"type":1,"code":1,"chunkid":0}` e não recebem resposta | Pedido de roteiro sem formato de resposta conhecido; exige captura do app oficial |
+| F14–F16 painel | ✗ “não reconhecida” | 15/19 com `{"simple_mode":0,"widgets":[2],"widgets_data":{}}` (sem `widgets_v2`) | Rev. 8 lê esse formato e troca `simple_mode` mantendo o resto |
+| F17 aceno | ½ cartão aparece e o aceno é aceito nos óculos | 21/33 enviado; nenhum 21/34 de volta | Resposta do gesto não chega ao telefone; exige captura do app oficial |
+| F18 ajustes | leitura ok | `wakeupConfig`, `headGestures`, `crownConfig` presentes | Rev. 8 registra esses grupos para entender o acionamento da voz |
+| F19 gravação | ✗ | — | Falta aceitar o consentimento (Diário → Gravação ambiente) |
 
 ### Recursos novos da 0.4.0 (conferir nas lentes)
 
