@@ -101,32 +101,32 @@ class GlassesSession(
     /** Sees every message accepted for sending (feature test capture); called on the glasses thread. */
     @Volatile var outboundTap: ((business: Int, payload: ByteArray) -> Unit)? = null
 
-    /** Business 18 is accepted only while this returns true (an active teleprompter session). */
+    /** The file businesses (17, 18) are accepted only while this returns true (an active teleprompter session). */
     @Volatile var fileLease: () -> Boolean = { false }
 
     /**
      * A file-transfer message larger than one ATT write is sent as ONE frame split across consecutive writes (the
      * producer behaviour of the official Android app, also used by the HarmonyOS client). The parts are queued together
-     * so nothing interleaves; a failed part drops the rest of that frame.
+     * so nothing interleaves; a failed part drops the rest of that frame. Like the official app, file frames carry
+     * message number 0.
      */
-    override fun sendFile(payload: ByteArray, done: (String?) -> Unit) = scheduler.post {
+    override fun sendFile(payload: ByteArray, business: Int, done: (String?) -> Unit) = scheduler.post {
         val reason = when {
             status.phase != Phase.READY || link == null -> "Óculos não conectado"
             !fileLease() -> "Canal de arquivo fechado (só durante o teleprompter)"
-            else -> org.turboio.customai.protocol.FileTransfer.outboundProblem(payload)
+            else -> org.turboio.customai.protocol.FileTransfer.outboundProblem(payload, business)
         }
         if (reason != null) { DiagnosticLog.w(tag, "arquivo recusado: $reason"); done(reason); return@post }
-        outboundTap?.let { tap -> runCatching { tap(Business.FILE, payload) } }
-        val frame = FrameCodec.encode(FramePacket(messageNumber, 0, null, ByteArray(0), Business.FILE, payload))
-        messageNumber = (messageNumber + 1) and 0xffff
-        enqueueSplit(frame, 128, done)
+        outboundTap?.let { tap -> runCatching { tap(business, payload) } }
+        val frame = FrameCodec.encode(FramePacket(0, 0, null, ByteArray(0), business, payload))
+        enqueueSplit(frame, 400, done)
     }
 
     /** One frame across consecutive ATT writes, queued together; a failed part drops the rest of that frame. */
     private fun enqueueSplit(frame: ByteArray, maxParts: Int, done: (String?) -> Unit) {
         val size = status.mtu - 3
         val parts = (0 until frame.size step size).map { frame.copyOfRange(it, minOf(frame.size, it + size)) }
-        if (parts.size > maxParts || txQueue.size + parts.size > 200) { done("Conteúdo grande demais para o MTU atual (${status.mtu})"); return }
+        if (parts.size > maxParts || txQueue.size + parts.size > maxOf(200, maxParts + 64)) { done("Conteúdo grande demais para o MTU atual (${status.mtu})"); return }
         val group = Any(); var failed = false
         parts.forEachIndexed { i, part ->
             val partDone: (String?) -> Unit = partDone@{ error ->

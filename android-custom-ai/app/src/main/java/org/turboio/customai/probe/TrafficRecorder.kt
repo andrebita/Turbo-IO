@@ -50,10 +50,10 @@ class TrafficRecorder(private val clock: () -> Long = System::currentTimeMillis,
         private val CARD_TEXT = setOf("title", "subtitle", "content")
 
         fun describe(business: Int, payload: ByteArray): String {
-            if (business == Business.FILE) {
-                val m = runCatching { FileTransfer.decode(payload) }.getOrNull() ?: return "18 bruto ${payload.size} B"
-                return "18 arquivo tipo=${m.type}" + when (m.type) {
-                    1 -> " tamanho=${m.fileSize} md5=${m.md5.take(8)}…"
+            if (business in FileTransfer.BUSINESSES) {
+                val m = runCatching { FileTransfer.decode(payload) }.getOrNull() ?: return "$business bruto ${payload.size} B"
+                return "$business arquivo tipo=${m.type} id=${m.uuid.take(24)}" + when (m.type) {
+                    1 -> " nome=${m.fileName.take(40)} canal=${m.busId} tamanho=${m.fileSize} md5=${m.md5.take(8)}…"
                     3, 4 -> " pedaço=${m.chunkId} início=${m.start} tamanho=${m.size}"
                     5 -> " estado=${m.state}" + if (m.reason.isNotEmpty()) " motivo=${m.reason}" else ""
                     6 -> if (m.reason.isNotEmpty()) " motivo=${m.reason}" else ""

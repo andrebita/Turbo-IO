@@ -32,9 +32,9 @@ The app lives in [`android-custom-ai/`](android-custom-ai/README.md).
   * a content check that accepts only known commands and value ranges.
 
   Unit tests prove the refusals.
-* **The file channel (business 18) is open only during a teleprompter session.**
-  * It accepts only three message types: file info, chunk data and cancel.
-  * The file name must be the session's random id, so it can never carry an update package.
+* **The file channels (businesses 17 and 18) are open only during a teleprompter session.**
+  * They accept only three message types: file info, chunk data and cancel.
+  * The file name must be the transfer id or a plain `.txt` name, so it can never carry an update package.
   * Files are capped at 48 KB.
 * **Changes to the glasses are reversible.** Settings and dashboard changes read the current state first, change only
   what you asked for, and read back to verify. The values read first are kept so you can restore them.
@@ -97,7 +97,7 @@ Dark interface with an emerald accent: a home screen with the glasses' status, s
 | **Android notifications** from the apps you choose (WhatsApp, e-mail, …). Duplicates and bursts are filtered; content is never stored | implemented · hardware pending |
 | **Google Maps turn-by-turn** on the lenses ("200 m · Main St") | implemented · hardware pending |
 | Pending items in the glasses' native **To-do** app, two-way: completing an item there completes it on the phone | implemented · hardware pending |
-| **Teleprompter**: drive the glasses' built-in teleprompter from the phone. Paste text or open a `.txt`, then start, pause, resume, change speed and exit | implemented · wire bytes match the HarmonyOS reference · hardware pending |
+| **Teleprompter**: drive the glasses' built-in teleprompter from the phone. Paste text or open a `.txt`, then start, pause, resume, change speed and exit | implemented · the file is now sent the way the official app 1.0.7 does (business 17), with fallbacks · not working on 1.0.5.5 so far |
 | **Dashboard card** with a short pending-items summary ("3 pend · 15:00 Call") | not supported by Strix OS 1.0.5.5 (no answer to `widget_install`); disabled there |
 | **Dashboard type** (simple/complete), with restore | ✅ change confirmed by read-back on the glasses |
 | **Nod / shake cards**: confirm (nod) or discard (shake) items found in conversations | implemented · hardware pending |
@@ -133,7 +133,7 @@ export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 154 unit tests with no lint errors.
+Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 158 unit tests with no lint errors.
 
 ## Documentation
 

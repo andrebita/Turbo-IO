@@ -113,7 +113,9 @@ class LensDisplay(
             var shown = 0L
             while (shown < total) {
                 if (closedByGlasses) { sid = ""; return fail("Exibição encerrada nos óculos") }
-                port.sendEnvelope(Business.SUBTITLE, 5, Commands.displayText(sid, page, settings.textFormat))?.let { closeSession(); return fail("Falha ao enviar texto: $it") }
+                // Caption formats: the page first as a sentence in progress (status 0), then final on every re-send.
+                port.sendEnvelope(Business.SUBTITLE, 5, Commands.displayText(sid, page, settings.textFormat, final = shown > 0 || !settings.resend))
+                    ?.let { closeSession(); return fail("Falha ao enviar texto: $it") }
                 if (shown == 0L) _state.value = DisplayState.Showing(index + 1, pages.size, page)
                 val step = if (settings.resend) minOf(2000L, total - shown) else total - shown
                 delay(step); shown += step

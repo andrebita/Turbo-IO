@@ -242,6 +242,14 @@ class GlassesSessionTest {
         val file = glasses.received.last()
         assertEquals(18, file.businessId)
         assertEquals(1500, org.turboio.customai.protocol.FileTransfer.decode(file.payload).data.size)
+        assertEquals(0, file.messageNumber)                                                    // like the official app
+        var small: String? = "pending"; var firmware: String? = null
+        session.sendFile(chunk, 17) { small = it }                                             // SmallCore
+        session.sendFile(chunk, 9) { firmware = it }                                           // never the firmware channel
+        scheduler.advance(1000)
+        assertNull(small); assertTrue(firmware != null)
+        assertEquals(17, glasses.received.last().businessId)
+        assertTrue(glasses.received.none { it.businessId == 9 })
         session.fileLease = { false }
     }
 

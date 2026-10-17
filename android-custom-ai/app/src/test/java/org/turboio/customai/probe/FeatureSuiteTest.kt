@@ -74,7 +74,7 @@ class FeatureSuiteTest {
         assertFalse(card.contains("Marina")); assertFalse(card.contains("segredo")); assertTrue(card.contains("«7 caracteres»"))
         val uuid = "0a0b0c0d-0e0f-4011-8213-141516171819"
         val chunk = TrafficRecorder.describe(18, FileTransfer.encode(FileMessage(4, uuid, start = 0, size = 5, data = "texto".toByteArray())))
-        assertEquals("18 arquivo tipo=4 pedaço=0 início=0 tamanho=5", chunk)
+        assertEquals("18 arquivo tipo=4 id=0a0b0c0d-0e0f-4011-8213- pedaço=0 início=0 tamanho=5", chunk)
         assertTrue(TrafficRecorder.describe(13, EnvelopeCodec.encode(5, "{}".toByteArray())).startsWith("13/5"))
         assertEquals("15 bruto 3 B", TrafficRecorder.describe(15, byteArrayOf(1, 2, 3)))
         // Audio frame streams collapse.

@@ -78,12 +78,22 @@ app:    após 12–45 s: type2 {"rc":2}, type7 {"rc":1} (saída)
 `type7` abrir sessão temporária (`sid` aleatório) → aguarda `type8` com `code` 1/2 (10 s) → páginas `type5` (≤ 90 caracteres,
 intervalo configurável) → `type3` encerrar. `type3`/`type4` vindos dos óculos interrompem.
 
-## Teleprompter (negócios 20 e 18)
+## Teleprompter (negócios 20 e 17/18)
 
-20/2 preparar (`did` UUID, total, checksum FNV-1a) → óculos 20/2 código 1 → 18 informação do arquivo (MD5) → óculos pedem
-pedaços (18/3 → 18/4) → 18/5 sucesso + 20/2 código 7 → pronto → 20/3 iniciar, 20/4 pausar, 20/5 continuar, 20/7
+20/2 preparar (`did` UUID, total, checksum FNV-1a) → óculos 20/2 código 1 → informação do arquivo (MD5) → óculos pedem
+pedaços (tipo 3 → tipo 4) → tipo 5 sucesso + 20/2 código 7 → pronto → 20/3 iniciar, 20/4 pausar, 20/5 continuar, 20/7
 velocidade (cada um espera a confirmação igual) → 20/6 sair (cancela o arquivo antes). Prazos: 30 s preparo, 2 min
-transferência, 10 s comando.
+transferência, 10 s comando. Um 20/6 dos óculos com outro código (ex.: 3) encerra a sessão.
+
+**Endereço do arquivo (rev. 12).** A análise do app oficial 1.0.7 mostrou que a transferência de arquivos tem dois canais:
+17 (“SmallCore”) e 18 (“LargeCore”); o `busId` da informação repete o número do canal, e o envio exposto do app oficial
+usa **17**, com id `task_<contador>_<milissegundos>` e o nome simples do arquivo. Até a rev. 11 usávamos 18 com o id da
+sessão como nome, e os óculos 1.0.5.5 ignoraram. Agora a informação é anunciada em ordem, cada forma só se a anterior
+ficar 6 s sem resposta: (1) 17 · `task_…` · `roteiro.txt`; (2) 17 · id da sessão · `roteiro.txt`; (3) 18 · `task_…` ·
+`roteiro.txt`. A primeira forma que os óculos responderem é a usada; respostas atrasadas das outras são ignoradas e a
+saída cancela só a forma em uso. Os pedidos de pedaço podem ter até 1 MB (o receptor oficial pede 51 200 bytes, sempre
+com `chunkId` 0); a resposta é cortada no fim do arquivo. Os quadros de arquivo vão com número de mensagem 0, como no
+app oficial. O que liga o arquivo ao `did` do 20/2 continua desconhecido (fica no código Flutter que faltou no APK).
 
 ## Painel (15/18 com sequência)
 
@@ -100,9 +110,10 @@ ler `dashboard_config` → `widget_install`/`widget_uninstall` ou `dashboard_upd
   * 15/18 só aceita tempo, leitura do painel, instalar/remover cartão `turbo_ui_*` e atualização do painel com `widgets_v2`;
   * 21 só aceita cartão de notificação deste app, a chave geral e cartões de aceno com limites de tamanho;
   * 20 exige id de sessão UUID; 22/2 só aceita uma pendência por mensagem.
-* **Negócio 18 (arquivo):** não usa envelopes e só passa por `GlassesSession.sendFile`, aberto apenas durante uma
-  sessão de teleprompter (`fileLease`) e filtrado por `FileTransfer.outboundProblem` (tipos 1, 4 e 6; nome = id da
-  sessão; ≤ 48 KB). Mensagens maiores que uma escrita BLE vão como um quadro dividido em escritas seguidas.
+* **Negócios 17 e 18 (arquivo):** não usam envelopes e só passam por `GlassesSession.sendFile`, aberto apenas durante
+  uma sessão de teleprompter (`fileLease`) e filtrado por `FileTransfer.outboundProblem`: só os canais 17 e 18; tipos 1,
+  4 e 6; o `busId` anunciado tem de ser o do canal; nome = id da transferência ou `<letras/números>.txt`; ≤ 48 KB.
+  Mensagens maiores que uma escrita BLE vão como um quadro dividido em escritas seguidas.
 
   Testes automatizados comprovam as recusas.
 * **Chaves de API:** cifradas no Android Keystore; nunca em código-fonte, `BuildConfig`, log, backup (`allowBackup=false`,

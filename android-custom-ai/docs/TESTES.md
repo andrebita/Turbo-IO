@@ -14,7 +14,7 @@ Legenda: ✅ executado e aprovado · ⚠️ executado com ressalva · ⏳ penden
 | Protocolo = referência HarmonyOS | ✅ vetores de ouro + vetores gerados executando o TypeScript original (`tools/harmony-vectors.mjs`) | `HarmonyCrossTest`, `ProtocolTest` |
 | Referência HarmonyOS em si | ✅ 48 testes do `harmony-sdk` (protocolo, autenticação, voz) passam neste ambiente | `node --test harmony-sdk/tests/{protocol-codec,auth-calculations,guest-exchange,business-commands,version-exchange,voice-session,launcher-status}.test.mjs` |
 | Sessão BLE completa contra óculos emulados | ✅ handshake em 2 links, bond após prova, status/bateria, conta vinculada recusada, prova falsa recusada, troca de identidade bloqueada, reconexão automática, timeout | `GlassesSessionTest` |
-| Sem OTA | ✅ negócio 9 recusado; envelope no negócio 18 recusado; arquivo só com a trava do teleprompter e só informação/pedaço/cancelar; nenhuma string de OTA/firmware no DEX | `outboundPolicyAndDelivery`, `fileChannelOnlyUnderLeaseAndSplitAcrossWrites`, `outboundGateOnlyInfoChunkCancel`; `strings classes*.dex \| grep -ci fota` = 0 |
+| Sem OTA | ✅ negócio 9 recusado (também como canal de arquivo); envelope no negócio 18 recusado; arquivo só nos canais 17/18, com a trava do teleprompter e só informação/pedaço/cancelar; nenhuma string de OTA/firmware no DEX | `outboundPolicyAndDelivery`, `fileChannelOnlyUnderLeaseAndSplitAcrossWrites`, `outboundGateOnlyInfoChunkCancel`; `strings classes*.dex \| grep -ci fota` = 0 |
 | Decodificador Opus (microfone dos óculos) | ✅ SNR **205 dB** contra libopus 1.5.2 do repositório (praticamente bit-exato) | `OpusAndEndpointTest` + `tools/opus_reference.c` |
 | Rodada de voz (negócio 13) | ✅ sequência rc1 → áudio → rc2 → transcrição final → blocos ≤ 24 → EOF → saída, com áudio Opus sintético; sem áudio / só silêncio / “pode fechar” / saída pelos óculos | `VoiceAndLensTest` |
 | Display (negócio 19) | ✅ abrir → ack → páginas ≤ 90 → fechar; ausência de ack tratada | `VoiceAndLensTest` |
@@ -45,7 +45,7 @@ autenticação quando a resposta chegava perto de 5 s (teste de regressão `slow
 | Notificação nativa: chave geral uma vez por conexão, cartão, estado devolvido; texto 21/1 de outros apps ignorado | ✅ | `NativeNotifierTest` |
 | Espelhar notificações: só apps escolhidos, sem repetidas/seguidas; Maps: só mudança de manobra/rua, distância a cada 8 s | ✅ | `MirrorPolicyTest` |
 | Tempo, fonte/posição do texto, “Hey RayNeo”, tarefa por frase livre | ✅ | `GroupOneTest`, `ProtocolTest` |
-| Teleprompter: bytes iguais aos do `FileTransfer.ts` de referência; preparo → arquivo → pronto só com as duas confirmações; comandos esperam a resposta igual; recusa, sucesso prematuro e prazo nunca liberam “iniciar”; saída cancela o arquivo | ✅ | `TeleprompterTest` |
+| Teleprompter: bytes iguais aos do `FileTransfer.ts` de referência; preparo → arquivo → pronto só com as duas confirmações; comandos esperam a resposta igual; recusa, sucesso prematuro e prazo nunca liberam “iniciar”; saída cancela o arquivo; formas de envio 17 → 17 → 18 em ordem, resposta no canal errado ignorada; pedidos de 51 200 bytes com `chunkId` repetido | ✅ | `TeleprompterTest` |
 | Painel: pedido com sequência e campo 6 = 1; instalar → reler → demais cartões preservados; recusa para sem repetir; cartão alheio com o mesmo id não é tocado; `simple_mode` trocado mantendo o tipo (número ou booleano); texto ≤ 20 | ✅ | `DashboardTest` |
 | Cartões de aceno: aceno = sim, balanço = não, sem resposta remove; resposta repetida ignorada; confirmação 21/35 | ✅ | `SuggestionCardsTest` |
 | Efeito real nas lentes (ajustes, To-do, notificações, tempo, teleprompter, painel, acenos) com o firmware 1.0.5.5 | ⏳ hardware | roteiro “Recursos novos da 0.4.0” abaixo |
@@ -271,6 +271,20 @@ notificações) e `log.txt`; “Exportar bateria de recursos” junta tudo num Z
 | F17 aceno | balanço chegou (21/34 `cmd 2`); aceno não | — | — |
 | F18 ajustes | ✓ | `wakeupConfig={"headupSwitch":1,"headupDegree":20,"crownSwitch":0}`, `crownConfig` com `direction` | Ângulo de “olhar para cima” implementado; `direction` preservado |
 | F19 gravação | ✗ sem aviso de consentimento | — | O aviso aparece ao iniciar a etapa |
+
+#### Rev. 12: o que a análise do app oficial 1.0.7 mudou
+
+O APK oficial (RayNeo AI 1.0.7, versionCode 230) foi analisado por outro agente a partir de um descompilado. A parte em
+Java/Kotlin trouxe o protocolo de transferência de arquivos e o formato das legendas. Telas e comandos do teleprompter,
+do painel e dos ajustes ficam no código Flutter (`libapp.so`) e na `libbusiness_jni.so`, que não estavam no APK base.
+
+| Item | Confirmado no código oficial | Mudança na rev. 12 | Conferir |
+| --- | --- | --- | --- |
+| Arquivo do teleprompter | canais 17 (SmallCore, o do envio exposto) e 18 (LargeCore); `busId` = canal; id `task_<n>_<ms>`; nome simples; o receptor pede 51 200 bytes com `chunkId` 0 | anuncia em 17 primeiro e tenta 17 com o id da sessão e depois 18, a cada 6 s sem resposta; aceita pedidos grandes e `chunkId` repetido; quadro com número 0 | F12: o tráfego mostra qual forma os óculos responderam (`arquivo tipo=2`) |
+| Texto nas lentes | 19/5 de legenda: `mode` 1 (clássico) ou 3 (título), `status` 0 (frase em formação) → 1 (final), `content` com `source_transcript`, `target_translation`, `label`, `keyword_info` | formatos “Legenda 1.0.7 (título)” e “(clássica)”; F1 compara A antigo × B título × C clássico | F1 |
+| Voz | 13/5 `{"text","final"}`; 13/32 `answer:{"text","isFinal"}`; 13/12 `{}` ao terminar no modo RayClaw (`linkType 3`, o que estes óculos pedem) | nada: o nosso envio já segue esse formato (o oficial manda `timestamp` em segundos; mantivemos o da referência HarmonyOS) | F4/F5 com Gemini ou Deepgram |
+| Teleprompter pelo menu (20/1 `chunkid 0`) | não está no Java | — | precisa da `libapp.so` |
+| Painel, cartões de aceno, ajustes | não estão no Java | — | precisa da `libapp.so` |
 
 ### Recursos novos da 0.4.0 (conferir nas lentes)
 

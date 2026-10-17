@@ -4,8 +4,9 @@ package org.turboio.customai.protocol
  * Business IDs and JSON command documents supported by the ORIGINAL Strix OS firmware, as used by the
  * hardware-validated HarmonyOS client (BusinessCommands.ts / VoiceSession.ets / DeviceFeatures.ets).
  *
- * Firmware update (9 / MARS_FOTA) and file transfer (18) are deliberately absent: this app has no
- * code path that can send OTA data to the glasses.
+ * Firmware update (9 / MARS_FOTA) is deliberately absent: this app has no code path that can send OTA data to the
+ * glasses. The file businesses (17, 18) are not in [OUTBOUND]: they have their own gate (FileTransfer.outboundProblem)
+ * and open only during a teleprompter session, for one small ".txt" script.
  */
 object Business {
     const val HANDSHAKE = 0x10
@@ -16,7 +17,8 @@ object Business {
     const val TODO = 22           // native To-do app of the glasses (schedule/todo service)
     const val NOTIFICATION = 21   // notification cards, master switch, nod/shake suggestion cards
     const val TELEPROMPTER = 20   // teleprompter session control (the script itself goes over FILE)
-    const val FILE = 18           // file transfer messages (protobuf, not envelopes): teleprompter script only
+    const val FILE = 18           // file transfer "LargeCore" (protobuf, not envelopes): teleprompter script only
+    const val SMALL_FILE = 17     // file transfer "SmallCore", the one the official app's upload uses; same messages
 
     /** Outbound allow-list: business -> envelope types we may send. Everything else is refused. */
     val OUTBOUND: Map<Int, Set<Int>> = mapOf(
@@ -176,13 +178,19 @@ object Commands {
 
     /** Text formats for 19/5: "legacy" (HarmonyOS client, older firmware), "official" (template of the official app's
      *  own subtitle preview on 1.0.5.5/1.0.6: final text, mode 0), "bilingual" (official with the translation line). */
-    val TEXT_FORMATS = listOf("legacy", "official", "bilingual")
+    val TEXT_FORMATS = listOf("legacy", "official", "bilingual", "caption", "classic")
 
-    fun displayText(sid: String, value: String, format: String = "legacy"): String {
+    /**
+     * "caption" / "classic": the official app 1.0.7's caption message (mode 3 = title layout, 1 = classic), status 0
+     * while the sentence is still forming and 1 when it is [final], with every content field (label 1 = no translation).
+     */
+    fun displayText(sid: String, value: String, format: String = "legacy", final: Boolean = true): String {
         val t = text(value, 96)
         return when (format) {
             "official" -> "{\"sid\":${sid(sid)},\"mode\":0,\"status\":1,\"content\":{\"source_transcript\":$t}}"
             "bilingual" -> "{\"sid\":${sid(sid)},\"mode\":0,\"status\":1,\"content\":{\"source_transcript\":$t,\"target_translation\":$t}}"
+            "caption", "classic" -> "{\"sid\":${sid(sid)},\"mode\":${if (format == "caption") 3 else 1},\"status\":${if (final) 1 else 0}," +
+                "\"content\":{\"source_transcript\":$t,\"target_translation\":\"\",\"label\":1,\"keyword_info\":\"\"}}"
             else -> "{\"sid\":${sid(sid)},\"mode\":3,\"status\":0,\"content\":{\"source_transcript\":$t}}"
         }
     }

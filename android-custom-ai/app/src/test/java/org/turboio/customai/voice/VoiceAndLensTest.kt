@@ -38,13 +38,14 @@ class FakePort : GlassesPort {
         listeners.forEach { it.onBusiness(business, Envelope(type, 0, json.toByteArray(), binary)) }
     }
     fun trace(): List<String> = sent.map { (b, e) -> "$b/${e.type}" }
-    /** File-transfer messages (business 18), checked by the same gate as the real session. */
+    /** File-transfer messages (business 17 or 18, in [fileBusinesses]), checked by the same gate as the real session. */
     val files = ArrayList<ByteArray>()
+    val fileBusinesses = ArrayList<Int>()
     var fileError: String? = null
-    override fun sendFile(payload: ByteArray, done: (String?) -> Unit) {
-        require(org.turboio.customai.protocol.FileTransfer.outboundProblem(payload) == null) { "arquivo recusado" }
+    override fun sendFile(payload: ByteArray, business: Int, done: (String?) -> Unit) {
+        require(org.turboio.customai.protocol.FileTransfer.outboundProblem(payload, business) == null) { "arquivo recusado" }
         fileError?.let { done(it); return }
-        files.add(payload.copyOf()); done(null)
+        files.add(payload.copyOf()); fileBusinesses.add(business); done(null)
     }
     private val raws = ArrayList<(Int, ByteArray) -> Unit>()
     override fun addRawListener(listener: (business: Int, payload: ByteArray) -> Unit) { raws.add(listener) }
@@ -186,6 +187,22 @@ class VoiceAndLensTest {
         assertTrue(texts.size >= 4); assertEquals(texts[0], texts[1])
         assertEquals("19/3", port.trace().last())
         assertTrue(display.state.value is DisplayState.Done)
+    }
+
+    /** Official app 1.0.7 caption message: status 0 while forming, then 1 (final), with every content field. */
+    @Test fun lensDisplayCaptionFormatGoesFromIntermediateToFinal() = runTest {
+        val port = FakePort()
+        val display = LensDisplay(port, this, fixedRandom)
+        val sid = "5a".repeat(16)
+        display.show("Olá, tudo bem?", DisplaySettings(lingerSeconds = 4, textFormat = "caption"))
+        runCurrent(); port.glasses(19, 8, "{\"sid\":\"$sid\",\"code\":1}"); advanceTimeBy(10_000); runCurrent()
+        val sends = port.sent.filter { it.second.type == 5 }.map { JSONObject(it.second.jsonText()) }
+        assertEquals(listOf(0, 1), sends.map { it.getInt("status") })
+        assertTrue(sends.all { it.getInt("mode") == 3 && it.getString("sid") == sid })
+        val content = sends[1].getJSONObject("content")
+        assertEquals("Olá, tudo bem?", content.getString("source_transcript")); assertEquals("", content.getString("target_translation"))
+        assertEquals(1, content.getInt("label")); assertEquals("", content.getString("keyword_info"))
+        assertEquals(1, JSONObject(org.turboio.customai.protocol.Commands.displayText(sid, "x", "classic")).getInt("mode"))
     }
 
     @Test fun lensDisplayReportsMissingAck() = runTest {

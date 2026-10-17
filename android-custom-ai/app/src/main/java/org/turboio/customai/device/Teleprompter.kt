@@ -27,11 +27,15 @@ import kotlin.coroutines.resume
 /**
  * The glasses' own teleprompter, driven from the phone (port of harmony-sdk TeleprompterSession, same wire as the iOS
  * client's NewsTeleprompter). Session control goes over business 20 (JSON envelopes); the script itself is a temporary
- * file on business 18 that the glasses pull chunk by chunk. Nothing is installed or changed on the glasses: the file
- * channel is open only while a session is active ([active] is the session's file lease).
+ * file that the glasses pull chunk by chunk. Nothing is installed or changed on the glasses: the file channel is open
+ * only while a session is active ([active] is the session's file lease).
  *
- * Flow: 20/2 prepare → glasses 20/2 action 2 code 1 → 18 file info → glasses request chunks (18/3 → 18/4) → 18/5
- * success + 20/2 code 7 → ready → 20/3 start, 20/4 pause, 20/5 resume, 20/7 speed → 20/6 exit.
+ * Flow: 20/2 prepare → glasses 20/2 action 2 code 1 → file info → glasses request chunks (3 → 4) → 5 success +
+ * 20/2 code 7 → ready → 20/3 start, 20/4 pause, 20/5 resume, 20/7 speed → 20/6 exit.
+ *
+ * Which file business the teleprompter listens on is not known for Strix OS 1.0.5.5 (18 with the session id as the name
+ * was ignored). The info is therefore announced in [ROUTES] order, the next one only when the previous got no answer
+ * in [retryInfoMs]: first as the official app 1.0.7 uploads (business 17, "task_…" id, plain .txt name).
  */
 class Teleprompter(
     private val port: GlassesPort,
@@ -41,7 +45,7 @@ class Teleprompter(
     private val prepareMs: Long = 30_000,
     private val transferMs: Long = 120_000,
     private val controlMs: Long = 10_000,
-    private val retryInfoMs: Long = 8_000,
+    private val retryInfoMs: Long = 6_000,
 ) : BusinessListener {
     enum class Phase(val label: String) {
         IDLE("parado"), PREPARING("preparando"), TRANSFERRING("enviando roteiro"), READY("pronto"), CONTROLLING("aguardando óculos"),
@@ -62,6 +66,9 @@ class Teleprompter(
     private var total = 0
     private var checksum = ""
     private var file: OutboundFile? = null
+    /** Every announced form of the file; the first one the glasses answer becomes [file]. */
+    private val attempts = ArrayList<Pair<FileRoute, OutboundFile>>()
+    private var chosen: FileRoute? = null
     private var fileStarted = false
     private var businessReady = false
     private var pendingControl = 0
@@ -70,7 +77,7 @@ class Teleprompter(
 
     init {
         port.addBusinessListener(this)
-        port.addRawListener { business, payload -> if (business == Business.FILE) receive(business, payload.copyOf(), null) }
+        port.addRawListener { business, payload -> if (business in FileTransfer.BUSINESSES) receive(business, payload.copyOf(), null) }
     }
 
     /** All state lives on the glasses thread (the scope's dispatcher), like the listeners that feed it. */
@@ -87,8 +94,8 @@ class Teleprompter(
 
     private suspend fun command(type: Int, body: JSONObject): String? = port.sendEnvelope(Business.TELEPROMPTER, type, body.toString())
 
-    private suspend fun sendFile(payload: ByteArray): String? = suspendCancellableCoroutine { cont ->
-        port.sendFile(payload) { error -> if (cont.isActive) cont.resume(error) }
+    private suspend fun sendFile(payload: ByteArray, business: Int): String? = suspendCancellableCoroutine { cont ->
+        port.sendFile(payload, business) { error -> if (cont.isActive) cont.resume(error) }
     }
 
     /** Validates and announces the script; null = request sent (the transfer then runs on the glasses' requests). */
@@ -104,6 +111,7 @@ class Teleprompter(
         val e = ++epoch
         did = uuid(); total = bytes.size; checksum = checksum(bytes); fileStarted = false; businessReady = false
         file = OutboundFile(did, bytes, md5(bytes)); bytes.fill(0)
+        attempts.clear(); chosen = null
         _state.value = State(Phase.PREPARING, "Pedindo aos óculos para abrir o teleprompter", 0, 0, speed)
         deadline(prepareMs, "Os óculos não responderam ao preparo; saia e tente de novo")
         val error = lock.withLock {
@@ -134,13 +142,21 @@ class Teleprompter(
 
     private suspend fun handle(business: Int, payload: ByteArray?, envelope: Envelope?, e: Int) {
         val phase = _state.value.phase
-        if (business == Business.FILE) {
-            val f = file ?: return
+        if (business in FileTransfer.BUSINESSES) {
             if (!fileStarted || phase == Phase.ERROR || phase == Phase.CLOSING || payload == null) return
-            val chunk = f.receive(FileTransfer.decode(payload))
+            // Business 17 may carry other traffic: only well-formed messages for one of our ids are handled.
+            val message = runCatching { FileTransfer.decode(payload) }.getOrElse { DiagnosticLog.d(TAG, "mensagem de arquivo ignorada em $business"); return }
+            val (route, f) = attempts.firstOrNull { it.first.business == business && it.second.uuid == message.uuid } ?: return
+            if (chosen == null) {
+                chosen = route
+                attempts.filter { it.second !== f }.forEach { it.second.close() }
+                file?.close(); file = f
+                DiagnosticLog.i(TAG, "óculos responderam ao arquivo pela rota ${route.label}")
+            } else if (route != chosen) return
+            val chunk = f.receive(message)
             if (chunk != null) {
                 val bytes = FileTransfer.encode(chunk)
-                val error = sendFile(bytes); bytes.fill(0); chunk.data.fill(0)
+                val error = sendFile(bytes, route.business); bytes.fill(0); chunk.data.fill(0)
                 if (error != null) throw IllegalStateException(error)
                 if (e != epoch) return
                 f.committed(chunk)
@@ -159,31 +175,21 @@ class Teleprompter(
             if (e == epoch) clear("Teleprompter encerrado; o roteiro continua no celular")
             return
         }
+        if (type == 6 && action == 2) {
+            // Seen on 1.0.5.5: code 3 about 30 s after a prepare whose file never arrived.
+            if (e == epoch) clear("Os óculos encerraram o teleprompter (código $code)" + if (chosen == null && fileStarted) "; não responderam a nenhuma forma de envio do arquivo" else "")
+            return
+        }
         if (phase == Phase.ERROR || phase == Phase.CLOSING) return
         if (type == 2 && action == 2) {
             if (code != 1 && code != 7) throw IllegalStateException("preparo recusado (código $code)")
             if (!fileStarted && code != 1) throw IllegalStateException("conclusão antes do arquivo")
             if (!fileStarted) {
-                val f = file ?: throw IllegalStateException("arquivo indisponível")
+                if (file == null) throw IllegalStateException("arquivo indisponível")
                 fileStarted = true
                 update { it.copy(phase = Phase.TRANSFERRING) }
                 deadline(transferMs, "Os óculos não confirmaram o roteiro em 2 minutos; saia e tente de novo")
-                val info = f.info()
-                val error = sendFile(info); info.fill(0)
-                if (error != null) throw IllegalStateException(error)
-                if (e == epoch) note("Informações do arquivo enviadas; os óculos vão pedir o roteiro em partes")
-                // No acknowledgement in 8 s: one more try naming the file "<id>.txt" (Strix OS 1.0.5.5 ignored the first form).
-                scope.launch {
-                    delay(retryInfoMs)
-                    if (e != epoch || f.acknowledged || _state.value.phase != Phase.TRANSFERRING) return@launch
-                    lock.withLock {
-                        if (e != epoch || f.acknowledged) return@withLock
-                        val again = f.info(withExtension = true)
-                        val err = sendFile(again); again.fill(0)
-                        DiagnosticLog.i(TAG, if (err == null) "sem confirmação do arquivo; reenviado como .txt" else "reenvio do arquivo falhou: $err")
-                        if (e == epoch) note("Sem confirmação dos óculos; informações do arquivo reenviadas (.txt)")
-                    }
-                }
+                announce(0, e)
             } else if (code == 7) { businessReady = true; ready() }
         }
         if (type in setOf(3, 4, 5, 7) && action == 2 && phase == Phase.CONTROLLING && type == pendingControl) {
@@ -201,6 +207,26 @@ class Teleprompter(
             if (type == 7) j.optInt("speed", -1).takeIf { it in SPEEDS }?.let { s -> update { it.copy(speed = s) } }
             command(type, JSONObject().put("did", did).put("action", 2).put("code", 1))
             if (e == epoch && type != 8) note("Alterado nos óculos: ${_state.value.phase.label}")
+        }
+    }
+
+    /** Announces the file in the form [ROUTES][index]; with no answer in [retryInfoMs], tries the next form. */
+    private suspend fun announce(index: Int, e: Int) {
+        val base = file ?: return
+        val route = ROUTES[index]
+        val f = base.copy(if (route.taskId) taskId() else did, FILE_NAME, route.business)
+        attempts.add(route to f)
+        val info = f.info()
+        val error = sendFile(info, route.business); info.fill(0)
+        DiagnosticLog.i(TAG, if (error == null) "arquivo anunciado pela rota ${route.label}" else "anúncio pela rota ${route.label} falhou: $error")
+        if (error != null && index == 0) throw IllegalStateException(error)
+        if (e == epoch) note(if (index == 0) "Informações do arquivo enviadas; os óculos vão pedir o roteiro em partes"
+            else "Sem resposta dos óculos; tentando de outra forma (${index + 1} de ${ROUTES.size})")
+        if (index == ROUTES.lastIndex) return
+        scope.launch {
+            delay(retryInfoMs)
+            if (e != epoch || chosen != null || _state.value.phase != Phase.TRANSFERRING) return@launch
+            lock.withLock { if (e == epoch && chosen == null) announce(index + 1, e) }
         }
     }
 
@@ -242,15 +268,16 @@ class Teleprompter(
     private suspend fun stopHere() {
         if (!active) return
         val id = did; val started = fileStarted; val e = ++epoch
-        file?.close()
+        val announced = attempts.filter { chosen == null || it.first == chosen }.map { it.first.business to it.second.uuid }
+        closeFiles()
         update { it.copy(phase = Phase.CLOSING, note = "Saindo; aguardando os óculos") }
         timer?.cancel()
         timer = scope.launch { delay(controlMs); if (e == epoch && active) clear("Saída não confirmada pelos óculos; se o teleprompter continuar aberto, saia pelo toque nos óculos") }
         lock.withLock {
             if (e != epoch) return@withLock
-            if (started) {
-                val bytes = runCatching { FileTransfer.encode(FileMessage(6, id, reason = "user-stop")) }.getOrNull()
-                if (bytes != null) { sendFile(bytes); bytes.fill(0) }
+            if (started) for ((business, uuid) in announced) {
+                val bytes = runCatching { FileTransfer.encode(FileMessage(6, uuid, reason = "user-stop")) }.getOrNull()
+                if (bytes != null) { sendFile(bytes, business); bytes.fill(0) }
             }
             command(6, JSONObject().put("did", id).put("action", 1))
         }
@@ -259,17 +286,22 @@ class Teleprompter(
     fun disconnected() { if (active) clear("Conexão perdida; o teleprompter não é retomado sozinho") }
 
     private fun fail(text: String) {
-        epoch++; timer?.cancel(); timer = null; file?.close()
+        epoch++; timer?.cancel(); timer = null; closeFiles()
         update { it.copy(phase = Phase.ERROR, note = text) }
         DiagnosticLog.w(TAG, text)
     }
 
     private fun clear(text: String) {
-        epoch++; timer?.cancel(); timer = null; file?.close(); file = null
+        epoch++; timer?.cancel(); timer = null; closeFiles(); file = null; attempts.clear(); chosen = null
         did = ""; fileStarted = false; businessReady = false; pendingControl = 0
         update { it.copy(phase = Phase.IDLE, note = text, progress = 0) }
         DiagnosticLog.i(TAG, text)
     }
+
+    private fun closeFiles() { file?.close(); attempts.forEach { it.second.close() } }
+
+    /** Transfer id in the official app's form, "task_<counter>_<milliseconds>". */
+    private fun taskId(): String = "task_${++tasks}_${System.currentTimeMillis()}"
 
     private fun uuid(): String {
         val r = random.bytes(16)
@@ -278,8 +310,18 @@ class Teleprompter(
         return "${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}"
     }
 
+    /** One way of addressing the file: [business] 17 or 18 (also the info's busId); [taskId] = "task_…" id, else the session id. */
+    data class FileRoute(val business: Int, val taskId: Boolean, val label: String)
+
     companion object {
         private const val TAG = "PROMPTER"
+        private var tasks = 0
+        const val FILE_NAME = "roteiro.txt"
+        val ROUTES = listOf(
+            FileRoute(Business.SMALL_FILE, true, "17 · task"),
+            FileRoute(Business.SMALL_FILE, false, "17 · sessão"),
+            FileRoute(Business.FILE, true, "18 · task"),
+        )
         const val MAX_CHARS = 12_000
         val SPEEDS = 60..240
 

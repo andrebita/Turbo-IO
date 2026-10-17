@@ -34,7 +34,7 @@ pacotes. O arquivo .txt do teleprompter é aberto pelo seletor do sistema (sem p
 | Risco | Mitigação |
 | --- | --- |
 | Firmware | Não existe código de OTA (negócio 9); allow-list de negócios testada; nenhuma etapa grava no firmware |
-| Canal de arquivos (negócio 18) | Só durante uma sessão de teleprompter (trava `fileLease`); só sai “informação do arquivo”, “pedaço” e “cancelar”; o nome do arquivo é obrigatoriamente o id aleatório da sessão (nunca um pacote de atualização); até 48 KB; os óculos pedem cada pedaço |
+| Canal de arquivos (negócios 17 e 18) | Só durante uma sessão de teleprompter (trava `fileLease`); só sai “informação do arquivo”, “pedaço” e “cancelar”; o nome é o id da transferência ou um nome simples terminado em `.txt` (nunca um pacote de atualização: sem `.zip`/`.bin`/`.img`, sem pastas); o `busId` tem de ser o do canal; até 48 KB; os óculos pedem cada pedaço. O negócio 9 (atualização) continua fora de qualquer caminho de envio |
 | Painel dos óculos (15/18) | Lê, muda só o pedido (o cartão `turbo_ui_io` ou `simple_mode`) e lê de novo para conferir; para na primeira divergência, sem repetir; nunca sobrescreve um cartão que não seja deste app; guarda o tipo original para “Restaurar tipo” |
 | Notificações nativas (21/2, 21/18) e cartões de aceno (21/33–35) | 21/18 liga a chave geral de notificações dos óculos (ajuste persistente, reversível no app oficial); o texto de notificações de outros apps vindo dos óculos (21/1) nunca é lido; aceno/balanço só confirma ou descarta uma pendência deste app |
 | “Hey RayNeo” (15/16) | Mesmo comando do app oficial; este app **não sabe desligar** (desligue pelo app oficial); aviso antes de ativar |

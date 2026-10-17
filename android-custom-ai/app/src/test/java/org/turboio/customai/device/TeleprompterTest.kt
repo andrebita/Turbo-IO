@@ -15,6 +15,7 @@ import org.junit.Test
 import org.turboio.customai.protocol.FileMessage
 import org.turboio.customai.protocol.FileTransfer
 import org.turboio.customai.protocol.Hex
+import org.turboio.customai.protocol.OutboundFile
 import org.turboio.customai.voice.FakePort
 import org.turboio.customai.voice.fixedRandom
 import org.turboio.customai.device.Teleprompter.Phase
@@ -44,9 +45,30 @@ class TeleprompterTest {
         assertNotNull(FileTransfer.outboundProblem(FileTransfer.encode(FileMessage(3, u, size = 10))))       // request: glasses only
         assertNotNull(FileTransfer.outboundProblem(FileTransfer.encode(FileMessage(5, u))))                  // result: glasses only
         assertNotNull(FileTransfer.outboundProblem(byteArrayOf(1, 2, 3)))
-        assertNotNull(FileTransfer.outboundProblem(ByteArray(30_000)))
+        assertNotNull(FileTransfer.outboundProblem(ByteArray(60_000)))
         // Other file names (e.g. an OTA package name) cannot be announced.
         assertTrue(runCatching { FileTransfer.encode(FileMessage(1, u, fileName = "update.zip", md5 = "5d41402abc4b2a76b9719d911017c592", fileSize = 5)) }.isFailure)
+        assertTrue(runCatching { FileTransfer.encode(FileMessage(1, u, fileName = "../roteiro.txt", md5 = "5d41402abc4b2a76b9719d911017c592", fileSize = 5)) }.isFailure)
+        // Business 17 (official app's upload): the info must name the business it travels on; nothing else is a file business.
+        val small = FileTransfer.encode(FileMessage(1, "task_1_1792276115000", fileName = "roteiro.txt", md5 = "5d41402abc4b2a76b9719d911017c592", fileSize = 5, busId = 17))
+        assertNull(FileTransfer.outboundProblem(small, 17))
+        assertNotNull(FileTransfer.outboundProblem(small, 18))
+        assertNotNull(FileTransfer.outboundProblem(FileTransfer.encode(FileMessage(6, u)), 9))
+        assertTrue(runCatching { FileTransfer.encode(FileMessage(1, u, fileName = u, md5 = "5d41402abc4b2a76b9719d911017c592", fileSize = 5, busId = 9)) }.isFailure)
+    }
+
+    /** The official app 1.0.7's receiver asks for 51 200 bytes with chunk id 0 every time; the answer is clipped to the file. */
+    @Test fun largeRequestsAndRepeatedChunkIdAreServed() {
+        val bytes = ByteArray(30_000) { (it % 97).toByte() }
+        val f = OutboundFile("task_1_1", bytes, Teleprompter.md5(bytes), "roteiro.txt", 17)
+        assertEquals(17L, FileTransfer.decode(f.info()).busId); assertEquals("roteiro.txt", FileTransfer.decode(f.info()).fileName)
+        val req = FileTransfer.decode(FileTransfer.encode(FileMessage(3, "task_1_1", chunkId = 0, start = 0, size = 51_200)))
+        f.receive(FileMessage(2, "task_1_1"))
+        val first = f.receive(FileMessage(3, "task_1_1", chunkId = 0, start = 0, size = 20_000))!!
+        assertEquals(20_000L, first.size); f.committed(first)
+        val rest = f.receive(FileMessage(3, "task_1_1", chunkId = 0, start = 20_000, size = req.size))!!   // same id, other range
+        assertEquals(10_000L, rest.size); assertNull(FileTransfer.outboundProblem(FileTransfer.encode(rest), 17)); f.committed(rest)
+        f.receive(FileMessage(5, "task_1_1")); assertTrue(f.complete)
     }
 
     @Test fun checksumMatchesIosVector() = assertEquals("4f9f2cab", Teleprompter.checksum("hello".toByteArray()))
@@ -54,7 +76,9 @@ class TeleprompterTest {
     private class Rig(val port: FakePort, val t: Teleprompter) {
         val did get() = JSONObject(port.sent.first { it.first == 20 }.second.jsonText()).getString("did")
         fun business(type: Int, extra: String = "") = port.glasses(20, type, """{"did":"$did","action":2,"code":1$extra}""")
-        fun file(m: FileMessage) = port.raw(18, FileTransfer.encode(m))
+        fun file(m: FileMessage, business: Int = 17) = port.raw(business, FileTransfer.encode(m))
+        /** Transfer id of the n-th announcement. */
+        fun id(n: Int = 0) = FileTransfer.decode(port.files.filterIndexed { i, _ -> FileTransfer.decode(port.files[i]).type == 1 }[n]).uuid
     }
 
     private fun TestScope.rig(): Rig { val port = FakePort(); return Rig(port, Teleprompter(port, this, fixedRandom)) }
@@ -65,18 +89,22 @@ class TeleprompterTest {
         val prep = JSONObject(r.port.sent[0].second.jsonText())
         assertEquals(1, prep.getInt("action")); assertEquals(text.toByteArray().size, prep.getInt("total"))
         assertEquals(Teleprompter.checksum(text.toByteArray()), prep.getString("checksum")); assertEquals(2, prep.getInt("scroll"))
-        assertTrue(r.port.files.isEmpty())                                      // nothing on 18 before the glasses accept
+        assertTrue(r.port.files.isEmpty())                                      // no file before the glasses accept
         r.business(2); runCurrent()
         val info = FileTransfer.decode(r.port.files[0])
-        assertEquals(1, info.type); assertEquals(r.did, info.fileName); assertEquals(Teleprompter.md5(text.toByteArray()), info.md5)
-        r.file(FileMessage(2, r.did)); r.file(FileMessage(3, r.did, chunkId = 0, start = 0, size = 20480)); runCurrent()
-        val chunk = FileTransfer.decode(r.port.files[1])
+        // First form: as the official app uploads (business 17, busId 17, "task_" id, plain .txt name).
+        assertEquals(1, info.type); assertEquals(17, r.port.fileBusinesses[0]); assertEquals(17L, info.busId)
+        assertTrue(info.uuid.startsWith("task_")); assertEquals(Teleprompter.FILE_NAME, info.fileName); assertEquals(Teleprompter.md5(text.toByteArray()), info.md5)
+        r.file(FileMessage(2, info.uuid)); r.file(FileMessage(3, info.uuid, chunkId = 0, start = 0, size = 51_200)); runCurrent()
+        val chunk = FileTransfer.decode(r.port.files[1]); assertEquals(17, r.port.fileBusinesses[1])
         assertEquals(text, String(chunk.data, Charsets.UTF_8)); assertEquals(100, r.t.state.value.progress)
         assertNotNull(r.t.control(3))                                           // not ready: file done, business not yet
         r.port.glasses(20, 2, """{"did":"${r.did}","action":2,"code":7}"""); runCurrent()
         assertEquals(Phase.TRANSFERRING, r.t.state.value.phase)                 // file result still missing
-        r.file(FileMessage(5, r.did)); runCurrent()
+        r.file(FileMessage(5, info.uuid)); runCurrent()
         assertEquals(Phase.READY, r.t.state.value.phase)
+        advanceTimeBy(20_000); runCurrent()
+        assertEquals(1, r.port.files.count { FileTransfer.decode(it).type == 1 })   // answered: no other form announced
         // Controls wait for the matching answer.
         assertNull(r.t.control(3)); runCurrent()
         val start = JSONObject(r.port.sent.last().second.jsonText())
@@ -92,12 +120,42 @@ class TeleprompterTest {
         assertEquals(7, r.t.state.value.offset)
         val ack = JSONObject(r.port.sent.last().second.jsonText())
         assertEquals("20/8", r.port.trace().last()); assertEquals(2, ack.getInt("action")); assertEquals(1, ack.getInt("code"))
-        // Exit: file cancel on 18, then 20/6; idle only after the glasses confirm.
+        // Exit: file cancel on the business that answered, then 20/6; idle only after the glasses confirm.
         r.t.stop(); runCurrent()
-        assertEquals(6, FileTransfer.decode(r.port.files.last()).type); assertEquals("20/6", r.port.trace().last())
+        assertEquals(6, FileTransfer.decode(r.port.files.last()).type); assertEquals(17, r.port.fileBusinesses.last()); assertEquals("20/6", r.port.trace().last())
         assertTrue(r.t.active)
         r.business(6); runCurrent()
         assertFalse(r.t.active)
+    }
+
+    /** No answer: the other forms are tried in order; the first form that answers is used, late answers of others ignored. */
+    @Test fun unansweredInfoTriesNextRoutes() = runTest {
+        val r = rig(); r.t.prepare("Texto curto", 120); runCurrent(); r.business(2); runCurrent()
+        assertEquals(listOf(17), r.port.fileBusinesses)
+        advanceTimeBy(6_100); runCurrent()
+        val second = FileTransfer.decode(r.port.files[1])
+        assertEquals(17, r.port.fileBusinesses[1]); assertEquals(r.did, second.uuid); assertEquals(Teleprompter.FILE_NAME, second.fileName)
+        advanceTimeBy(6_100); runCurrent()
+        val third = FileTransfer.decode(r.port.files[2])
+        assertEquals(18, r.port.fileBusinesses[2]); assertEquals(18L, third.busId); assertTrue(third.uuid.startsWith("task_"))
+        advanceTimeBy(20_000); runCurrent()
+        assertEquals(3, r.port.files.size)                                    // three forms, then only the 2-minute deadline
+        // The glasses answer the 18 form; the 17 forms are dropped (an answer on the wrong business is ignored).
+        r.file(FileMessage(2, third.uuid), 17); r.file(FileMessage(3, third.uuid, chunkId = 0, start = 0, size = 100), 17); runCurrent()
+        assertEquals(3, r.port.files.size)
+        r.file(FileMessage(2, third.uuid), 18); r.file(FileMessage(3, third.uuid, chunkId = 0, start = 0, size = 100), 18); runCurrent()
+        assertEquals("Texto curto", String(FileTransfer.decode(r.port.files[3]).data)); assertEquals(18, r.port.fileBusinesses[3])
+        r.file(FileMessage(3, second.uuid, chunkId = 0, start = 0, size = 100), 17); runCurrent()
+        assertEquals(4, r.port.files.size)
+        // Exit cancels only the form in use.
+        r.t.stop(); runCurrent()
+        assertEquals(5, r.port.files.size); assertEquals(third.uuid, FileTransfer.decode(r.port.files[4]).uuid)
+    }
+
+    @Test fun glassesExitWithCodeEndsSession() = runTest {
+        val r = rig(); r.t.prepare("Texto", 120); runCurrent(); r.business(2); runCurrent()
+        r.port.glasses(20, 6, """{"did":"${r.did}","action":2,"code":3}"""); runCurrent()
+        assertFalse(r.t.active); assertTrue(r.t.state.value.note.contains("código 3"))
     }
 
     @Test fun refusalPrematureSuccessAndTimeoutNeverUnlockStart() = runTest {
@@ -110,7 +168,7 @@ class TeleprompterTest {
         assertEquals(Phase.ERROR, early.t.state.value.phase); assertTrue(early.port.files.isEmpty())
 
         val premature = rig(); premature.t.prepare("Texto", 120); runCurrent(); premature.business(2); runCurrent()
-        premature.file(FileMessage(5, premature.did)); runCurrent()
+        premature.file(FileMessage(5, premature.id())); runCurrent()
         assertEquals(Phase.ERROR, premature.t.state.value.phase)
 
         val slow = rig(); slow.t.prepare("Texto", 120); runCurrent()

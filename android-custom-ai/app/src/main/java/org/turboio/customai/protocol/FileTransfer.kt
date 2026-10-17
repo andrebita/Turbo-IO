@@ -3,9 +3,11 @@ package org.turboio.customai.protocol
 import java.io.ByteArrayOutputStream
 
 /**
- * File-transfer messages of business 18 (protobuf TransferMessage), ported from harmony-sdk/turbo_core FileTransfer.ts
- * with the same bounds. Used only for the teleprompter script: the file name is the random transfer id (optionally
- * ".txt"), at most 48 000 bytes, MD5 announced, and the glasses pull every chunk (type 3 → type 4).
+ * File-transfer messages (protobuf TransferMessage), ported from harmony-sdk/turbo_core FileTransfer.ts and checked
+ * against the official app 1.0.7: the message goes straight into the frame payload (no envelope) on business 17
+ * ("SmallCore", the one the official app's upload uses) or 18 ("LargeCore"), and FileInfoSync.busId repeats that number.
+ * Used only for the teleprompter script: a plain ".txt" name or the transfer id, at most 48 000 bytes, MD5 announced,
+ * and the glasses pull every chunk (type 3 → type 4).
  * Types: 1 info, 2 ack, 3 chunk request, 4 chunk data, 5 result, 6 cancel.
  */
 class FileMessage(
@@ -14,7 +16,7 @@ class FileMessage(
     val fileName: String = "",
     val md5: String = "",
     val fileSize: Long = 0,
-    val busId: Long = 18,
+    val busId: Long = Business.FILE.toLong(),
     val chunkId: Long = 0,
     val start: Long = 0,
     val size: Long = 0,
@@ -25,9 +27,13 @@ class FileMessage(
 
 object FileTransfer {
     const val MAX_FILE = 48_000
-    const val MAX_CHUNK = 20_480
-    const val MAX_MESSAGE = 22_000
-    private val UUID = Regex("^[A-Za-z0-9-]{1,64}$")
+    /** Largest range the glasses may ask for (the official receiver asks 51 200); answers are clipped to the file. */
+    const val MAX_REQUEST = 1 shl 20
+    const val MAX_MESSAGE = MAX_FILE + 512
+    /** File businesses: 17 = SmallCore, 18 = LargeCore. */
+    val BUSINESSES = setOf(Business.SMALL_FILE, Business.FILE)
+    private val UUID = Regex("^[A-Za-z0-9_-]{1,64}$")
+    private val NAME = Regex("^[A-Za-z0-9_-]{1,40}\\.txt$")
 
     private fun ascii(s: String, max: Int): ByteArray {
         if (s.length > max || s.any { it.code !in 0x20..0x7e }) throw ProtocolException("file-ascii")
@@ -44,12 +50,13 @@ object FileTransfer {
         body.blob(1, ascii(m.uuid, 64))
         when (m.type) {
             1 -> {
-                if (m.fileName !in setOf(m.uuid, m.uuid + ".txt") || !Regex("^[a-f0-9]{32}$").matches(m.md5) || m.busId != 18L || m.fileSize !in 1..MAX_FILE.toLong())
+                if ((m.fileName != m.uuid && !NAME.matches(m.fileName)) || !Regex("^[a-f0-9]{32}$").matches(m.md5) ||
+                    m.busId !in BUSINESSES.map { it.toLong() } || m.fileSize !in 1..MAX_FILE.toLong())
                     throw ProtocolException("file-info")
-                body.blob(2, ascii(m.fileName, 68)); body.scalar(3, m.fileSize); body.blob(4, ascii(m.md5, 32)); body.scalar(5, 18)
+                body.blob(2, ascii(m.fileName, 68)); body.scalar(3, m.fileSize); body.blob(4, ascii(m.md5, 32)); body.scalar(5, m.busId)
             }
             3, 4 -> {
-                if (m.chunkId !in 0..0xffffffffL || m.start !in 0..MAX_FILE.toLong() || m.size !in 1..MAX_CHUNK.toLong()) throw ProtocolException("file-chunk")
+                if (m.chunkId !in 0..0xffffffffL || m.start !in 0..MAX_FILE.toLong() || m.size !in 1..maxSize(m.type)) throw ProtocolException("file-chunk")
                 body.scalar(2, m.chunkId); body.scalar(3, m.start); body.scalar(4, m.size)
                 if (m.type == 4) { if (m.data.size.toLong() != m.size) throw ProtocolException("file-chunk-size"); body.blob(5, m.data) }
             }
@@ -109,7 +116,7 @@ object FileTransfer {
             3, 4 -> {
                 val data = list.firstOrNull { it.key == 5 }?.data ?: ByteArray(0)
                 val m = FileMessage(type, uuid, chunkId = num(2), start = num(3), size = num(4), data = data)
-                if (m.chunkId !in 0..0xffffffffL || m.start !in 0..MAX_FILE.toLong() || m.size !in 1..MAX_CHUNK.toLong() || (type == 4 && data.size.toLong() != m.size))
+                if (m.chunkId !in 0..0xffffffffL || m.start !in 0..MAX_FILE.toLong() || m.size !in 1..maxSize(type) || (type == 4 && data.size.toLong() != m.size))
                     throw ProtocolException("file-chunk")
                 m
             }
@@ -119,32 +126,43 @@ object FileTransfer {
         }
     }
 
-    /** Outgoing gate: only info (1), chunk data (4) and cancel (6), well formed and bounded. Null = allowed. */
-    fun outboundProblem(payload: ByteArray): String? {
+    private fun maxSize(type: Int): Long = if (type == 3) MAX_REQUEST.toLong() else MAX_FILE.toLong()
+
+    /**
+     * Outgoing gate: only info (1), chunk data (4) and cancel (6), well formed and bounded, on a file business; the info's
+     * busId must name the business it travels on. Null = allowed.
+     */
+    fun outboundProblem(payload: ByteArray, business: Int = Business.FILE): String? {
+        if (business !in BUSINESSES) return "Canal de arquivo inválido ($business)"
         if (payload.size > MAX_MESSAGE + 10) return "Mensagem de arquivo grande demais"
         val m = runCatching { decode(payload) }.getOrElse { return "Mensagem de arquivo inválida" }
         if (m.type !in setOf(1, 4, 6)) return "Tipo de mensagem de arquivo não permitido (${m.type})"
+        if (m.type == 1 && m.busId != business.toLong()) return "Arquivo anunciado para outro canal (${m.busId})"
         return runCatching { encode(m); null }.getOrElse { "Mensagem de arquivo fora dos limites" }
     }
 }
 
-/** One outgoing file served on the glasses' requests (port of OutboundFile). */
-class OutboundFile(val uuid: String, bytes: ByteArray, private val md5: String) {
+/** One outgoing file served on the glasses' requests (port of OutboundFile), announced as [fileName] on [business]. */
+class OutboundFile(val uuid: String, bytes: ByteArray, private val md5: String, val fileName: String = uuid, val business: Int = Business.FILE) {
     private val bytes = bytes.copyOf()
     var acknowledged = false; private set
     var complete = false; private set
     var cancelled = false; private set
     var sentBytes = 0; private set
     private val ranges = ArrayList<IntRange>()
-    private val descriptors = HashMap<Long, String>()
     private var requests = 0
     val size get() = bytes.size
 
     init { info() }
 
-    /** [withExtension] names the file "<id>.txt" (the reference accepts both forms; which one the glasses expect is unknown). */
-    fun info(withExtension: Boolean = false): ByteArray =
-        FileTransfer.encode(FileMessage(1, uuid, fileName = if (withExtension) "$uuid.txt" else uuid, md5 = md5, fileSize = bytes.size.toLong()))
+    fun info(): ByteArray =
+        FileTransfer.encode(FileMessage(1, uuid, fileName = fileName, md5 = md5, fileSize = bytes.size.toLong(), busId = business.toLong()))
+
+    /** The same bytes under another transfer id, name or business (the next addressing attempt). */
+    fun copy(uuid: String, fileName: String, business: Int) = OutboundFile(uuid, bytes, md5, fileName, business)
+
+    /** Why the glasses refused the file, when they said so. */
+    var failure = ""; private set
 
     /** Handles a glasses message; returns the chunk to send for a request, else null. Throws on protocol errors. */
     fun receive(m: FileMessage): FileMessage? {
@@ -153,16 +171,15 @@ class OutboundFile(val uuid: String, bytes: ByteArray, private val md5: String) 
             2 -> { acknowledged = true; return null }
             6 -> { cancelled = true; throw ProtocolException("file-peer-cancelled") }
             5 -> {
-                if (m.state != 0L) throw ProtocolException("file-peer-failed")
+                if (m.state != 0L) { failure = m.reason; throw ProtocolException("file-peer-failed" + if (m.reason.isNotEmpty()) ": ${m.reason}" else "") }
                 if (sentBytes != bytes.size) throw ProtocolException("file-premature-success")
                 complete = true; return null
             }
             3 -> {
-                if (!acknowledged) throw ProtocolException("file-request-before-ack")
+                // A request implies the info was accepted (the official receiver acks first, but nothing depends on it).
+                acknowledged = true
+                // The official receiver uses chunk id 0 for every request, so ids are echoed, not checked for reuse.
                 if (++requests > 256 || m.start >= bytes.size) throw ProtocolException("file-request-limit")
-                val descriptor = "${m.start}:${m.size}"
-                descriptors[m.chunkId]?.let { if (it != descriptor) throw ProtocolException("file-chunk-id-conflict") }
-                descriptors[m.chunkId] = descriptor
                 val start = m.start.toInt(); val size = minOf(m.size.toInt(), bytes.size - start)
                 return FileMessage(4, uuid, chunkId = m.chunkId, start = start.toLong(), size = size.toLong(), data = bytes.copyOfRange(start, start + size))
             }
@@ -181,5 +198,5 @@ class OutboundFile(val uuid: String, bytes: ByteArray, private val md5: String) 
         sentBytes = merged.sumOf { it.last - it.first + 1 }
     }
 
-    fun close() { cancelled = true; bytes.fill(0); ranges.clear(); descriptors.clear() }
+    fun close() { cancelled = true; bytes.fill(0); ranges.clear() }
 }

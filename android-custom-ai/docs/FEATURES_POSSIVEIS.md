@@ -1,7 +1,7 @@
 # O que mais o app pode fazer nos RayNeo iO (firmware original)
 
 Revisão de 2026-10-17, depois da autorização do usuário: **qualquer coisa que não altere o firmware**. Isso libera:
-* o canal de arquivos (negócio 18) para conteúdo como roteiros;
+* os canais de arquivo (negócios 17 e 18) para conteúdo como roteiros;
 * gravar ajustes nos óculos.
 
 Continuam fora: OTA/atualização (negócio 9), flash, downgrade e qualquer firmware modificado.
@@ -35,7 +35,7 @@ Legenda de evidência:
 | 2 | **Notificações do Android nas lentes** (WhatsApp, e-mail…; filtro por app no telefone) | permissão de acesso a notificações → 21/2 | A (cartão) | não | M |
 | 3 | **Palavra de ativação “Hey RayNeo”** ligada pelo app | 15/16 `set_ai_voice_wakeup` mode 1 | A (comando observado no app oficial; clientes enviam a cada conexão) | sim; **desligar: comando desconhecido** | P |
 | 4 | **Tarefa por frase livre** (“preciso comprar pão amanhã”) | a IA decide (função/ferramenta) → 22/2 | — (só telefone) | não | P |
-| 5 | **Teleprompter**: colar texto ou abrir .txt, iniciar/pausar/velocidade pelo celular | 20/2–8 + 18 (arquivo ≤ 48 KB, nome aleatório, MD5; os óculos pedem cada pedaço) | B/A parcial (iOS enviou roteiros com a biblioteca do fabricante; o envio reescrito do HarmonyOS não tem registro) | não (arquivo temporário do teleprompter) | M |
+| 5 | **Teleprompter**: colar texto ou abrir .txt, iniciar/pausar/velocidade pelo celular | 20/2–8 + 17/18 (arquivo ≤ 48 KB, `roteiro.txt`, MD5; os óculos pedem cada pedaço) | B/A parcial (iOS enviou roteiros com a biblioteca do fabricante; o envio reescrito do HarmonyOS não tem registro) | não (arquivo temporário do teleprompter) | M |
 | 6 | **Confirmar com aceno/balanço de cabeça** (“Tarefa: X?” → aceitar/recusar; sim/não para a IA) | 21/33 cartão, 21/34 resposta, 21/35 confirmação | B | não | M |
 | 7 | **Tempo na tela inicial** (Open-Meteo, sem chave) e cartão de previsão | 15/18 `current_weather_update` / `weather_update` | A parcial (ícones a conferir na lente) | conteúdo da tela inicial | P |
 | 8 | **Cartão curto no painel** (“3 pendências · 15h Marina”) e ordem dos cartões | 15/18 `dashboard_config` → `widget_install`/`dashboard_update` | A (cartão de texto, HarmonyOS) | sim (painel); lê antes e confere depois | M |
