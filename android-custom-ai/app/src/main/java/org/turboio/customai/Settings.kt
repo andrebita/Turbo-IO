@@ -84,7 +84,13 @@ class SettingsRepository(context: Context) {
         pageSeconds = prefs.getInt("display.pageSeconds", 5),
         lingerSeconds = prefs.getInt("display.lingerSeconds", 6),
         stripAccents = prefs.getBoolean("display.stripAccents", false),
+        fontSize = prefs.getInt("display.fontSize", 2).coerceIn(1, 3),
+        position = prefs.getString("display.position", "center")?.takeIf { it in setOf("center", "top", "bottom") } ?: "center",
+        maxLines = prefs.getInt("display.maxLines", 5).coerceIn(1, 5),
     )
+
+    fun setDisplayLayout(fontSize: Int, position: String, maxLines: Int) =
+        prefs.edit().putInt("display.fontSize", fontSize).putString("display.position", position).putInt("display.maxLines", maxLines).apply()
 
     fun setVoiceEnabled(value: Boolean) = prefs.edit().putBoolean("voice.enabled", value).apply()
     fun setStripAccents(value: Boolean) = prefs.edit().putBoolean("display.stripAccents", value).apply()
@@ -169,6 +175,18 @@ class SettingsRepository(context: Context) {
             e.apply()
         }
     }
+
+    var weatherOn: Boolean
+        get() = prefs.getBoolean("weather.on", false)
+        set(v) { prefs.edit().putBoolean("weather.on", v).apply() }
+    var weatherCity: String
+        get() = prefs.getString("weather.city", "") ?: ""
+        set(v) { prefs.edit().putString("weather.city", v.trim().take(60)).apply() }
+
+    /** Alerts (reminders, new items, morning brief) as the glasses' native notification card. */
+    var nativeAlerts: Boolean
+        get() = prefs.getBoolean("alerts.native", true)
+        set(v) { prefs.edit().putBoolean("alerts.native", v).apply() }
 
     fun deepgramKey(): String = secrets.get("key.ambient.deepgram")
     fun hasDeepgramKey(): Boolean = secrets.has("key.ambient.deepgram")

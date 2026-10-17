@@ -33,7 +33,7 @@ class GlassesSettingsTest {
         val s = GlassesSettings(port, this, originals, clock = { 1000L })
         var result: String? = "?"
         s.read { result = it }; glassesAnswer(3, 2, 0, 5)
-        assertNull(result); assertEquals(GlassesConfig(3, 2, 0, 5, 1000), s.state.value.config); assertEquals(3, originals.c!!.height)
+        assertNull(result); assertEquals(GlassesConfig(3, 2, 0, 5, 1000, keys = "crownConfig,displayConfig,privacyConfig"), s.state.value.config); assertEquals(3, originals.c!!.height)
         s.setDisplay(height = 1) { result = it }
         glassesAnswer(3, 2, 0, 5)                                                   // fresh read before writing
         assertEquals(listOf("15/4", "15/4", "15/5"), port.trace())

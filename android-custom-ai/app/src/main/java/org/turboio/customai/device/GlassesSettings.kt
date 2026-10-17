@@ -31,7 +31,9 @@ object SettingsWire {
     val DISTANCES = listOf(1, 2)
 }
 
-data class GlassesConfig(val height: Int? = null, val distance: Int? = null, val crownDouble: Int? = null, val crownLongPress: Int? = null, val readAt: Long = 0) {
+data class GlassesConfig(val height: Int? = null, val distance: Int? = null, val crownDouble: Int? = null, val crownLongPress: Int? = null, val readAt: Long = 0,
+                         /** Voice wake-up (“Hey RayNeo”) if the glasses report it; key name not documented, so several are tried. */
+                         val wakeup: Boolean? = null, val keys: String = "") {
     val hasDisplay get() = height != null && distance != null
     val hasCrown get() = crownDouble != null && crownLongPress != null
 
@@ -46,7 +48,20 @@ data class GlassesConfig(val height: Int? = null, val distance: Int? = null, val
             val root = json.optJSONObject("generalSettings") ?: json
             val display = obj(root, "displayConfig", "display_config")
             val crown = obj(root, "crownConfig", "crown_config")
-            return GlassesConfig(int(display, "height"), int(display, "distance"), int(crown, "double"), int(crown, "longPress"), at)
+            return GlassesConfig(int(display, "height"), int(display, "distance"), int(crown, "double"), int(crown, "longPress"), at,
+                wakeup(root), root.keys().asSequence().toList().sorted().joinToString(","))
+        }
+
+        private val WAKE_KEYS = setOf("voiceWakeup", "voice_wakeup", "ai_voice_wakeup", "voiceWakeUp", "aiVoiceWakeup", "wakeup", "wakeUp")
+
+        /** First boolean-ish value under a wake-up key, searched one level deep. */
+        fun wakeup(o: JSONObject): Boolean? {
+            for (k in o.keys()) {
+                val v = o.opt(k)
+                if (k in WAKE_KEYS) when (v) { is Boolean -> return v; is Number -> return v.toInt() != 0 }
+                if (v is JSONObject) wakeup(v)?.let { return it }
+            }
+            return null
         }
     }
 }
@@ -74,7 +89,8 @@ class GlassesSettings(
         if (business != Business.LAUNCHER) return
         val j = runCatching { JSONObject(envelope.jsonText()) }.getOrNull() ?: return
         if (envelope.type == 4) { settingsReply?.complete(j); return }
-        if (envelope.type in setOf(3, 6, 17, 19) && j.optString("cmd") == pendingCmd && pendingCmd.isNotEmpty()) commandReply?.complete(envelope.type to j)
+        if (envelope.type in setOf(3, 6, 16, 17, 19) && j.optString("cmd") == pendingCmd && pendingCmd.isNotEmpty()) commandReply?.complete(envelope.type to j)
+        if (envelope.type == 17) DiagnosticLog.i("AJUSTES", "15/17: ${j.toString().take(200)}")
     }
 
     private fun note(text: String, busy: Boolean = false) { _state.value = _state.value.copy(note = text, busy = busy); DiagnosticLog.i("AJUSTES", text) }
@@ -97,6 +113,7 @@ class GlassesSettings(
             originals.save(original)
         }
         _state.value = _state.value.copy(config = config, original = original)
+        DiagnosticLog.i("AJUSTES", "chaves dos ajustes: ${config.keys.take(300)}")
         note(if (config.hasDisplay || config.hasCrown) "Ajustes lidos" else "Os óculos não informaram altura/distância nem o duplo toque")
         return null
     }
@@ -119,6 +136,24 @@ class GlassesSettings(
             if (!c.hasCrown || c.crownDouble !in setOf(0, 8)) return@write null
             SettingsWire.crown(if (on) 8 else 0, c.crownLongPress!!)
         })
+    }
+
+    /**
+     * “Hey RayNeo”: the enable command the official app sends (15/16 set_ai_voice_wakeup, mode 1). No disable command is
+     * known, so this cannot be undone from this app (use the glasses' menu or the official app).
+     */
+    fun enableWakeWord(done: (String?) -> Unit = {}) = scope.launch {
+        if (!port.isReady) return@launch done("Conecte os óculos")
+        note("Ativando a palavra de ativação…", busy = true)
+        pendingCmd = "set_ai_voice_wakeup"
+        val waiter = CompletableDeferred<Pair<Int, JSONObject>>().also { commandReply = it }
+        port.sendEnvelope(Business.LAUNCHER, 16, Business.WAKEUP_ON)?.let { pendingCmd = ""; return@launch done("Falha ao enviar: $it".also { m -> note(m) }) }
+        val reply = withTimeoutOrNull(6000) { waiter.await() }
+        pendingCmd = ""; commandReply = null
+        DiagnosticLog.i("AJUSTES", "palavra de ativação: resposta ${reply?.let { "${it.first} ${it.second.toString().take(160)}" } ?: "nenhuma"}")
+        readNow()
+        done(if (reply == null) "Enviado; os óculos não responderam. Diga “Hey RayNeo” para testar" else null)
+        note(if (reply == null) "Ativação enviada sem resposta; teste dizendo “Hey RayNeo”" else "Óculos responderam; teste dizendo “Hey RayNeo”")
     }
 
     fun restore(done: (String?) -> Unit = {}) = scope.launch {

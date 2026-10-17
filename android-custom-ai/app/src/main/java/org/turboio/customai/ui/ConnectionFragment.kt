@@ -91,13 +91,52 @@ class ConnectionFragment : Fragment() {
             AlertDialog.Builder(requireContext()).setTitle("Restaurar?").setMessage("Volta altura, distância e duplo toque aos primeiros valores lidos dos óculos.")
                 .setPositiveButton("Restaurar") { _, _ -> app.glassesSettings.restore { done(it ?: "Restaurado") } }.setNegativeButton("Cancelar", null).show()
         }
-        c.hint("O tipo de painel (dashboard) não pode ser alterado: o comando não é conhecido. Para trocar, use o app oficial.")
+        c.title("Tempo na tela inicial dos óculos (experimental)")
+        val city = c.field("Cidade (ex.: São Paulo)", app.settings.weatherCity)
+        c.switch("Atualizar a cada hora com os óculos conectados", app.settings.weatherOn) { on ->
+            app.settings.weatherCity = city.text.toString(); app.settings.weatherOn = on
+            org.turboio.customai.device.WeatherWorker.schedule(requireContext(), on)
+        }
+        c.button("Enviar o tempo agora", filled = false) {
+            app.settings.weatherCity = city.text.toString()
+            val name = app.settings.weatherCity
+            if (name.isBlank()) { done("Informe a cidade"); return@button }
+            viewLifecycleOwner.lifecycleScope.launch {
+                val r = try {
+                    val w = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { org.turboio.customai.device.OpenMeteo.now(name) }
+                    app.weather.send(w)
+                } catch (e: Exception) { "Falhou: ${e.message ?: e.javaClass.simpleName}" }
+                done(r)
+            }
+        }
+        c.hint("Dados do Open-Meteo (grátis, sem chave). O ícone segue a numeração usada pelos outros clientes; confira nas lentes se combina com o tempo.")
+        c.title("“Hey RayNeo”")
+        c.hint("Liga a palavra de ativação com o mesmo comando do app oficial. Ao dizer “Hey RayNeo”, o assistente dos óculos " +
+            "é atendido por este app (com a sua IA). Não há comando conhecido para desligar pelo app: use o menu dos óculos ou o app oficial.")
+        c.button("Ativar “Hey RayNeo”", filled = false) {
+            AlertDialog.Builder(requireContext()).setTitle("Ativar a palavra de ativação?")
+                .setMessage("Os óculos passam a ouvir “Hey RayNeo” (pode gastar mais bateria). Este app não consegue desligar depois; " +
+                    "só o menu dos óculos ou o app oficial.")
+                .setPositiveButton("Ativar") { _, _ -> app.glassesSettings.enableWakeWord { done(it ?: "Ativado — diga “Hey RayNeo”") } }
+                .setNegativeButton("Cancelar", null).show()
+        }
+        c.title("Alertas nos óculos")
+        c.switch("Lembretes e avisos como notificação nativa (experimental)", app.settings.nativeAlerts) { app.settings.nativeAlerts = it }
+        c.hint("Usa o cartão de notificação dos próprios óculos (liga a chave de notificações deles). Se os óculos não responderem, " +
+            "o aviso aparece como texto nas lentes. Fora do rosto ou em “não perturbe”, nada é mostrado.")
+        c.button("Testar notificação nativa", filled = false) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                val r = app.nativeNotifier.show("Teste", "Turbo IO: notificação nativa funcionando.")
+                done("Resultado: ${r.label}")
+            }
+        }
     }
 
     private fun renderSettings(s: org.turboio.customai.device.SettingsState) {
         if (!::settingsText.isInitialized) return
         val c = s.config
         settingsText.text = buildString {
+            if (c.readAt > 0) append("Palavra de ativação: ${when (c.wakeup) { true -> "ligada"; false -> "desligada"; null -> "não informada" }}\n")
             append(if (c.readAt > 0) "Atual: altura ${c.height ?: "?"} · distância ${c.distance ?: "?"} · duplo toque ${when (c.crownDouble) { 8 -> "abre To-do"; 0 -> "sem ação"; null -> "?"; else -> "função ${c.crownDouble}" }}"
                 else "Ainda não lido")
             s.original?.let { o -> append("\nOriginais: altura ${o.height ?: "?"} · distância ${o.distance ?: "?"} · duplo toque ${o.crownDouble ?: "?"}") }

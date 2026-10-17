@@ -135,7 +135,10 @@ class ProtocolTest {
         assertTrue(Business.outboundAllowed(13, 32)); assertTrue(Business.outboundAllowed(19, 5)); assertTrue(Business.outboundAllowed(15, 1))
         assertFalse(Business.outboundAllowed(9, 1))    // MARS_FOTA (firmware update)
         assertFalse(Business.outboundAllowed(18, 1))   // file transfer
-        assertFalse(Business.outboundAllowed(15, 18))  // launcher writes other than status query
+        // Launcher 18 (weather/dashboard) is allowed only through the content gate.
+        assertFalse(Business.contentAllowed(15, 18, """{"cmd":"factory_reset","payload":{"value":0}}"""))
+        assertFalse(Business.contentAllowed(15, 18, """{"cmd":"widget_uninstall","payload":{"data":{"id":"weather"}}}"""))   // not our widget
+        assertFalse(Business.outboundAllowed(15, 3))
         assertFalse(Business.outboundAllowed(0x10, 1))
         assertNull(Business.OUTBOUND[9]); assertNull(Business.OUTBOUND[18])
     }

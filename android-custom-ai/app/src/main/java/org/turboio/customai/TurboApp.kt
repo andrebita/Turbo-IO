@@ -9,6 +9,7 @@ import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import org.turboio.customai.memory.TaskMarker
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.turboio.customai.ai.AiAnswer
 import org.turboio.customai.ai.AiClient
@@ -58,6 +59,8 @@ class TurboApp : Application() {
     lateinit var suite: org.turboio.customai.probe.TestSuite; private set
     lateinit var glassesSettings: org.turboio.customai.device.GlassesSettings; private set
     lateinit var glassesTodo: org.turboio.customai.memory.GlassesTodoSync; private set
+    lateinit var nativeNotifier: org.turboio.customai.device.NativeNotifier; private set
+    lateinit var weather: org.turboio.customai.device.GlassesWeather; private set
     val probeFiles by lazy { org.turboio.customai.probe.ProbeFiles(this) }
     lateinit var scope: CoroutineScope; private set
     lateinit var random: org.turboio.customai.ble.Randomness; private set
@@ -94,6 +97,17 @@ class TurboApp : Application() {
         probe = org.turboio.customai.probe.HardwareProbe(session, scope, org.turboio.customai.probe.PrefsPendingFlag(this), random, probeFiles)
         suite = org.turboio.customai.probe.TestSuite(probe, org.turboio.customai.probe.PrefsSuiteStore(this))
         glassesSettings = org.turboio.customai.device.GlassesSettings(session, scope, settings.originalGlassesSettings)
+        nativeNotifier = org.turboio.customai.device.NativeNotifier(session, scope, random)
+        weather = org.turboio.customai.device.GlassesWeather(session)
+        // What the user opens on the glasses (15/24 glass_preview): opening the native To-do refreshes it right away.
+        session.addBusinessListener { business, envelope ->
+            if (business != org.turboio.customai.protocol.Business.LAUNCHER || envelope.type != 24) return@addBusinessListener
+            val data = runCatching { org.json.JSONObject(org.json.JSONObject(envelope.jsonText()).getJSONObject("payload").getString("data")) }.getOrNull()
+                ?: return@addBusinessListener
+            val opened = data.optJSONObject("app")?.takeIf { it.optInt("action") != 2 }?.optString("name").orEmpty()
+            if (opened.isNotEmpty()) DiagnosticLog.i("OCULOS", "aberto nos óculos: $opened")
+            if (opened == "com.rayneo.liteos.todo") memoryChanged()
+        }
         glassesTodo = org.turboio.customai.memory.GlassesTodoSync(session, scope, { memoryStore }, random,
             { settings.memorySettings().let { it.enabled && it.glassesTodo } })
         // The glasses LifeLog channel is shared: probes wait while the journal records from the glasses, and a
@@ -111,6 +125,8 @@ class TurboApp : Application() {
             if (ready != wasReady) {
                 wasReady = ready; voice.connectionChanged(ready)
                 if (ready) {
+                    nativeNotifier.connectionChanged()
+                    if (settings.weatherOn) runCatching { org.turboio.customai.device.WeatherWorker.now(this) }
                     probe.connectionReady()   // re-sends LifeLog OFF if a previous one was not confirmed
                     if (settings.ambientSettings().glassesMenu) ambient.armGlassesMenu()
                     memoryChanged()
@@ -119,6 +135,7 @@ class TurboApp : Application() {
         }
         runCatching { org.turboio.customai.insights.DailyInsightWorker.schedule(this) }
         runCatching { org.turboio.customai.memory.MemorySchedule.all(this) }
+        runCatching { org.turboio.customai.device.WeatherWorker.schedule(this, settings.weatherOn) }
         DiagnosticLog.i("APP", "Turbo IO Custom AI ${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
     }
 
@@ -192,9 +209,20 @@ class TurboApp : Application() {
         val config = settings.aiConfig()
         val key = settings.apiKey(config.provider)
         val snapshot = synchronized(history) { history.toList() }
-        val effective = if (DisplayText.wantsDetail(question)) config.copy(maxTokens = maxOf(config.maxTokens, 1500)) else config
         val started = System.currentTimeMillis()
-        val result = ai.ask(effective, key, snapshot, question)
+        val tasks = record && settings.memorySettings().enabled
+        val base = if (tasks) config.copy(systemPrompt = config.systemPrompt + TaskMarker.instruction(started)) else config
+        val effective = if (DisplayText.wantsDetail(question)) base.copy(maxTokens = maxOf(base.maxTokens, 1500)) else base
+        val raw = ai.ask(effective, key, snapshot, question)
+        // The assistant itself flags requests to remember something; the marker becomes an item and is never shown.
+        val marker = if (tasks) TaskMarker.find(raw.text) else null
+        val result = if (marker == null) raw else raw.copy(text = marker.rest.ifBlank { "Anotado." })
+        if (marker != null) withContext(Dispatchers.IO) {
+            runCatching { memory.itemFromMarker(marker.task, marker.due, question, started) }.getOrNull()?.let {
+                DiagnosticLog.i("MEMORIA", "pendência criada pela conversa com a IA")
+                org.turboio.customai.memory.Reminders.sync(this@TurboApp); memoryChanged()
+            }
+        }
         synchronized(history) {
             history.add(ChatMessage("user", question.take(4000)))
             history.add(ChatMessage("assistant", result.text.take(8000)))
@@ -264,6 +292,21 @@ class TurboApp : Application() {
         val c = settings.aiConfig()
         recordInteraction(question, answer, source, started, c.provider.id, c.model, System.currentTimeMillis() - started, "{\"journal_query\":true}")
         return answer
+    }
+
+    /**
+     * A short alert on the glasses. Native notification card when enabled; if the glasses do not answer it, the same
+     * text goes to the lens display. Not worn / do-not-disturb / busy are respected (nothing else is shown).
+     */
+    fun glassesAlert(title: String, text: String) {
+        if (!session.isReady) return
+        scope.launch {
+            if (settings.nativeAlerts) {
+                val outcome = nativeNotifier.show(title, text)
+                if (outcome != org.turboio.customai.device.NativeNotifier.Outcome.NO_REPLY && outcome != org.turboio.customai.device.NativeNotifier.Outcome.FAILED) return@launch
+            }
+            if (!display.active) display.show(if (title == "Turbo IO") text else "$title: $text", settings.displaySettings())
+        }
     }
 
     /** Pending items changed somewhere (screen, voice, notification, analysis): mirror to the glasses' To-do. */

@@ -30,7 +30,10 @@ suspend fun GlassesPort.sendEnvelope(business: Int, type: Int, json: String): St
 
 fun newSid(random: Randomness): String = Hex.encode(random.bytes(16))
 
-data class DisplaySettings(val pageSeconds: Int = 5, val lingerSeconds: Int = 6, val stripAccents: Boolean = false, val pageChars: Int = 90)
+data class DisplaySettings(val pageSeconds: Int = 5, val lingerSeconds: Int = 6, val stripAccents: Boolean = false, val pageChars: Int = 90,
+                           val fontSize: Int = 2, val position: String = "center", val maxLines: Int = 5) {
+    val standardLayout get() = fontSize == 2 && position == "center" && maxLines == 5
+}
 
 sealed class DisplayState {
     data object Idle : DisplayState()
@@ -89,13 +92,16 @@ class LensDisplay(
         val pages = DisplayText.pages(text, settings.pageChars.coerceIn(20, 96))
         if (pages.isEmpty()) return fail("Nada para exibir")
         if (sid.isNotEmpty()) closeSession()
-        sid = newSid(random); closedByGlasses = false
-        val waiter = CompletableDeferred<Int>().also { ack = it }
         _state.value = DisplayState.Opening(pages.size)
         DiagnosticLog.i("LENS", "abrindo exibição: ${pages.size} página(s), ${text.length} caracteres")
-        port.sendEnvelope(Business.SUBTITLE, 7, Commands.displayStart(sid))?.let { sid = ""; return fail("Falha ao abrir exibição: $it") }
-        val code = withTimeoutOrNull(10_000) { waiter.await() }
-        if (code == null) { closeSession(); return fail("Os óculos não confirmaram a exibição (10 s)") }
+        var code = open(settings.fontSize, settings.position, settings.maxLines) ?: return fail("Falha ao abrir exibição")
+        if (code != 1 && code != 2 && !settings.standardLayout) {
+            // Experimental layout refused: fall back to the layout known to work.
+            DiagnosticLog.w("LENS", "layout tamanho=${settings.fontSize} posição=${settings.position} linhas=${settings.maxLines} recusado ($code); usando o padrão")
+            closeSession()
+            code = open(2, "center", 5) ?: return fail("Falha ao abrir exibição")
+        }
+        if (code == -1) { closeSession(); return fail("Os óculos não confirmaram a exibição (10 s)") }
         if (code != 1 && code != 2) { closeSession(); return fail("Os óculos recusaram a exibição (código $code)") }
         for ((index, page) in pages.withIndex()) {
             if (closedByGlasses) { sid = ""; return fail("Exibição encerrada nos óculos") }
@@ -106,6 +112,14 @@ class LensDisplay(
         closeSession()
         _state.value = DisplayState.Done(pages.size)
         return null
+    }
+
+    /** Opens a session; the glasses' ack code, -1 on timeout, null when the request could not be sent. */
+    private suspend fun open(fontSize: Int, position: String, maxLines: Int): Int? {
+        sid = newSid(random); closedByGlasses = false
+        val waiter = CompletableDeferred<Int>().also { ack = it }
+        port.sendEnvelope(Business.SUBTITLE, 7, Commands.displayStart(sid, fontSize, position, maxLines))?.let { DiagnosticLog.w("LENS", "abertura: $it"); sid = ""; return null }
+        return withTimeoutOrNull(10_000) { waiter.await() } ?: -1
     }
 
     private suspend fun closeSession() {

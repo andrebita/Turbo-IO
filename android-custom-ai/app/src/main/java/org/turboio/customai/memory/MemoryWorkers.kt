@@ -55,10 +55,8 @@ object MemoryNotifier {
         manager.notify(id, builder.build())
     }
 
-    /** Short text on the lenses when the glasses are connected and free. */
-    fun lens(app: TurboApp, text: String) {
-        if (app.session.isReady && !app.display.active) app.display.show(text.take(270), app.settings.displaySettings())
-    }
+    /** On the glasses: native notification card when enabled (falls back to lens text), else lens text. */
+    fun lens(app: TurboApp, text: String, title: String = "Turbo IO") = app.glassesAlert(title, text)
 }
 
 /** Analyses closed conversations (today and yesterday), then notifies new items and refreshes reminders. */
@@ -79,7 +77,7 @@ class MemoryWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                     if (single != null) "Nova pendência" else "${run.newItems.size} novas pendências", text,
                     actions = if (single == null) emptyList() else listOf(MemoryNotifier.Action("Feita", ItemActionReceiver.DONE, single.id),
                         MemoryNotifier.Action("Descartar", ItemActionReceiver.DISMISS, single.id)))
-                if (s.lensNew) MemoryNotifier.lens(app, "Anotado: " + run.newItems.take(2).joinToString("; ") { q.line(it, now) })
+                if (s.lensNew) MemoryNotifier.lens(app, run.newItems.take(2).joinToString("; ") { q.line(it, now) }, "Anotado")
             }
             Reminders.sync(app)
             app.memoryChanged()
@@ -120,7 +118,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val line = app.memoryQueries.line(item, now)
         MemoryNotifier.show(app, "memory_reminder", "Lembretes", reminderNotification(id), "Lembrete", line, NotificationManager.IMPORTANCE_HIGH,
             listOf(MemoryNotifier.Action("Feita", ItemActionReceiver.DONE, id), MemoryNotifier.Action("Adiar 1 h", ItemActionReceiver.SNOOZE, id)))
-        MemoryNotifier.lens(app, "Lembrete: $line")
+        MemoryNotifier.lens(app, line, "Lembrete")
         app.memoryStore.updateItem(item.copy(remindedAt = now, snoozeUntil = null, updatedAt = item.updatedAt))
         DiagnosticLog.i("MEMORIA", "lembrete exibido (#$id)")
         return Result.success()
@@ -191,7 +189,7 @@ class MorningWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         if (!app.settings.memorySettings().morning) return Result.success()
         val text = app.memoryQueries.morningBrief(System.currentTimeMillis()) ?: return Result.success()
         MemoryNotifier.show(app, "memory_morning", "Resumo da manhã", 7401, "Seu dia", text)
-        MemoryNotifier.lens(app, text)
+        MemoryNotifier.lens(app, text, "Bom dia")
         return Result.success()
     }
 }

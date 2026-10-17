@@ -290,11 +290,22 @@ class MemoryEngine(
         return Analysis(created, closed, named)
     }
 
+    /** Item from the task marker the assistant writes in its own answer (no extra model call). */
+    fun itemFromMarker(text: String, dueIso: String, request: String, now: Long): Item? {
+        if (text.trim().length < 3) return null
+        val j = JSONObject().put("texto", text.trim()).put("quando", dueIso.trim()).put("quando_texto", "").put("tipo", "tarefa")
+        return saveQuick(j, request, now)
+    }
+
     /** "Me lembra de…" by voice/text: one model call to normalize text and deadline; still saved if the call fails. */
     suspend fun quickItem(request: String, now: Long): Item {
         val nowLocal = LocalDateTime.ofInstant(Instant.ofEpochMilli(now), zone)
         val ctx = "Agora: " + nowLocal.format(DateTimeFormatter.ofPattern("EEEE, dd/MM/yyyy HH:mm", Locale.forLanguageTag("pt-BR"))) + "\nPedido: " + request.trim()
         val j = runCatching { parse(llm.complete(MemoryPrompts.QUICK, ctx, 300)) }.getOrNull()
+        return saveQuick(j, request, now)
+    }
+
+    private fun saveQuick(j: JSONObject?, request: String, now: Long): Item {
         val text = j?.optString("texto")?.trim()?.takeIf { it.length >= 3 } ?: request.trim().replaceFirstChar { it.uppercase() }
         val personName = j?.optString("pessoa")?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) }
         val person = personName?.let { store.upsertPerson(it, seenAt = now) }

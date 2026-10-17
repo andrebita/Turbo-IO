@@ -71,6 +71,14 @@ class AiFragment : Fragment() {
         val voice = settings.voiceSettings()
         ui.switch("Assistente de voz ativo (ao acionar nos óculos)", voice.enabled) { settings.setVoiceEnabled(it) }
         ui.switch("Remover acentos no display (use se aparecerem quadrados)", voice.stripAccents) { settings.setStripAccents(it) }
+        ui.text("Texto nas lentes (experimental; se os óculos recusarem, volta ao padrão)", size = 13f)
+        val d = settings.displaySettings()
+        var fontSize = d.fontSize; var position = d.position; var lines = d.maxLines
+        val sizes = listOf(1 to "Pequeno", 2 to "Médio (padrão)", 3 to "Grande")
+        ui.spinner(sizes, sizes.indexOfFirst { it.first == fontSize }, { "Tamanho: ${it.second}" }) { fontSize = it.first; settings.setDisplayLayout(fontSize, position, lines) }
+        val positions = listOf("center" to "Centro (padrão)", "top" to "Topo", "bottom" to "Base")
+        ui.spinner(positions, positions.indexOfFirst { it.first == position }, { "Posição: ${it.second}" }) { position = it.first; settings.setDisplayLayout(fontSize, position, lines) }
+        ui.spinner(listOf(3, 4, 5), listOf(3, 4, 5).indexOf(lines).coerceAtLeast(0), { "Linhas: $it${if (it == 5) " (padrão)" else ""}" }) { lines = it; settings.setDisplayLayout(fontSize, position, lines) }
 
         ui.title("Transcrição do ambiente (gravação contínua)")
         val amb = settings.ambientSettings(); ambientProvider = amb.provider
