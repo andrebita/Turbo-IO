@@ -11,6 +11,7 @@
 | `RECORD_AUDIO` | modo “microfone do telefone” (opcional) | se concedida |
 | `FOREGROUND_SERVICE`, `…_CONNECTED_DEVICE`, `…_MICROPHONE` | manter a conexão/assistente com tela desligada | opcional |
 | `POST_NOTIFICATIONS` | notificação do serviço | Android 13+ |
+| `WAKE_LOCK`, `ACCESS_NETWORK_STATE`, `RECEIVE_BOOT_COMPLETED` | adicionadas pelo WorkManager (resumo diário e fila de transcrição): manter a CPU acordada durante a tarefa, esperar rede e reagendar após reiniciar | automático |
 
 Não há permissões de contatos, SMS, armazenamento, localização em segundo plano, acessibilidade, instalação de pacotes
 ou leitura de notificações. `<queries>` só consulta a versão de `com.rayneo.venus` (exibição) e o serviço de reconhecimento de voz.
@@ -29,7 +30,7 @@ ou leitura de notificações. `<queries>` só consulta a versão de `com.rayneo.
 | --- | --- |
 | Firmware | Não existe código de OTA/arquivos; allow-list de negócios testada; nenhuma etapa grava no firmware |
 | Disputa de conexão com o app oficial | Use um cliente por vez; procedimento de troca em [REVERSAO.md](REVERSAO.md) |
-| Perguntas/áudio enviados a terceiros | Só para o provedor configurado pelo usuário, via HTTPS; custos e privacidade conforme o provedor |
+| Perguntas/áudio enviados a terceiros | Só para o provedor configurado pelo usuário, via HTTPS; na gravação ambiente, só os trechos com fala, e só após o consentimento; áudio bruto apagado após a transcrição |
 | Vazamento de chave | Keystore AES-GCM, sem backup, sem log, sem exibição; apagar dados/desinstalar remove |
 | Compatibilidade com Strix OS 1.0.5.5 | Protocolo validado antes do 1.0.5.5; **teste em hardware pendente** (Teste C) |
 | Uso dirigindo/andando | Respostas curtas; não use o display de forma que comprometa a segurança |
