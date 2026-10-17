@@ -42,6 +42,16 @@ The app lives in [`android-custom-ai/`](android-custom-ai/README.md).
   * They are never in source code, `BuildConfig`, logs, backups or the APK.
   * Logs redact tokens and MAC addresses, and never store audio or notification text.
 
+## Look
+
+Dark interface with an emerald accent: a home screen with the glasses' status, shortcut tiles for every feature and an
+"ask the AI" bar, and five tabs (Home, Glasses, Memory, AI, More).
+
+<p>
+  <img src="android-custom-ai/docs/screenshots/ui-bottomBar.png" width="260" alt="Home screen" />
+  <img src="android-custom-ai/docs/screenshots/ui-components.png" width="260" alt="Settings components" />
+</p>
+
 ## Features
 
 ### Connection
@@ -123,7 +133,7 @@ export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 150 unit tests with no lint errors.
+Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 154 unit tests with no lint errors.
 
 ## Documentation
 

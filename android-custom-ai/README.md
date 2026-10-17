@@ -33,11 +33,12 @@ export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-* The 150 unit tests include:
+* The 154 unit tests include:
   * the BLE session against emulated glasses;
   * protocol vectors generated from the original TypeScript;
   * the voice round with synthetic Opus;
-  * teleprompter, dashboard and suggestion-card flows against simulated glasses.
+  * teleprompter, dashboard and suggestion-card flows against simulated glasses;
+  * JVM screenshots of the UI with Paparazzi (`./gradlew recordPaparazziDebug`, images in `docs/screenshots/ui-*.png`).
 * Optional live provider tests: `RUN_LIVE_PROVIDER_TESTS=1 ./gradlew testDebugUnitTest --tests '*LiveProviderTest*'`.
 
 ## Documentation (Portuguese)

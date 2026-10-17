@@ -35,44 +35,50 @@ class TestFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
         val ui = Column(requireContext())
-        ui.title("Pergunta à IA")
-        question = ui.field("Digite uma pergunta em português", multiline = true)
-        ask = ui.button("Executar consulta") { runQuery() }
-        aiStatus = ui.text(size = 13f)
-        ui.title("Resposta")
-        answer = ui.text("—")
+        ui.header("Ferramentas", "Pergunte à IA e use o teleprompter")
+        ui.section("Pergunta à IA")
+        val g1 = ui.card()
+        question = g1.field("Digite uma pergunta em português", multiline = true)
+        ask = g1.button("Executar consulta") { runQuery() }
+        aiStatus = g1.text(size = 13f)
+        ui.section("Resposta")
+        val g2 = ui.card()
+        answer = g2.text("—")
 
-        ui.title("Óculos")
-        ui.button("Transmitir resposta aos óculos") {
+        ui.section("Óculos")
+        val g3 = ui.card()
+        g3.button("Transmitir resposta aos óculos") {
             if (lastAnswer.isEmpty()) { lensStatus.text = "Execute uma consulta primeiro"; lensStatus.setTextColor(statusColor(false)); return@button }
             app.display.show(lastAnswer, app.settings.displaySettings())
         }
-        ui.button("Enviar texto de teste (acentuação pt-BR)", filled = false) {
+        g3.button("Enviar texto de teste (acentuação pt-BR)", filled = false) {
             app.display.show("Teste Turbo IO: olá! Ação, coração, café, você e pão. Se aparecerem quadrados, ative \"Remover acentos\".", app.settings.displaySettings())
         }
-        ui.button("Parar exibição", filled = false) { app.display.stop() }
-        lensStatus = ui.text(size = 13f)
-        ui.button("Limpar contexto da conversa", filled = false) { app.clearHistory(); aiStatus.text = "Contexto limpo" }
+        g3.button("Parar exibição", filled = false) { app.display.stop() }
+        lensStatus = g3.text(size = 13f)
+        g3.button("Limpar contexto da conversa", filled = false) { app.clearHistory(); aiStatus.text = "Contexto limpo" }
 
-        ui.title("Assistente de voz")
-        ui.hint("Acione o assistente nos óculos (gesto/botão de IA do firmware original) e fale. O app usa o motor escolhido na aba IA.")
-        voiceStatus = ui.text(size = 13f)
+        ui.section("Assistente de voz")
+        val g4 = ui.card()
+        g4.hint("Acione o assistente nos óculos (gesto/botão de IA do firmware original) e fale. O app usa o motor escolhido na aba IA.")
+        voiceStatus = g4.text(size = 13f)
 
-        ui.title("Teleprompter dos óculos")
-        ui.hint("Usa o teleprompter que já vem nos óculos. O roteiro vai como arquivo temporário (até 12 000 caracteres) e " +
+        ui.section("Teleprompter dos óculos")
+        val g5 = ui.card()
+        g5.hint("Usa o teleprompter que já vem nos óculos. O roteiro vai como arquivo temporário (até 12 000 caracteres) e " +
             "fica só no celular depois que você sai. Nada é instalado nos óculos. Ainda não foi testado nos seus óculos.")
-        script = ui.field("Roteiro (cole o texto)", multiline = true)
-        ui.button("Abrir arquivo .txt", filled = false) { openScript.launch(arrayOf("text/plain")) }
+        script = g5.field("Roteiro (cole o texto)", multiline = true)
+        g5.button("Abrir arquivo .txt", filled = false) { openScript.launch(arrayOf("text/plain")) }
         val speeds = (60..240 step 20).toList()
-        ui.text("Velocidade (caracteres por minuto)", size = 13f)
-        ui.spinner(speeds, speeds.indexOf(prompterSpeed), { "$it" }) { prompterSpeed = it }
-        ui.button("Enviar roteiro aos óculos") { prompter { app.teleprompter.prepare(script.text.toString(), prompterSpeed) } }
-        ui.buttons("Iniciar" to { prompter { app.teleprompter.control(3) } },
+        g5.text("Velocidade (caracteres por minuto)", size = 13f)
+        g5.spinner(speeds, speeds.indexOf(prompterSpeed), { "$it" }) { prompterSpeed = it }
+        g5.button("Enviar roteiro aos óculos") { prompter { app.teleprompter.prepare(script.text.toString(), prompterSpeed) } }
+        g5.buttons("Iniciar" to { prompter { app.teleprompter.control(3) } },
             "Pausar" to { prompter { app.teleprompter.control(4) } },
             "Continuar" to { prompter { app.teleprompter.control(5) } })
-        ui.buttons("Aplicar velocidade" to { prompter { app.teleprompter.control(7, prompterSpeed) } },
+        g5.buttons("Aplicar velocidade" to { prompter { app.teleprompter.control(7, prompterSpeed) } },
             "Sair" to { prompter { app.teleprompter.stop(); null } })
-        prompterStatus = ui.text(size = 13f)
+        prompterStatus = g5.text(size = 13f)
         return ui.scroll()
     }
 

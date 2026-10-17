@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark "glass" palette: near-black with a green glow, emerald accent. Mirrored in ui/Palette.kt. -->
+    <color name="tio_bg">#FF080B0A</color>
+    <color name="tio_bg_glow">#FF0F2219</color>
+    <color name="tio_surface">#FF121816</color>
+    <color name="tio_surface_high">#FF1A221F</color>
+    <color name="tio_stroke">#FF25302B</color>
+    <color name="tio_primary">#FF3DDC97</color>
+    <color name="tio_on_primary">#FF04150D</color>
+    <color name="tio_primary_container">#FF113A29</color>
+    <color name="tio_text">#FFEEF3F0</color>
+    <color name="tio_text_muted">#FF8D9A93</color>
+    <color name="tio_danger">#FFF87171</color>
+    <color name="tio_warning">#FFFBBF24</color>
+</resources>

@@ -38,12 +38,8 @@ class JournalFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
         val ui = Column(requireContext())
-        val nav = ui.row()
-        val c = Column(requireContext())
-        c.button("◀ Dia anterior", filled = false) { day = Days.shift(day, -1); load() }
-        c.button("Hoje", filled = false) { day = Days.of(System.currentTimeMillis()); load() }
-        c.button("Próximo dia ▶", filled = false) { day = Days.shift(day, 1); load() }
-        nav.addView(c.root)
+        ui.buttons("‹  Anterior" to { day = Days.shift(day, -1); load() }, "Hoje" to { day = Days.of(System.currentTimeMillis()); load() },
+            "Próximo  ›" to { day = Days.shift(day, 1); load() })
         dayLabel = ui.title("")
 
         val amb = ui.card()
@@ -79,26 +75,30 @@ class JournalFragment : Fragment() {
         card.button("Refazer do zero (ignora cache)", filled = false) { generate(force = true) }
         status = ui.hint("")
 
-        ui.title("Buscar no diário")
-        search = ui.field("Palavras (ex.: reunião orçamento)")
-        ui.button("Buscar em todos os dias", filled = false) { runSearch() }
+        ui.section("Buscar no diário")
+        val g1 = ui.card()
+        search = g1.field("Palavras (ex.: reunião orçamento)")
+        g1.button("Buscar em todos os dias", filled = false) { runSearch() }
 
-        ui.title("Linha do tempo")
-        timeline = ui.row().apply { orientation = LinearLayout.VERTICAL }
+        ui.section("Linha do tempo")
+        val g2 = ui.card()
+        timeline = g2.row().apply { orientation = LinearLayout.VERTICAL }
 
-        ui.title("Ações")
-        ui.button("Exportar o dia (Markdown)", filled = false) { export() }
-        ui.button("Apagar este dia", filled = false) { confirmDeleteDay() }
+        ui.section("Ações")
+        val g3 = ui.card()
+        g3.button("Exportar o dia (Markdown)", filled = false) { export() }
+        g3.button("Apagar este dia", filled = false) { confirmDeleteDay() }
 
-        ui.title("Configurações do diário")
+        ui.section("Configurações do diário")
+        val g4 = ui.card()
         val s = app.settings.journalSettings()
-        ui.switch("Registrar perguntas e respostas no diário", s.recordInteractions) { app.settings.saveJournal(app.settings.journalSettings().copy(recordInteractions = it)) }
-        ui.switch("Resumo automático diário", s.autoDaily) { app.settings.saveJournal(app.settings.journalSettings().copy(autoDaily = it)); DailyInsightWorker.schedule(requireContext()) }
-        val time = ui.field("Horário do resumo (HH:MM)", "%02d:%02d".format(s.dailyHour, s.dailyMinute))
-        ui.switch("Mostrar o resumo automático nas lentes (se conectado)", s.lensDaily) { app.settings.saveJournal(app.settings.journalSettings().copy(lensDaily = it)) }
-        val retention = ui.field("Manter dias (0 = sempre)", s.retentionDays.toString(), number = true)
-        val model = ui.field("Modelo para insights (vazio = o mesmo da aba IA)", s.insightsModel)
-        ui.button("Salvar configurações do diário", filled = false) {
+        g4.switch("Registrar perguntas e respostas no diário", s.recordInteractions) { app.settings.saveJournal(app.settings.journalSettings().copy(recordInteractions = it)) }
+        g4.switch("Resumo automático diário", s.autoDaily) { app.settings.saveJournal(app.settings.journalSettings().copy(autoDaily = it)); DailyInsightWorker.schedule(requireContext()) }
+        val time = g4.field("Horário do resumo (HH:MM)", "%02d:%02d".format(s.dailyHour, s.dailyMinute))
+        g4.switch("Mostrar o resumo automático nas lentes (se conectado)", s.lensDaily) { app.settings.saveJournal(app.settings.journalSettings().copy(lensDaily = it)) }
+        val retention = g4.field("Manter dias (0 = sempre)", s.retentionDays.toString(), number = true)
+        val model = g4.field("Modelo para insights (vazio = o mesmo da aba IA)", s.insightsModel)
+        g4.button("Salvar configurações do diário", filled = false) {
             val m = Regex("^(\\d{1,2}):(\\d{2})$").find(time.text.toString().trim())
             val h = m?.groupValues?.get(1)?.toIntOrNull(); val mi = m?.groupValues?.get(2)?.toIntOrNull()
             if (h == null || mi == null || h > 23 || mi > 59) { toast("Horário inválido (use HH:MM)"); return@button }
@@ -106,7 +106,7 @@ class JournalFragment : Fragment() {
                 retentionDays = retention.text.toString().toIntOrNull()?.coerceIn(0, 3650) ?: 0, insightsModel = model.text.toString().trim()))
             DailyInsightWorker.schedule(requireContext()); toast("Configurações salvas")
         }
-        ui.hint("Tudo fica no telefone. Para gerar insights, o texto do dia é enviado ao provedor de IA configurado.")
+        g4.hint("Tudo fica no telefone. Para gerar insights, o texto do dia é enviado ao provedor de IA configurado.")
         // Sections: Dia (this column) · Pendências · Pessoas · Semana (memory, docs/MEMORIA_E_ASSISTENTE.md).
         memory = MemoryViews(requireContext()) { viewLifecycleOwner.lifecycleScope }
         val dayView = ui.scroll()
@@ -114,9 +114,14 @@ class JournalFragment : Fragment() {
         val tabs = com.google.android.material.button.MaterialButtonToggleGroup(requireContext()).apply { isSingleSelection = true; isSelectionRequired = true }
         val labels = listOf("Dia", "Pendências", "Pessoas", "Semana")
         val ids = labels.map { View.generateViewId() }
+        val checkedStates = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
         labels.forEachIndexed { i, label ->
             tabs.addView(MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-                id = ids[i]; text = label; isAllCaps = false; textSize = 13f; setPadding(0, paddingTop, 0, paddingBottom)
+                id = ids[i]; text = label; isAllCaps = false; textSize = 13.5f; letterSpacing = 0f; setPadding(0, paddingTop, 0, paddingBottom)
+                minHeight = ui.dp(44); insetTop = 0; insetBottom = 0
+                backgroundTintList = android.content.res.ColorStateList(checkedStates, intArrayOf(Palette.PRIMARY_CONTAINER, Palette.SURFACE))
+                setTextColor(android.content.res.ColorStateList(checkedStates, intArrayOf(Palette.PRIMARY, Palette.MUTED)))
+                strokeColor = android.content.res.ColorStateList.valueOf(Palette.STROKE)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
         val frame = android.widget.FrameLayout(requireContext())
@@ -129,9 +134,11 @@ class JournalFragment : Fragment() {
         }
         selectSection = { name -> tabs.check(ids[when (name) { "pending" -> 1; "people" -> 2; "week" -> 3; else -> 0 }]) }
         val pad = ui.dp(12)
+        val head = Column(requireContext()).apply { root.setPadding(ui.dp(18), ui.dp(8), ui.dp(18), 0); header("Memória", "Diário, pendências, pessoas e semana") }
         return LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            addView(tabs, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(pad, pad / 2, pad, 0) })
+            addView(head.root, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(tabs, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(ui.dp(18), pad, ui.dp(18), 0) })
             addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
     }

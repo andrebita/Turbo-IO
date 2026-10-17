@@ -1,6 +1,8 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    // JVM screenshots of the UI (no emulator needed); only used by tests in src/test/.../ui.
+    id("app.cash.paparazzi")
 }
 
 android {

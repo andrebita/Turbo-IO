@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Turbo IO IA</string>
-    <string name="tab_connection">Conexão</string>
+    <string name="tab_home">Início</string>
+    <string name="tab_glasses">Óculos</string>
+    <string name="tab_memory">Memória</string>
     <string name="tab_ai">IA</string>
-    <string name="tab_journal">Diário</string>
-    <string name="tab_test">Testes</string>
-    <string name="tab_diag">Diagnóstico</string>
+    <string name="tab_more">Mais</string>
 </resources>

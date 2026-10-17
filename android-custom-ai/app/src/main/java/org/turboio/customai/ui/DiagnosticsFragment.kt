@@ -45,15 +45,18 @@ class DiagnosticsFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
         val ui = Column(requireContext())
-        ui.title("Versões e conexão")
-        info = ui.text(size = 13f, mono = true)
+        ui.header("Diagnóstico", "Testes nos óculos, log e dados")
+        ui.section("Versões e conexão")
+        val g1 = ui.card()
+        info = g1.text(size = 13f, mono = true)
 
-        ui.title("Testes de comunicação")
-        ui.button("Teste BLE: ler estado dos óculos") { bleTest() }
-        ui.button("Teste do provedor de IA (pergunta curta)", filled = false) { aiTest() }
-        test = ui.text(size = 13f)
+        ui.section("Testes de comunicação")
+        val g2 = ui.card()
+        g2.button("Teste BLE: ler estado dos óculos") { bleTest() }
+        g2.button("Teste do provedor de IA (pergunta curta)", filled = false) { aiTest() }
+        test = g2.text(size = 13f)
 
-        ui.title("Bateria de recursos (todas as funções)")
+        ui.section("Bateria de recursos (todas as funções)")
         ui.hint("Testa cada função nos óculos, uma por vez: o app faz a ação, mostra o que viu e você diz se funcionou nas lentes. " +
             "O tráfego com os óculos é registrado (sem áudio nem texto de notificações). No fim, exporte um arquivo e me envie.")
         val fc = ui.card()
@@ -83,7 +86,7 @@ class DiagnosticsFragment : Fragment() {
         featButtons["export"] = fc.button("Exportar bateria de recursos (1 arquivo)") { exportFeatures() }
         featButtons["end"] = fc.button("Encerrar bateria de recursos", filled = false) { f.end() }
 
-        ui.title("Bateria de testes nos óculos de áudio (LifeLog)")
+        ui.section("Bateria de testes nos óculos de áudio (LifeLog)")
         ui.hint("Todos os testes de hardware em sequência (cerca de 10 min), com instruções entre eles, e um único arquivo " +
             "para enviar no final. Nada é gravado no firmware; o LifeLog é desligado ao fim de cada etapa.")
         val suiteCard = ui.card()
@@ -96,18 +99,19 @@ class DiagnosticsFragment : Fragment() {
         btnExportAll = suiteCard.button("Exportar todos os testes (1 arquivo)") { exportAll() }
         btnEnd = suiteCard.button("Encerrar bateria", filled = false) { app.suite.end() }
 
-        ui.title("Testes de hardware avulsos (fase 3)")
-        ui.hint("Testes curtos e limitados nos canais de áudio do firmware original. Nada é gravado no firmware. " +
+        ui.section("Testes de hardware avulsos (fase 3)")
+        val g3 = ui.card()
+        g3.hint("Testes curtos e limitados nos canais de áudio do firmware original. Nada é gravado no firmware. " +
             "Fale frases de teste e avise quem estiver perto. Ao final, exporte o pacote e envie para análise.")
-        ui.button("G1–G3 · LifeLog 30 s") { confirmProbe("LifeLog por 30 s") { app.probe.startLifeLog(30) } }
-        ui.button("G4 · LifeLog 5 min (fale com pausas)", filled = false) { confirmProbe("LifeLog por 5 min") { app.probe.startLifeLog(300) } }
-        ui.button("G4b · LifeLog em tempo real 60 s", filled = false) { confirmProbe("LifeLog em tempo real por 60 s") { app.probe.startLifeLog(60, realtimePage = true) } }
-        ui.button("Parar teste", filled = false) { app.probe.stop() }
-        ui.button("Segurança: desligar LifeLog nos óculos", filled = false) { app.probe.forceLifeLogOff() }
-        probeStatus = ui.text(size = 12.5f, mono = true)
-        ui.button("Exportar último teste (com áudio)", filled = false) { exportProbe(true) }
-        ui.button("Exportar último teste (sem áudio)", filled = false) { exportProbe(false) }
-        ui.button("Apagar testes salvos no telefone", filled = false) {
+        g3.button("G1–G3 · LifeLog 30 s") { confirmProbe("LifeLog por 30 s") { app.probe.startLifeLog(30) } }
+        g3.button("G4 · LifeLog 5 min (fale com pausas)", filled = false) { confirmProbe("LifeLog por 5 min") { app.probe.startLifeLog(300) } }
+        g3.button("G4b · LifeLog em tempo real 60 s", filled = false) { confirmProbe("LifeLog em tempo real por 60 s") { app.probe.startLifeLog(60, realtimePage = true) } }
+        g3.button("Parar teste", filled = false) { app.probe.stop() }
+        g3.button("Segurança: desligar LifeLog nos óculos", filled = false) { app.probe.forceLifeLogOff() }
+        probeStatus = g3.text(size = 12.5f, mono = true)
+        g3.button("Exportar último teste (com áudio)", filled = false) { exportProbe(true) }
+        g3.button("Exportar último teste (sem áudio)", filled = false) { exportProbe(false) }
+        g3.button("Apagar testes salvos no telefone", filled = false) {
             AlertDialog.Builder(requireContext()).setTitle("Apagar testes salvos?")
                 .setMessage("Remove os áudios e relatórios dos testes de hardware guardados neste app.")
                 .setPositiveButton("Apagar") { _, _ ->
@@ -116,7 +120,7 @@ class DiagnosticsFragment : Fragment() {
                 }.setNegativeButton("Cancelar", null).show()
         }
 
-        ui.title("Log técnico (sem chaves, endereços ou conteúdo)")
+        ui.section("Log técnico (sem chaves, endereços ou conteúdo)")
         val row = ui.row()
         val c = Column(requireContext())
         c.button("Copiar log", filled = false) {
@@ -128,8 +132,9 @@ class DiagnosticsFragment : Fragment() {
         row.addView(c.root)
         log = ui.text(size = 11f, mono = true)
 
-        ui.title("Reversão")
-        ui.button("Apagar todos os dados deste app", filled = false) {
+        ui.section("Reversão")
+        val g4 = ui.card()
+        g4.button("Apagar todos os dados deste app", filled = false) {
             AlertDialog.Builder(requireContext()).setTitle("Apagar dados?")
                 .setMessage("Remove chaves de API, configurações, o diário, a memória (pessoas e pendências) e o óculos salvo deste app. O app oficial e o firmware não são afetados.")
                 .setPositiveButton("Apagar") { _, _ ->

@@ -33,37 +33,38 @@ class ConnectionFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
         val ui = Column(requireContext())
+        ui.header("Óculos", "Conexão, notificações e ajustes")
         val status = ui.card()
         status.title("Status dos óculos")
-        phase = status.text(size = 20f)
+        phase = status.text(size = 24f).apply { typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL) }
         note = status.text()
         details = status.text(size = 13f)
         bluetooth = status.text(size = 13f)
 
-        ui.title("Conectar")
-        ui.hint("Antes da primeira conexão: (1) no app RayNeo oficial, desvincule os óculos; (2) em Configurações > Bluetooth do Android, " +
+        ui.section("Conectar")
+        val g1 = ui.card()
+        g1.hint("Antes da primeira conexão: (1) no app RayNeo oficial, desvincule os óculos; (2) em Configurações > Bluetooth do Android, " +
             "esqueça o dispositivo RayNeo; (3) mantenha o botão dos óculos pressionado ~5 s até o LED azul piscar. " +
             "O firmware não é alterado em nenhuma etapa.")
-        ui.button("Procurar óculos (15 s)") { scan() }
-        scanStatus = ui.hint("")
-        candidates = ui.row().apply { orientation = LinearLayout.VERTICAL }
-        ui.button("Reconectar óculos salvo", filled = false) {
-            if (!permitted()) return@button
-            if (!app.connectSaved()) toast("Nenhum óculos salvo; procure e selecione primeiro")
-        }
-        ui.button("Desconectar", filled = false) { app.disconnect() }
-        ui.button("Esquecer óculos (voltar ao app oficial)", filled = false) {
+        g1.button("Procurar óculos (15 s)") { scan() }
+        scanStatus = g1.hint("")
+        candidates = g1.row().apply { orientation = LinearLayout.VERTICAL }
+        g1.buttons("Reconectar" to {
+            if (permitted() && !app.connectSaved()) toast("Nenhum óculos salvo; procure e selecione primeiro")
+        }, "Desconectar" to { app.disconnect() })
+        g1.button("Esquecer óculos (voltar ao app oficial)", filled = false) {
             AlertDialog.Builder(requireContext()).setTitle("Esquecer óculos?")
                 .setMessage("A identidade salva será apagada. Para voltar ao app RayNeo oficial: remova o pareamento em Configurações > Bluetooth, " +
                     "coloque os óculos em modo de pareamento e vincule-os novamente no app oficial.")
                 .setPositiveButton("Esquecer") { _, _ -> app.session.forget(); org.turboio.customai.service.ConnectionService.stop(requireContext()) }
                 .setNegativeButton("Cancelar", null).show()
         }
-        ui.switch("Manter conexão com a tela desligada (serviço em primeiro plano)", app.settings.keepConnected) { app.settings.keepConnected = it }
+        g1.switch("Manter conexão com a tela desligada (serviço em primeiro plano)", app.settings.keepConnected) { app.settings.keepConnected = it }
 
-        ui.title("Versões")
-        ui.text(versionText(), size = 13f)
         glassesCard(ui)
+        ui.section("Versões")
+        val g2 = ui.card()
+        g2.text(versionText(), size = 13f)
         return ui.scroll()
     }
 
@@ -215,8 +216,7 @@ class ConnectionFragment : Fragment() {
         val degrees = (org.turboio.customai.device.SettingsWire.WAKE_DEGREES + listOfNotNull(c.wakeDegree)).distinct().sorted()
         if (::wakeSpinner.isInitialized && degrees != wakeChoices) {
             wakeChoices = degrees
-            wakeSpinner.adapter = android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item,
-                degrees.map { "Ângulo $it°" + if (it == c.wakeDegree) " (atual)" else "" })
+            wakeSpinner.adapter = darkAdapter(requireContext(), degrees.map { "Ângulo $it°" + if (it == c.wakeDegree) " (atual)" else "" })
             wakeSpinner.setSelection(degrees.indexOf(c.wakeDegree ?: 20).coerceAtLeast(0))
             wakeSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) { wakeDegree = degrees[pos] }
@@ -227,7 +227,7 @@ class ConnectionFragment : Fragment() {
         heightChoices = heights; distanceChoices = distances
         val known = gs.distances()
         fun bind(spinner: android.widget.Spinner, items: List<Int>, label: (Int) -> String, current: Int?, set: (Int) -> Unit) {
-            spinner.adapter = android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, items.map(label))
+            spinner.adapter = darkAdapter(requireContext(), items.map(label))
             spinner.setSelection(items.indexOf(current).coerceAtLeast(0))
             spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) = set(items[pos])

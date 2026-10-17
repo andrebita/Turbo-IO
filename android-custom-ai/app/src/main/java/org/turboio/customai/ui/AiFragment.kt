@@ -42,57 +42,62 @@ class AiFragment : Fragment() {
         val config = settings.aiConfig()
         provider = config.provider
         val ui = Column(requireContext())
+        ui.header("IA", "Provedor, voz e texto nas lentes")
 
-        ui.title("Provedor de IA")
-        ui.spinner(ProviderKind.entries.toList(), ProviderKind.entries.indexOf(provider), { it.label }) { selected ->
+        ui.section("Provedor de IA")
+        val g1 = ui.card()
+        g1.spinner(ProviderKind.entries.toList(), ProviderKind.entries.indexOf(provider), { it.label }) { selected ->
             if (selected != provider) { provider = selected; loadProvider() }
         }
-        model = ui.field("Modelo")
-        models = ui.hint("")
-        endpoint = ui.field("Endpoint (HTTPS)")
-        key = ui.field("Chave de API (deixe vazio para manter a salva)", password = true)
-        keyState = ui.hint("")
-        ui.hint("A chave é cifrada com o Android Keystore (AES-GCM), nunca é exibida, registrada em log, incluída em backup ou no APK.")
+        model = g1.field("Modelo")
+        models = g1.hint("")
+        endpoint = g1.field("Endpoint (HTTPS)")
+        key = g1.field("Chave de API (deixe vazio para manter a salva)", password = true)
+        keyState = g1.hint("")
+        g1.hint("A chave é cifrada com o Android Keystore (AES-GCM), nunca é exibida, registrada em log, incluída em backup ou no APK.")
 
-        ui.title("Comportamento")
-        prompt = ui.field("Instruções de sistema", config.systemPrompt, multiline = true)
-        ui.button("Restaurar instruções padrão (pt-BR, respostas curtas)", filled = false) { prompt.setText(DEFAULT_SYSTEM_PROMPT) }
-        tokens = ui.field("Limite de tokens da resposta", config.maxTokens.toString(), number = true)
-        timeout = ui.field("Tempo máximo de resposta (segundos)", config.timeoutSeconds.toString(), number = true)
-        history = ui.field("Rodadas de contexto mantidas (0–10)", config.historyTurns.toString(), number = true)
+        ui.section("Comportamento")
+        val g2 = ui.card()
+        prompt = g2.field("Instruções de sistema", config.systemPrompt, multiline = true)
+        g2.button("Restaurar instruções padrão (pt-BR, respostas curtas)", filled = false) { prompt.setText(DEFAULT_SYSTEM_PROMPT) }
+        tokens = g2.field("Limite de tokens da resposta", config.maxTokens.toString(), number = true)
+        timeout = g2.field("Tempo máximo de resposta (segundos)", config.timeoutSeconds.toString(), number = true)
+        history = g2.field("Rodadas de contexto mantidas (0–10)", config.historyTurns.toString(), number = true)
 
-        ui.title("Reconhecimento de voz (pt-BR)")
+        ui.section("Reconhecimento de voz (pt-BR)")
+        val g3 = ui.card()
         val stt = settings.sttConfig(); engine = stt.engine
-        ui.spinner(SttEngine.entries.toList(), SttEngine.entries.indexOf(engine), { it.label }) { engine = it; loadStt() }
-        sttModel = ui.field("Modelo de transcrição OpenAI", stt.openAiModel)
-        sttKey = ui.field("Chave da API de transcrição (vazio = manter)", password = true)
-        sttKeyState = ui.hint("")
-        ui.hint("Microfone dos óculos: o áudio Opus é recebido pelo canal oficial do firmware original e enviado ao serviço escolhido. " +
+        g3.spinner(SttEngine.entries.toList(), SttEngine.entries.indexOf(engine), { it.label }) { engine = it; loadStt() }
+        sttModel = g3.field("Modelo de transcrição OpenAI", stt.openAiModel)
+        sttKey = g3.field("Chave da API de transcrição (vazio = manter)", password = true)
+        sttKeyState = g3.hint("")
+        g3.hint("Microfone dos óculos: o áudio Opus é recebido pelo canal oficial do firmware original e enviado ao serviço escolhido. " +
             "Android nativo: usa o microfone do telefone; nenhuma chave é necessária.")
         val voice = settings.voiceSettings()
-        ui.switch("Assistente de voz ativo (ao acionar nos óculos)", voice.enabled) { settings.setVoiceEnabled(it) }
-        ui.switch("Remover acentos no display (use se aparecerem quadrados)", voice.stripAccents) { settings.setStripAccents(it) }
+        g3.switch("Assistente de voz ativo (ao acionar nos óculos)", voice.enabled) { settings.setVoiceEnabled(it) }
+        g3.switch("Remover acentos no display (use se aparecerem quadrados)", voice.stripAccents) { settings.setStripAccents(it) }
         val formats = listOf("legacy" to "Formato antigo, repetido (padrão)", "official" to "Formato do app oficial", "bilingual" to "Oficial com linha de tradução")
-        ui.text("Formato do texto nas lentes (a etapa F1 da bateria mostra os três)", size = 13f)
-        ui.spinner(formats, formats.indexOfFirst { it.first == settings.displaySettings().textFormat }.coerceAtLeast(0), { it.second }) { settings.setTextFormat(it.first) }
-        ui.text("Texto nas lentes (experimental; se os óculos recusarem, volta ao padrão)", size = 13f)
+        g3.text("Formato do texto nas lentes (a etapa F1 da bateria mostra os três)", size = 13f)
+        g3.spinner(formats, formats.indexOfFirst { it.first == settings.displaySettings().textFormat }.coerceAtLeast(0), { it.second }) { settings.setTextFormat(it.first) }
+        g3.text("Texto nas lentes (experimental; se os óculos recusarem, volta ao padrão)", size = 13f)
         val d = settings.displaySettings()
         var fontSize = d.fontSize; var position = d.position; var lines = d.maxLines
         val sizes = listOf(1 to "Pequeno", 2 to "Médio (padrão)", 3 to "Grande")
-        ui.spinner(sizes, sizes.indexOfFirst { it.first == fontSize }, { "Tamanho: ${it.second}" }) { fontSize = it.first; settings.setDisplayLayout(fontSize, position, lines) }
+        g3.spinner(sizes, sizes.indexOfFirst { it.first == fontSize }, { "Tamanho: ${it.second}" }) { fontSize = it.first; settings.setDisplayLayout(fontSize, position, lines) }
         val positions = listOf("center" to "Centro (padrão)", "top" to "Topo", "bottom" to "Base")
-        ui.spinner(positions, positions.indexOfFirst { it.first == position }, { "Posição: ${it.second}" }) { position = it.first; settings.setDisplayLayout(fontSize, position, lines) }
-        ui.spinner(listOf(3, 4, 5), listOf(3, 4, 5).indexOf(lines).coerceAtLeast(0), { "Linhas: $it${if (it == 5) " (padrão)" else ""}" }) { lines = it; settings.setDisplayLayout(fontSize, position, lines) }
+        g3.spinner(positions, positions.indexOfFirst { it.first == position }, { "Posição: ${it.second}" }) { position = it.first; settings.setDisplayLayout(fontSize, position, lines) }
+        g3.spinner(listOf(3, 4, 5), listOf(3, 4, 5).indexOf(lines).coerceAtLeast(0), { "Linhas: $it${if (it == 5) " (padrão)" else ""}" }) { lines = it; settings.setDisplayLayout(fontSize, position, lines) }
 
-        ui.title("Transcrição do ambiente (gravação contínua)")
+        ui.section("Transcrição do ambiente (gravação contínua)")
+        val g4 = ui.card()
         val amb = settings.ambientSettings(); ambientProvider = amb.provider
-        ui.spinner(org.turboio.customai.ambient.AmbientProvider.entries.toList(), org.turboio.customai.ambient.AmbientProvider.entries.indexOf(ambientProvider), { it.label }) { ambientProvider = it; loadAmbient() }
-        deepgramKey = ui.field("Chave da Deepgram (vazio = manter)", password = true)
-        deepgramState = ui.hint("")
-        ambientModel = ui.field("Modelo OpenAI para o ambiente", amb.openAiModel)
-        ui.hint("Deepgram Nova-3 pt-BR separa os falantes (até ~5 min de fala por envio). OpenAI usa a chave de transcrição/IA da OpenAI e não separa falantes.")
+        g4.spinner(org.turboio.customai.ambient.AmbientProvider.entries.toList(), org.turboio.customai.ambient.AmbientProvider.entries.indexOf(ambientProvider), { it.label }) { ambientProvider = it; loadAmbient() }
+        deepgramKey = g4.field("Chave da Deepgram (vazio = manter)", password = true)
+        deepgramState = g4.hint("")
+        ambientModel = g4.field("Modelo OpenAI para o ambiente", amb.openAiModel)
+        g4.hint("Deepgram Nova-3 pt-BR separa os falantes (até ~5 min de fala por envio). OpenAI usa a chave de transcrição/IA da OpenAI e não separa falantes.")
 
-        ui.button("Salvar configuração") { save() }
+        g4.button("Salvar configuração") { save() }
         loadProvider(); loadStt()
         return ui.scroll()
     }

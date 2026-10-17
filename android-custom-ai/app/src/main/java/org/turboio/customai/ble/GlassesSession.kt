@@ -168,6 +168,9 @@ class GlassesSession(
         beginVersionProbe()
     }
 
+    /** True when a pair of glasses was saved earlier (shown on the home screen). */
+    fun hasSaved(): Boolean = store.load() != null
+
     fun reconnectSaved(): Boolean {
         val saved = store.load() ?: return false
         connect(saved.address, saved.name)

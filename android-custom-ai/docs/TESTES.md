@@ -10,7 +10,7 @@ Legenda: ✅ executado e aprovado · ⚠️ executado com ressalva · ⏳ penden
 | --- | --- | --- |
 | Compilação (AGP 8.13.2, Kotlin 2.2.21, compileSdk/targetSdk 35, minSdk 26) | ✅ | `./gradlew assembleDebug` |
 | Lint Android | ✅ 0 erros (avisos cosméticos: i18n/KTX/versões) | `./gradlew lintDebug` |
-| Testes unitários | ✅ **150 testes** executados, 0 falhas (+ 4 testes de rede ao vivo, opcionais) | `./gradlew testDebugUnitTest` |
+| Testes unitários | ✅ **154 testes** (4 são capturas de tela da interface com Paparazzi, sem emulador) executados, 0 falhas (+ 4 testes de rede ao vivo, opcionais) | `./gradlew testDebugUnitTest` |
 | Protocolo = referência HarmonyOS | ✅ vetores de ouro + vetores gerados executando o TypeScript original (`tools/harmony-vectors.mjs`) | `HarmonyCrossTest`, `ProtocolTest` |
 | Referência HarmonyOS em si | ✅ 48 testes do `harmony-sdk` (protocolo, autenticação, voz) passam neste ambiente | `node --test harmony-sdk/tests/{protocol-codec,auth-calculations,guest-exchange,business-commands,version-exchange,voice-session,launcher-status}.test.mjs` |
 | Sessão BLE completa contra óculos emulados | ✅ handshake em 2 links, bond após prova, status/bateria, conta vinculada recusada, prova falsa recusada, troca de identidade bloqueada, reconexão automática, timeout | `GlassesSessionTest` |

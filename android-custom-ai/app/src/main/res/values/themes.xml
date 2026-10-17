@@ -1,10 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.TurboIO" parent="Theme.Material3.DayNight">
-        <item name="colorPrimary">#0B6E99</item>
-        <item name="colorSecondary">#00897B</item>
-        <!-- Android 15/16 enforce edge-to-edge for targetSdk 35; keep the classic layout so the action bar,
-             bottom navigation and adjustResize (keyboard) behave the same as on Android 8–14. -->
+    <!-- Always dark, like the glasses' own app: black base, green glow, emerald accent. Screens draw their own headers. -->
+    <style name="Theme.TurboIO" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/tio_primary</item>
+        <item name="colorOnPrimary">@color/tio_on_primary</item>
+        <item name="colorPrimaryContainer">@color/tio_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/tio_primary</item>
+        <item name="colorSecondary">@color/tio_primary</item>
+        <item name="colorOnSecondary">@color/tio_on_primary</item>
+        <item name="colorSecondaryContainer">@color/tio_primary_container</item>
+        <item name="colorOnSecondaryContainer">@color/tio_primary</item>
+        <item name="colorSurface">@color/tio_surface</item>
+        <item name="colorOnSurface">@color/tio_text</item>
+        <item name="colorOnSurfaceVariant">@color/tio_text_muted</item>
+        <item name="colorSurfaceContainer">@color/tio_surface</item>
+        <item name="colorSurfaceContainerHigh">@color/tio_surface_high</item>
+        <item name="colorSurfaceContainerHighest">@color/tio_surface_high</item>
+        <item name="colorOutline">@color/tio_stroke</item>
+        <item name="colorOutlineVariant">@color/tio_stroke</item>
+        <item name="colorError">@color/tio_danger</item>
+        <item name="android:colorBackground">@color/tio_bg</item>
+        <item name="android:windowBackground">@drawable/bg_window</item>
+        <item name="android:statusBarColor">@color/tio_bg_glow</item>
+        <item name="android:navigationBarColor">@color/tio_surface</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <!-- Android 15/16 enforce edge-to-edge for targetSdk 35; keep the classic layout so the bottom navigation and
+             adjustResize (keyboard) behave the same as on Android 8–14. -->
         <item name="android:windowOptOutEdgeToEdgeEnforcement" tools:targetApi="35">true</item>
     </style>
 </resources>

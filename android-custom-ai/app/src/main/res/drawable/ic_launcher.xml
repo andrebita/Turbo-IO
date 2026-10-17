@@ -1,6 +1,9 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
-        <shape android:shape="oval"><solid android:color="#0B6E99" /><size android:width="48dp" android:height="48dp" /></shape>
+        <shape android:shape="oval">
+            <gradient android:angle="315" android:startColor="#FF0F2219" android:endColor="#FF050706" />
+            <size android:width="48dp" android:height="48dp" />
+        </shape>
     </item>
-    <item android:drawable="@drawable/ic_glasses" android:left="8dp" android:right="8dp" android:top="8dp" android:bottom="8dp" />
+    <item android:drawable="@drawable/ic_launcher_mark" android:left="9dp" android:right="9dp" android:top="9dp" android:bottom="9dp" />
 </layer-list>

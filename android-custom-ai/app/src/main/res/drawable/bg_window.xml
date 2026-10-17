@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Soft green glow at the top fading into black. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient android:type="linear" android:angle="270" android:startColor="@color/tio_bg_glow"
+        android:centerColor="@color/tio_bg" android:endColor="@color/tio_bg" android:centerY="0.35" />
+</shape>
