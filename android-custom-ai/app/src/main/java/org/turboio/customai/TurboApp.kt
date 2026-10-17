@@ -220,6 +220,7 @@ class TurboApp : Application() {
     /** Returns null when [question] is not about the journal. Journal queries are recorded but excluded from insights. */
     suspend fun journalAnswer(question: String, source: EntrySource): String? {
         val intent = JournalIntents.detect(question) ?: return null
+        if (!settings.memorySettings().enabled && (intent is JournalIntent.Remind || intent is JournalIntent.Complete || intent is JournalIntent.Pending)) return null
         val today = Days.of(System.currentTimeMillis())
         val started = System.currentTimeMillis()
         DiagnosticLog.i("DIARIO", "pergunta sobre o diário: ${intent.javaClass.simpleName}")
@@ -228,18 +229,48 @@ class TurboApp : Application() {
             val now = System.currentTimeMillis()
             when (intent) {
                 is JournalIntent.Summary -> insights.day(Days.shift(today, intent.dayOffset.toLong())).insight.lens(400)
-                is JournalIntent.Tasks -> if (memoryOn) memoryQueries.pendingAnswer(now) else insights.day(Days.shift(today, intent.dayOffset.toLong())).insight.tarefas
+                is JournalIntent.Tasks -> if (memoryOn) listPending(now, null) else insights.day(Days.shift(today, intent.dayOffset.toLong())).insight.tarefas
                     .let { if (it.isEmpty()) "Nenhuma tarefa registrada." else "Tarefas: " + it.take(5).joinToString("; ") }
-                is JournalIntent.Pending -> memoryQueries.pendingAnswer(now, intent.person)
+                is JournalIntent.Pending -> listPending(now, intent.person)
+                is JournalIntent.Remind -> memory.quickItem(intent.text, now).let { item ->
+                    org.turboio.customai.memory.Reminders.sync(this@TurboApp)
+                    "Anotado: " + memoryQueries.line(item, now)
+                }
+                is JournalIntent.Complete -> when (val m = memoryQueries.match(intent.ref, lastListed)) {
+                    is org.turboio.customai.memory.MemoryQueries.Match.One -> {
+                        memoryStore.setStatus(m.item.id, org.turboio.customai.memory.ItemStatus.DONE, now, question.take(200))
+                        "Feito: " + m.item.text
+                    }
+                    is org.turboio.customai.memory.MemoryQueries.Match.Many -> {
+                        lastListed = m.items.map { it.id }
+                        "Qual delas? " + m.items.mapIndexed { i, it -> "${i + 1}) ${it.text}" }.joinToString("; ") + ". Diga: marca a 1 como feita."
+                    }
+                    org.turboio.customai.memory.MemoryQueries.Match.None -> if (intent.explicit) "Não achei essa pendência. Diga “minhas pendências” para ver a lista." else null
+                }
                 is JournalIntent.Person -> memoryQueries.personAnswer(intent.name, now)
                 is JournalIntent.Weekly -> weeklyReview()?.text?.let { DisplayText.clean(it).take(500) } ?: "Ainda não há conteúdo suficiente nesta semana."
                 is JournalIntent.Search -> if (memoryOn) memoryQueries.search(question, now)
                     else insights.ask(question, intent.term, intent.dayOffset?.let { Days.shift(today, it.toLong()) })
             }
         }
+        if (answer == null) return null   // "já fiz X" that matches no item: an ordinary question for the model
         val c = settings.aiConfig()
         recordInteraction(question, answer, source, started, c.provider.id, c.model, System.currentTimeMillis() - started, "{\"journal_query\":true}")
         return answer
+    }
+
+    /** Ids of the last numbered list read out (for "marca a 2 como feita"). */
+    @Volatile var lastListed: List<Long> = emptyList()
+
+    private fun listPending(now: Long, person: String?): String =
+        memoryQueries.pendingList(now, person).also { lastListed = it.ids }.text
+
+    /** Pendências nas lentes, on demand (Diário → Pendências, or by voice). */
+    suspend fun showPendingOnLens(): String? {
+        if (!session.isReady) return "Conecte os óculos"
+        val text = withContext(Dispatchers.IO) { listPending(System.currentTimeMillis(), null) }
+        display.show(text, settings.displaySettings())
+        return null
     }
 
     fun clearHistory() = synchronized(history) { history.clear() }

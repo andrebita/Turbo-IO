@@ -45,6 +45,7 @@ class MemoryViews(private val context: Context, private val scope: () -> Lifecyc
         pending.hint("Criadas automaticamente a partir das suas conversas e perguntas. Cada uma mostra de onde veio. " +
             "Toque para marcar como feita, descartar ou editar.")
         pending.button("Analisar conversas agora") { analyseNow() }
+        pending.buttons("Mostrar nas lentes" to { io { app.showPendingOnLens()?.let { toast(it) } } }, "Adicionar" to { add() })
         if (open.isEmpty()) pending.text("Nenhuma pendência aberta.", size = 14f)
         val overdue = open.filter { (it.dueAt ?: Long.MAX_VALUE) < now }
         if (overdue.isNotEmpty()) pending.text("⚠ ${overdue.size} atrasada(s)", size = 13f).setTextColor(statusColor(false))
@@ -86,6 +87,17 @@ class MemoryViews(private val context: Context, private val scope: () -> Lifecyc
                 withContext(Dispatchers.IO) { app.memoryStore.updateItem(i.copy(text = field.text.toString().trim().ifEmpty { i.text }, updatedAt = System.currentTimeMillis())) }
                 loadPending()
             } }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun add() {
+        val field = EditText(context).apply { hint = "Ex.: ligar para o João sexta às 10h" }
+        AlertDialog.Builder(context).setTitle("Nova pendência").setView(field).setPositiveButton("Adicionar") { _, _ ->
+            val text = field.text.toString().trim()
+            if (text.length >= 3) io {
+                val item = withContext(Dispatchers.IO) { app.memory.quickItem(text, System.currentTimeMillis()).also { Reminders.sync(app) } }
+                toast("Anotado: ${item.text}"); loadPending()
+            }
+        }.setNegativeButton("Cancelar", null).show()
     }
 
     private fun analyseNow(): kotlinx.coroutines.Job = io {

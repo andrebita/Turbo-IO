@@ -66,6 +66,11 @@ Responda APENAS com um objeto JSON válido, sem Markdown, neste formato:
  "itens_concluidos": [{"id": 0, "evidencia": ""}]}"""
 
     const val RETRY = "Sua resposta anterior não era um JSON válido. Responda novamente APENAS com o objeto JSON pedido."
+
+    const val QUICK = """Transforme o pedido da pessoa em UMA pendência. Português do Brasil. Responda APENAS com JSON:
+{"texto": "verbo no infinitivo + objeto, curto", "tipo": "tarefa|compromisso", "quando": "AAAA-MM-DDTHH:MM ou vazio",
+ "quando_texto": "como a pessoa disse o prazo, ou vazio", "pessoa": "nome de outra pessoa envolvida, ou vazio"}
+Calcule "quando" a partir da data e hora atuais informadas; sem hora dita, use 09:00; sem prazo, deixe vazio."""
 }
 
 /**
@@ -282,6 +287,26 @@ class MemoryEngine(
             }
         }
         return Analysis(created, closed, named)
+    }
+
+    /** "Me lembra de…" by voice/text: one model call to normalize text and deadline; still saved if the call fails. */
+    suspend fun quickItem(request: String, now: Long): Item {
+        val nowLocal = LocalDateTime.ofInstant(Instant.ofEpochMilli(now), zone)
+        val ctx = "Agora: " + nowLocal.format(DateTimeFormatter.ofPattern("EEEE, dd/MM/yyyy HH:mm", Locale.forLanguageTag("pt-BR"))) + "\nPedido: " + request.trim()
+        val j = runCatching { parse(llm.complete(MemoryPrompts.QUICK, ctx, 300)) }.getOrNull()
+        val text = j?.optString("texto")?.trim()?.takeIf { it.length >= 3 } ?: request.trim().replaceFirstChar { it.uppercase() }
+        val personName = j?.optString("pessoa")?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", true) }
+        val person = personName?.let { store.upsertPerson(it, seenAt = now) }
+        val due = j?.let { parseDue(it.optString("quando"), now) }
+        val draft = Item(kind = ItemKind.of(j?.optString("tipo")), text = text.take(300), personId = person?.id, dueAt = due,
+            dueText = j?.optString("quando_texto")?.trim()?.take(80) ?: "", blockId = "voz", sourceTs = now, quote = request.trim().take(300),
+            confidence = 1.0, createdAt = now, updatedAt = now)
+        store.openItems(400).firstOrNull { jaccard(tokens(it.text), tokens(text)) >= 0.8 }?.let { same ->
+            val merged = same.copy(dueAt = due ?: same.dueAt, dueText = draft.dueText.ifBlank { same.dueText }, updatedAt = now,
+                remindedAt = if (due != null && due != same.dueAt) null else same.remindedAt)
+            store.updateItem(merged); return merged
+        }
+        return draft.copy(id = store.addItem(draft))
     }
 
     /** Renames anonymous diarization labels to a person in the journal; user corrections win. */

@@ -89,3 +89,10 @@ A aba Diário tem quatro seções: **Dia** (linha do tempo e insights), **Pendê
   pendências e resumos) ou **Não guardar** (as falas são apagadas depois de classificadas).
 * Por voz ou em Semana → Perguntar: “minhas pendências”, “o que tenho pendente com a Marina”, “o que conversei com o
   João”, “o que falei de custos semana passada”, “resumo da semana”.
+* Pela voz, direto nos óculos: “me lembra de ligar pro dentista segunda às 10h” / “anota: comprar pão” (cria na hora,
+  com lembrete); “minhas pendências” lê a lista numerada nas lentes; “marca a 2 como feita” ou “já mandei o relatório”
+  conclui.
+* Nas lentes sob demanda: Pendências → **Mostrar nas lentes**. Nas notificações: **Feita**, **Descartar** e **Adiar 1 h**,
+  sem abrir o app.
+* O painel nativo (dashboard) dos óculos não recebe a lista: o firmware original não oferece esse recurso a apps de
+  terceiros. O texto aparece pela exibição de texto (a mesma das respostas da IA), quando pedido ou na hora do lembrete.

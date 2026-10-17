@@ -32,7 +32,11 @@ import java.util.concurrent.TimeUnit
 
 /** Notifications of the memory (one channel per kind so each can be silenced in Android settings). */
 object MemoryNotifier {
-    fun show(context: Context, channel: String, channelName: String, id: Int, title: String, text: String, importance: Int = NotificationManager.IMPORTANCE_DEFAULT) {
+    /** A button on the notification acting on one item without opening the app. */
+    data class Action(val label: String, val action: String, val itemId: Long)
+
+    fun show(context: Context, channel: String, channelName: String, id: Int, title: String, text: String,
+             importance: Int = NotificationManager.IMPORTANCE_DEFAULT, actions: List<Action> = emptyList()) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -40,9 +44,15 @@ object MemoryNotifier {
         val open = PendingIntent.getActivity(context, id, Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_TAB, "journal")
             .putExtra(MainActivity.EXTRA_SECTION, if (channel == "memory_weekly") "week" else "pending"),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        manager.notify(id, NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_glasses)
+        val builder = NotificationCompat.Builder(context, channel).setSmallIcon(R.drawable.ic_glasses)
             .setContentTitle(title).setContentText(text.take(120)).setStyle(NotificationCompat.BigTextStyle().bigText(text.take(1200)))
-            .setContentIntent(open).setAutoCancel(true).build())
+            .setContentIntent(open).setAutoCancel(true)
+        actions.forEachIndexed { i, a ->
+            val intent = Intent(context, ItemActionReceiver::class.java).setAction(a.action)
+                .putExtra(ItemActionReceiver.EXTRA_ITEM, a.itemId).putExtra(ItemActionReceiver.EXTRA_NOTIFICATION, id)
+            builder.addAction(0, a.label, PendingIntent.getBroadcast(context, id * 10 + i, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+        }
+        manager.notify(id, builder.build())
     }
 
     /** Short text on the lenses when the glasses are connected and free. */
@@ -64,8 +74,11 @@ class MemoryWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             if (run.newItems.isNotEmpty()) {
                 val q = app.memoryQueries
                 val text = run.newItems.take(5).joinToString("\n") { "• " + q.line(it, now) }
+                val single = run.newItems.singleOrNull()
                 if (s.notifyNew) MemoryNotifier.show(app, "memory_new", "Novas pendências", 7400,
-                    if (run.newItems.size == 1) "Nova pendência" else "${run.newItems.size} novas pendências", text)
+                    if (single != null) "Nova pendência" else "${run.newItems.size} novas pendências", text,
+                    actions = if (single == null) emptyList() else listOf(MemoryNotifier.Action("Feita", ItemActionReceiver.DONE, single.id),
+                        MemoryNotifier.Action("Descartar", ItemActionReceiver.DISMISS, single.id)))
                 if (s.lensNew) MemoryNotifier.lens(app, "Anotado: " + run.newItems.take(2).joinToString("; ") { q.line(it, now) })
             }
             Reminders.sync(app)
@@ -102,12 +115,52 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val item = app.memoryStore.item(id) ?: return Result.success()
         if (item.status != ItemStatus.OPEN || item.dueAt == null || item.remindedAt != null) return Result.success()
         val now = System.currentTimeMillis()
+        if ((item.snoozeUntil ?: 0) > now + 60_000) return Result.success()      // snoozed again meanwhile
         val line = app.memoryQueries.line(item, now)
-        MemoryNotifier.show(app, "memory_reminder", "Lembretes", 8000 + (id % 1000).toInt(), "Lembrete", line, NotificationManager.IMPORTANCE_HIGH)
+        MemoryNotifier.show(app, "memory_reminder", "Lembretes", reminderNotification(id), "Lembrete", line, NotificationManager.IMPORTANCE_HIGH,
+            listOf(MemoryNotifier.Action("Feita", ItemActionReceiver.DONE, id), MemoryNotifier.Action("Adiar 1 h", ItemActionReceiver.SNOOZE, id)))
         MemoryNotifier.lens(app, "Lembrete: $line")
-        app.memoryStore.updateItem(item.copy(remindedAt = now, updatedAt = item.updatedAt))
+        app.memoryStore.updateItem(item.copy(remindedAt = now, snoozeUntil = null, updatedAt = item.updatedAt))
         DiagnosticLog.i("MEMORIA", "lembrete exibido (#$id)")
         return Result.success()
+    }
+}
+
+fun reminderNotification(itemId: Long) = 8000 + (itemId % 1000).toInt()
+
+/** Notification buttons: Feita / Descartar / Adiar 1 h, handled without opening the app. */
+class ItemActionReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val id = intent.getLongExtra(EXTRA_ITEM, -1)
+        if (id < 0) return
+        val app = context.applicationContext as TurboApp
+        val pending = goAsync()
+        Thread {
+            try {
+                val now = System.currentTimeMillis()
+                val item = app.memoryStore.item(id)
+                if (item != null && item.status == ItemStatus.OPEN) when (intent.action) {
+                    DONE -> app.memoryStore.setStatus(id, ItemStatus.DONE, now, "marcada na notificação")
+                    DISMISS -> app.memoryStore.setStatus(id, ItemStatus.DISMISSED, now)
+                    SNOOZE -> {
+                        val until = now + 3600_000L
+                        app.memoryStore.updateItem(item.copy(remindedAt = null, snoozeUntil = until, updatedAt = item.updatedAt))
+                        WorkManager.getInstance(app).enqueueUniqueWork("reminder-$id", ExistingWorkPolicy.REPLACE,
+                            OneTimeWorkRequestBuilder<ReminderWorker>().setInitialDelay(3600_000L, TimeUnit.MILLISECONDS).setInputData(workDataOf("item" to id)).build())
+                    }
+                }
+                DiagnosticLog.i("MEMORIA", "notificação: ${intent.action?.substringAfterLast('.')} (#$id)")
+                context.getSystemService(NotificationManager::class.java).cancel(intent.getIntExtra(EXTRA_NOTIFICATION, 0))
+            } finally { pending.finish() }
+        }.start()
+    }
+
+    companion object {
+        const val DONE = "org.turboio.customai.memory.DONE"
+        const val DISMISS = "org.turboio.customai.memory.DISMISS"
+        const val SNOOZE = "org.turboio.customai.memory.SNOOZE"
+        const val EXTRA_ITEM = "item"
+        const val EXTRA_NOTIFICATION = "notification"
     }
 }
 
@@ -119,8 +172,10 @@ object Reminders {
         val now = System.currentTimeMillis()
         for (i in app.memoryStore.openItems()) {
             val due = i.dueAt ?: continue
-            if (!s.reminders || i.remindedAt != null || due < now) continue
-            val delay = maxOf(0L, due - s.reminderLeadMin * 60_000L - now)
+            if (!s.reminders || i.remindedAt != null || due < now - 3600_000L) continue
+            val snooze = i.snoozeUntil?.takeIf { it > now }
+            if (snooze == null && due < now) continue
+            val delay = snooze?.let { it - now } ?: maxOf(0L, due - s.reminderLeadMin * 60_000L - now)
             wm.enqueueUniqueWork("reminder-${i.id}", ExistingWorkPolicy.REPLACE,
                 OneTimeWorkRequestBuilder<ReminderWorker>().setInitialDelay(delay, TimeUnit.MILLISECONDS).setInputData(workDataOf("item" to i.id)).build())
         }

@@ -42,6 +42,10 @@ class MemoryQueries(
     private val zone: ZoneId = ZoneId.systemDefault(),
 ) {
     private val dm = DateTimeFormatter.ofPattern("dd/MM")
+    private val NUMBERS = mapOf("um" to 1, "uma" to 1, "dois" to 2, "duas" to 2, "tres" to 3, "quatro" to 4, "cinco" to 5,
+        "seis" to 6, "sete" to 7, "oito" to 8, "nove" to 9, "dez" to 10)
+    private val VERBS = setOf("fiz", "terminei", "mandei", "enviei", "liguei", "paguei", "comprei", "resolvi", "respondi", "entreguei",
+        "marquei", "agendei", "feita", "feito", "concluida", "pronta", "pendencia", "tarefa")
     private val WEEKDAYS = listOf("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
     private fun stamp(ms: Long) = Instant.ofEpochMilli(ms).atZone(zone).let { it.format(dm) + " " + Days.time(ms, zone) }
 
@@ -66,14 +70,37 @@ class MemoryQueries(
     }
 
     // ------------------------------------------------------------------ pending
-    fun pendingAnswer(now: Long, personName: String? = null, max: Int = 5): String {
+    /** Numbered list (the numbers are what "marca a 2 como feita" refers to) and the ids in that order. */
+    data class Listing(val text: String, val ids: List<Long>)
+
+    fun pendingList(now: Long, personName: String? = null, max: Int = 5): Listing {
         val person = personName?.let { store.findPerson(it) }
-        if (personName != null && person == null) return "Não conheço ninguém chamado $personName no diário."
+        if (personName != null && person == null) return Listing("Não conheço ninguém chamado $personName no diário.", emptyList())
         val items = (if (person != null) store.itemsOf(person.id) else store.openItems()).filter { it.kind != ItemKind.DECISION }
-        if (items.isEmpty()) return if (person != null) "Nada pendente com ${person.name}." else "Nenhuma pendência aberta."
+        if (items.isEmpty()) return Listing(if (person != null) "Nada pendente com ${person.name}." else "Nenhuma pendência aberta.", emptyList())
         val overdue = items.count { (it.dueAt ?: Long.MAX_VALUE) < now }
+        val shown = items.take(max)
         val head = "${items.size} pendência(s)" + (if (overdue > 0) ", $overdue atrasada(s)" else "") + ": "
-        return head + items.take(max).joinToString("; ") { line(it, now) }
+        return Listing(head + shown.mapIndexed { i, it -> "${i + 1}) ${line(it, now)}" }.joinToString("; "), shown.map { it.id })
+    }
+
+    fun pendingAnswer(now: Long, personName: String? = null, max: Int = 5): String = pendingList(now, personName, max).text
+
+    sealed class Match { data class One(val item: Item) : Match(); data class Many(val items: List<Item>) : Match(); object None : Match() }
+
+    /** Finds the open item meant by a spoken reference: its number in [lastListed], or its words. */
+    fun match(ref: String, lastListed: List<Long>): Match {
+        val n = NUMBERS[ref.trim()] ?: ref.trim().toIntOrNull()
+        if (n != null) return lastListed.getOrNull(n - 1)?.let { store.item(it) }?.takeIf { it.status == ItemStatus.OPEN }?.let { Match.One(it) } ?: Match.None
+        val words = tokens(ref) - VERBS
+        if (words.isEmpty()) return Match.None
+        val scored = store.openItems(400).map { i ->
+            val target = tokens(i.text + " " + (i.personId?.let { store.person(it)?.name } ?: ""))
+            i to words.count { w -> target.any { it == w || (w.length >= 5 && it.startsWith(w.take(5))) } }.toDouble() / words.size
+        }.filter { it.second >= 0.5 }.sortedByDescending { it.second }
+        if (scored.isEmpty()) return Match.None
+        val top = scored.filter { it.second >= scored.first().second - 0.15 }
+        return if (top.size == 1) Match.One(top.first().first) else Match.Many(top.map { it.first }.take(3))
     }
 
     // ------------------------------------------------------------------ morning brief

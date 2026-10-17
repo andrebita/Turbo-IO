@@ -67,6 +67,7 @@ data class Item(
     val doneAt: Long? = null,
     val doneEvidence: String = "",
     val remindedAt: Long? = null,
+    val snoozeUntil: Long? = null,
 )
 
 /** Normalized token set used for duplicate detection. */
@@ -99,6 +100,7 @@ class MemoryStore(private val db: SqlDb) {
             quote TEXT NOT NULL DEFAULT '', confidence REAL NOT NULL DEFAULT 0, created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL, done_at INTEGER, done_evidence TEXT NOT NULL DEFAULT '', reminded_at INTEGER)""")
         db.exec("CREATE INDEX IF NOT EXISTS items_status ON items(status, due_at)")
+        runCatching { db.exec("ALTER TABLE items ADD COLUMN snooze_until INTEGER") }   // added after the first 0.4.0 build
     }
 
     // ------------------------------------------------------------------ blocks
@@ -214,9 +216,9 @@ class MemoryStore(private val db: SqlDb) {
         i.quote, i.confidence, i.createdAt, i.updatedAt)
 
     fun updateItem(i: Item) = db.exec(
-        "UPDATE items SET kind = ?, text = ?, norm = ?, status = ?, owner = ?, person_id = ?, due_at = ?, due_text = ?, quote = ?, confidence = ?, updated_at = ?, done_at = ?, done_evidence = ?, reminded_at = ? WHERE id = ?",
+        "UPDATE items SET kind = ?, text = ?, norm = ?, status = ?, owner = ?, person_id = ?, due_at = ?, due_text = ?, quote = ?, confidence = ?, updated_at = ?, done_at = ?, done_evidence = ?, reminded_at = ?, snooze_until = ? WHERE id = ?",
         i.kind.id, i.text.trim(), searchNormalize(i.text), i.status.id, i.owner, i.personId, i.dueAt, i.dueText, i.quote, i.confidence,
-        i.updatedAt, i.doneAt, i.doneEvidence, i.remindedAt, i.id)
+        i.updatedAt, i.doneAt, i.doneEvidence, i.remindedAt, i.snoozeUntil, i.id)
 
     fun setStatus(id: Long, status: ItemStatus, at: Long, evidence: String = "") = db.exec(
         "UPDATE items SET status = ?, updated_at = ?, done_at = ?, done_evidence = ? WHERE id = ?",
@@ -234,7 +236,7 @@ class MemoryStore(private val db: SqlDb) {
         ItemStatus.of(r["status"] as String), r["owner"] as String, (r["person_id"] as Number?)?.toLong(), (r["due_at"] as Number?)?.toLong(),
         r["due_text"] as String, r["block_id"] as String, num(r["source_ts"]), r["quote"] as String, (r["confidence"] as Number).toDouble(),
         num(r["created_at"]), num(r["updated_at"]), (r["done_at"] as Number?)?.toLong(), r["done_evidence"] as String,
-        (r["reminded_at"] as Number?)?.toLong())
+        (r["reminded_at"] as Number?)?.toLong(), (r["snooze_until"] as Number?)?.toLong())
 
     fun wipe() = db.transaction {
         db.exec("DELETE FROM blocks"); db.exec("DELETE FROM people"); db.exec("DELETE FROM person_blocks"); db.exec("DELETE FROM items")

@@ -179,10 +179,18 @@ class JournalTest {
         assertEquals(JournalIntent.Person("dr paulo".let { "paulo" }), JournalIntents.detect("última conversa com o doutor Paulo"))
         assertEquals(JournalIntent.Weekly, JournalIntents.detect("Qual o resumo da semana?"))
         assertEquals(JournalIntent.Weekly, JournalIntents.detect("como foi minha semana"))
+        assertEquals(JournalIntent.Remind("ligar pro dentista segunda às 10h"), JournalIntents.detect("Me lembra de ligar pro dentista segunda às 10h"))
+        assertEquals(JournalIntent.Remind("comprar pão"), JournalIntents.detect("anota aí: comprar pão"))
+        assertEquals(JournalIntent.Remind("pagar o condomínio"), JournalIntents.detect("Não me deixa esquecer de pagar o condomínio"))
+        assertEquals(JournalIntent.Complete("2", true), JournalIntents.detect("marca a 2 como feita"))
+        assertEquals(JournalIntent.Complete("dois", true), JournalIntents.detect("Marque a tarefa dois como concluída"))
+        assertEquals(JournalIntent.Complete("o relatorio", true), JournalIntents.detect("marca o relatório como feito"))
+        assertEquals(JournalIntent.Complete("ja mandei o relatorio", false), JournalIntents.detect("Já mandei o relatório"))
         // Ordinary questions must go to the model, not the journal.
         listOf("Qual é a capital do Brasil?", "Me dê insights sobre investimentos", "Quais tarefas priorizar em um projeto?",
             "Faça um resumo da história do Brasil", "O que eu fiz de errado neste código?", "Como organizar tarefas?",
-            "O que fazer com sobras de arroz?", "Quem é o presidente do Brasil?")
+            "O que fazer com sobras de arroz?", "Quem é o presidente do Brasil?", "Me lembra o nome do ator de Titanic?",
+            "Você lembra de mim?")
             .forEach { assertNull(it, JournalIntents.detect(it)) }
     }
 

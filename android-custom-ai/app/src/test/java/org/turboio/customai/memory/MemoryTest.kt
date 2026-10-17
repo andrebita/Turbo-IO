@@ -134,6 +134,30 @@ class MemoryTest {
         assertEquals(4, run.blocks)
     }
 
+    @Test fun voiceRemindersAndCompletionByNumberOrWords() = runBlocking {
+        val llm = ScriptedLlm { system, user ->
+            assertEquals(MemoryPrompts.QUICK, system); assertTrue(user.contains("Agora: sábado, 17/10/2026 11:00"))
+            if (user.contains("dentista")) """{"texto":"Ligar para o dentista","tipo":"tarefa","quando":"2026-10-19T10:00","quando_texto":"segunda às 10h","pessoa":""}"""
+            else "não sei"
+        }
+        val eng = engine(llm)
+        val dentist = eng.quickItem("ligar pro dentista segunda às 10h", at(11, 0))
+        assertEquals("Ligar para o dentista", dentist.text); assertEquals(at(10, 0, 19), dentist.dueAt); assertEquals("voz", dentist.blockId)
+        val bread = eng.quickItem("comprar pão", at(11, 0))                          // model failed: the request itself is kept
+        assertEquals("Comprar pão", bread.text); assertNull(bread.dueAt)
+        assertEquals(bread.id, eng.quickItem("comprar pão", at(11, 5)).id)          // same request again: no duplicate
+        val q = MemoryQueries(journal, store, llm, zone)
+        val listing = q.pendingList(at(11, 0))
+        assertEquals(listOf(dentist.id, bread.id), listing.ids)                      // dated first
+        assertEquals(dentist.id, (q.match("1", listing.ids) as MemoryQueries.Match.One).item.id)
+        assertEquals(bread.id, (q.match("dois", listing.ids) as MemoryQueries.Match.One).item.id)
+        assertEquals(dentist.id, (q.match("ja liguei pro dentista", emptyList()) as MemoryQueries.Match.One).item.id)
+        assertEquals(MemoryQueries.Match.None, q.match("ja paguei o aluguel", emptyList()))
+        assertEquals(MemoryQueries.Match.None, q.match("7", listing.ids))
+        eng.quickItem("comprar pão integral para o lanche", at(11, 0))
+        assertTrue(q.match("comprar pao", emptyList()) is MemoryQueries.Match.Many)
+    }
+
     @Test fun queriesPendingMorningSearchAndWeekly() = runBlocking {
         ambient(10, 0, "Pessoa A", "Me manda o relatório?"); ambient(10, 1, "Você", "Oi, Marina. Te mando sexta.")
         engine(ScriptedLlm { _, _ -> firstConversation }).process(listOf("2026-10-17"), at(11, 0))
@@ -146,7 +170,7 @@ class MemoryTest {
             }
         }
         val q = MemoryQueries(journal, store, llm, zone)
-        assertEquals("1 pendência(s): Enviar o relatório para a Marina — sex 23/10 15:00", q.pendingAnswer(at(11, 0)))
+        assertEquals("1 pendência(s): 1) Enviar o relatório para a Marina — sex 23/10 15:00", q.pendingAnswer(at(11, 0)))
         assertEquals("Nada pendente com Bruno.".let { "Não conheço ninguém chamado Bruno no diário." }, q.pendingAnswer(at(11, 0), "Bruno"))
         assertTrue(q.pendingAnswer(at(11, 0), "marina").contains("relatório"))
         assertTrue(q.morningBrief(at(8, 0, 23))!!.contains("Hoje: Enviar o relatório para a Marina — hoje 15:00"))

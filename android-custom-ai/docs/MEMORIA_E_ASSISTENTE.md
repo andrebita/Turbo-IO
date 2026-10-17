@@ -98,6 +98,11 @@ Descartado não volta: o texto normalizado fica bloqueado para o mesmo bloco.
 | 21:00 (existente) | resumo do dia, agora só com conversas relevantes |
 | domingo 19:00 | revisão semanal |
 
+Também: pendências nas lentes sob demanda (lista numerada), “me lembra de…”/“anota…” por voz (criação imediata, uma
+chamada curta ao modelo para normalizar texto e prazo), “marca a 2 como feita”/“já fiz X” por voz, e botões **Feita**,
+**Descartar** e **Adiar 1 h** nas notificações. O painel nativo dos óculos não é alterável pelo firmware original; a
+entrega nas lentes usa a sessão de texto (negócio 19).
+
 A análise roda em segundo plano (WorkManager, com rede) após cada transcrição, após perguntas à IA e a cada 30 min.
 
 ## 8. Busca por sentido e período
