@@ -13,16 +13,20 @@ object Business {
     const val LAUNCHER = 15       // general status / battery
     const val SUBTITLE = 19       // temporary text display session
     const val RECORDING = 14      // glasses-menu recording (phase-3 probe)
+    const val TODO = 22           // native To-do app of the glasses (schedule/todo service)
 
     /** Outbound allow-list: business -> envelope types we may send. Everything else is refused. */
     val OUTBOUND: Map<Int, Set<Int>> = mapOf(
         // 162 = LifeLog A2 (start), 166 = A6 (exit), 168 = A8 (realtime page flag)
         AI_ASSISTANT to setOf(2, 5, 7, 12, 32, 162, 166, 168),
-        // 20 = launcher command, restricted by content to life_log_guide / life_log_switch (see contentAllowed)
-        LAUNCHER to setOf(1, 20),
+        // 4 = read general settings; 5 = display_config / crown_config with evidence-backed values only;
+        // 20 = life_log_guide / life_log_switch (see contentAllowed)
+        LAUNCHER to setOf(1, 4, 5, 20),
         SUBTITLE to setOf(3, 5, 7),
         // enable(14), start/ack(1), stop/ack(4), acks(8, 9, 11) — no delete/format/file commands
         RECORDING to setOf(1, 4, 8, 9, 11, 14),
+        // 2 = add/modify ONE to-do (eventType 1); no batch, delete, schedule or binary types
+        TODO to setOf(2),
     )
 
     fun outboundAllowed(business: Int, type: Int): Boolean = OUTBOUND[business]?.contains(type) == true
@@ -31,11 +35,25 @@ object Business {
 
     /** Second gate on the JSON body for generic command channels. */
     fun contentAllowed(business: Int, type: Int, json: String): Boolean {
-        if (business == LAUNCHER && type == 20) {
-            val cmd = Regex("^\\{\"cmd\":\"([a-z_]+)\"").find(json)?.groupValues?.get(1)
-            return cmd in LAUNCHER_COMMANDS
-        }
+        val cmd = Regex("^\\{\"cmd\":\"([a-z_]+)\"").find(json)?.groupValues?.get(1)
+        if (business == LAUNCHER && type == 20) return cmd in LAUNCHER_COMMANDS
+        if (business == LAUNCHER && type == 4) return cmd == "request_general_settings"
+        if (business == LAUNCHER && type == 5) return settingAllowed(cmd, json)
+        if (business == TODO) return runCatching { org.json.JSONObject(json) }.getOrNull()?.let { j ->
+            j.optInt("eventType") == 1 && j.optLong("eventID") > 0 && j.optString("title").length in 1..60 && j.optInt("status", -1) in 0..1
+        } ?: false
         return true
+    }
+
+    /** Settings writes accepted only with the value ranges the official app is known to use (RayNeoCompanion evidence). */
+    private fun settingAllowed(cmd: String?, json: String): Boolean {
+        val data = runCatching { org.json.JSONObject(org.json.JSONObject(json).getJSONObject("payload").getString("data")) }.getOrNull() ?: return false
+        val keys = data.keys().asSequence().toSet()
+        return when (cmd) {
+            "display_config" -> keys == setOf("height", "distance") && data.optInt("height") in setOf(1, 3, 5) && data.optInt("distance") in setOf(1, 2)
+            "crown_config" -> keys == setOf("double", "longPress") && data.optInt("double", -1) in setOf(0, 8) && data.optInt("longPress", -1) in 0..64
+            else -> false
+        }
     }
 }
 

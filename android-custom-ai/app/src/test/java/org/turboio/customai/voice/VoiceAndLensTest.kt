@@ -30,6 +30,7 @@ class FakePort : GlassesPort {
     override fun send(business: Int, envelope: ByteArray, done: (String?) -> Unit) {
         val e = EnvelopeCodec.decode(envelope)
         require(Business.outboundAllowed(business, e.type)) { "não permitido $business/${e.type}" }
+        require(Business.contentAllowed(business, e.type, e.jsonText())) { "conteúdo recusado $business/${e.type}: ${e.jsonText()}" }
         sent.add(business to e); done(null)
     }
     override fun addBusinessListener(listener: BusinessListener) { listeners.add(listener) }

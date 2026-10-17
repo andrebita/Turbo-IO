@@ -101,6 +101,10 @@ class MemoryStore(private val db: SqlDb) {
             updated_at INTEGER NOT NULL, done_at INTEGER, done_evidence TEXT NOT NULL DEFAULT '', reminded_at INTEGER)""")
         db.exec("CREATE INDEX IF NOT EXISTS items_status ON items(status, due_at)")
         runCatching { db.exec("ALTER TABLE items ADD COLUMN snooze_until INTEGER") }   // added after the first 0.4.0 build
+        // Native To-do of the glasses (business 22): id used on the wire and what was last sent/reported.
+        runCatching { db.exec("ALTER TABLE items ADD COLUMN wire_id INTEGER") }
+        runCatching { db.exec("ALTER TABLE items ADD COLUMN wire_status INTEGER") }
+        runCatching { db.exec("ALTER TABLE items ADD COLUMN wire_title TEXT") }
     }
 
     // ------------------------------------------------------------------ blocks
@@ -237,6 +241,22 @@ class MemoryStore(private val db: SqlDb) {
         r["due_text"] as String, r["block_id"] as String, num(r["source_ts"]), r["quote"] as String, (r["confidence"] as Number).toDouble(),
         num(r["created_at"]), num(r["updated_at"]), (r["done_at"] as Number?)?.toLong(), r["done_evidence"] as String,
         (r["reminded_at"] as Number?)?.toLong(), (r["snooze_until"] as Number?)?.toLong())
+
+    // ------------------------------------------------------------------ glasses To-do
+    data class Wire(val item: Item, val wireId: Long?, val status: Int?, val title: String?)
+
+    /** Open items to show on the glasses, plus closed ones the glasses still believe open. */
+    fun wireCandidates(maxOpen: Int): List<Wire> {
+        fun rows(sql: String, vararg args: Any?) = db.query(sql, *args).map { Wire(itemRow(it), (it["wire_id"] as Number?)?.toLong(), (it["wire_status"] as Number?)?.toInt(), it["wire_title"] as String?) }
+        val open = rows("SELECT * FROM items WHERE status = 'aberta' AND kind != 'decisao' ORDER BY CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at, created_at DESC LIMIT ?", maxOpen)
+        val closed = rows("SELECT * FROM items WHERE status != 'aberta' AND wire_id IS NOT NULL AND wire_status = 0")
+        return open + closed
+    }
+
+    fun itemByWire(wireId: Long): Item? = db.query("SELECT * FROM items WHERE wire_id = ?", wireId).firstOrNull()?.let(::itemRow)
+
+    fun setWire(itemId: Long, wireId: Long, status: Int, title: String?) =
+        db.exec("UPDATE items SET wire_id = ?, wire_status = ?, wire_title = COALESCE(?, wire_title) WHERE id = ?", wireId, status, title, itemId)
 
     fun wipe() = db.transaction {
         db.exec("DELETE FROM blocks"); db.exec("DELETE FROM people"); db.exec("DELETE FROM person_blocks"); db.exec("DELETE FROM items")

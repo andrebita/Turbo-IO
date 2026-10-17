@@ -94,5 +94,8 @@ A aba Diário tem quatro seções: **Dia** (linha do tempo e insights), **Pendê
   conclui.
 * Nas lentes sob demanda: Pendências → **Mostrar nas lentes**. Nas notificações: **Feita**, **Descartar** e **Adiar 1 h**,
   sem abrir o app.
-* O painel nativo (dashboard) dos óculos não recebe a lista: o firmware original não oferece esse recurso a apps de
-  terceiros. O texto aparece pela exibição de texto (a mesma das respostas da IA), quando pedido ou na hora do lembrete.
+* **No To-do nativo dos óculos** (experimental, desligado por padrão): Pendências → Configurações da memória → “Enviar
+  pendências ao app To-do dos óculos”. As abertas aparecem no To-do dos óculos (e no widget To-do do painel, se ele
+  estiver lá); concluir nos óculos conclui no app. Detalhes e limites em [AJUSTES_DOS_OCULOS.md](AJUSTES_DOS_OCULOS.md).
+* **Altura do texto, distância e duplo toque abre To-do**: aba Conexão → “Ajustes da tela dos óculos”. O tipo de
+  painel não pode ser trocado por este app.

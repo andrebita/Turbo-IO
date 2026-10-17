@@ -29,6 +29,8 @@ ou leitura de notificações. `<queries>` só consulta a versão de `com.rayneo.
 | Risco | Mitigação |
 | --- | --- |
 | Firmware | Não existe código de OTA/arquivos; allow-list de negócios testada; nenhuma etapa grava no firmware |
+| Ajustes dos óculos (altura, distância, duplo toque) | Só valores observados no app oficial; lê antes, preserva o resto, guarda os originais e restaura; efeito na lente a confirmar |
+| Pendências no To-do dos óculos | Opcional; só envia o que mudou (não sobrescreve conclusões feitas nos óculos); não há como apagar pelo Bluetooth — itens fechados são marcados como feitos |
 | Disputa de conexão com o app oficial | Use um cliente por vez; procedimento de troca em [REVERSAO.md](REVERSAO.md) |
 | Perguntas/áudio enviados a terceiros | Só para o provedor configurado pelo usuário, via HTTPS; na gravação ambiente, só os trechos com fala, e só após o consentimento; áudio bruto apagado após a transcrição |
 | Texto das conversas analisado pela IA (memória) | Só texto, nunca áudio, ao provedor de IA configurado; uma chamada por conversa; categorias marcadas “não guardar” têm as falas apagadas; desligável em Diário → Pendências → Configurações da memória |

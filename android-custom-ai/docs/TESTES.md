@@ -40,6 +40,9 @@ autenticação quando a resposta chegava perto de 5 s (teste de regressão `slow
 | Pendências por pessoa, resumo da manhã (hoje/atrasadas), busca planejada com período e citações, ficha da pessoa, revisão semanal | ✅ | `queriesPendingMorningSearchAndWeekly` |
 | Intenções de voz novas sem capturar perguntas comuns | ✅ | `JournalTest.intents` |
 | “Me lembra de…” cria pendência com prazo (e guarda o pedido se o modelo falhar), sem duplicar; concluir por número da lista, por palavras ou pedir para escolher | ✅ | `voiceRemindersAndCompletionByNumberOrWords`, `JournalTest.intents` |
+| To-do dos óculos: um item por mensagem, só mudanças, descartada vai como feita, conclusão/reabertura vinda dos óculos, título ≤ 60 com data fixa | ✅ | `GlassesTodoTest` |
+| Ajustes da tela: lê antes, preserva o campo não alterado, guarda originais e restaura; duplo toque só sobre 0/8; regra de conteúdo recusa outros valores | ✅ | `GlassesSettingsTest` |
+| Efeito real dos ajustes e do To-do nas lentes com o firmware 1.0.5.5 | ⏳ hardware | — |
 | Telas Pendências, Pessoas e Semana no Android 11 (emulador), sem erros no log | ✅ | `docs/screenshots/android11-memoria-*.jpg` |
 | Qualidade real da extração com o seu modelo e conversas reais | ⏳ uso real | — |
 

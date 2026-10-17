@@ -29,6 +29,7 @@ data class MemorySettings(
     val weeklyDow: Int = 7,          // ISO: 1 = Monday … 7 = Sunday
     val weeklyHour: Int = 19,
     val policies: Map<String, CategoryPolicy> = mapOf("ruido" to CategoryPolicy.IGNORE),
+    val glassesTodo: Boolean = false,   // mirror open items into the glasses' native To-do (opt-in)
 ) {
     fun policy(category: String): CategoryPolicy = policies[category] ?: CategoryPolicy.INCLUDE
 }

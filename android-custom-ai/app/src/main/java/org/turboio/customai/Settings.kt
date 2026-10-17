@@ -142,6 +142,7 @@ class SettingsRepository(context: Context) {
             weeklyDow = prefs.getInt("memory.weeklyDow", 7).coerceIn(1, 7),
             weeklyHour = prefs.getInt("memory.weeklyHour", 19).coerceIn(0, 23),
             policies = policies,
+            glassesTodo = prefs.getBoolean("memory.glassesTodo", false),
         )
     }
 
@@ -150,7 +151,23 @@ class SettingsRepository(context: Context) {
         prefs.edit().putBoolean("memory.enabled", s.enabled).putBoolean("memory.notifyNew", s.notifyNew).putBoolean("memory.lensNew", s.lensNew)
             .putBoolean("memory.reminders", s.reminders).putInt("memory.lead", s.reminderLeadMin).putBoolean("memory.morning", s.morning)
             .putInt("memory.morningHour", s.morningHour).putInt("memory.morningMinute", s.morningMinute).putBoolean("memory.weekly", s.weekly)
-            .putInt("memory.weeklyDow", s.weeklyDow).putInt("memory.weeklyHour", s.weeklyHour).putString("memory.policies", policies.toString()).apply()
+            .putInt("memory.weeklyDow", s.weeklyDow).putInt("memory.weeklyHour", s.weeklyHour).putString("memory.policies", policies.toString())
+            .putBoolean("memory.glassesTodo", s.glassesTodo).apply()
+    }
+
+    /** First display/crown values read from the glasses (restore point). */
+    val originalGlassesSettings = object : org.turboio.customai.device.OriginalSettings {
+        override fun load(): org.turboio.customai.device.GlassesConfig? {
+            if (!prefs.contains("glasses.orig.at")) return null
+            fun i(k: String) = if (prefs.contains(k)) prefs.getInt(k, 0) else null
+            return org.turboio.customai.device.GlassesConfig(i("glasses.orig.height"), i("glasses.orig.distance"), i("glasses.orig.double"), i("glasses.orig.long"), prefs.getLong("glasses.orig.at", 0))
+        }
+        override fun save(c: org.turboio.customai.device.GlassesConfig) {
+            val e = prefs.edit().putLong("glasses.orig.at", c.readAt)
+            fun put(k: String, v: Int?) { if (v != null) e.putInt(k, v) else e.remove(k) }
+            put("glasses.orig.height", c.height); put("glasses.orig.distance", c.distance); put("glasses.orig.double", c.crownDouble); put("glasses.orig.long", c.crownLongPress)
+            e.apply()
+        }
     }
 
     fun deepgramKey(): String = secrets.get("key.ambient.deepgram")

@@ -82,6 +82,7 @@ class MemoryWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 if (s.lensNew) MemoryNotifier.lens(app, "Anotado: " + run.newItems.take(2).joinToString("; ") { q.line(it, now) })
             }
             Reminders.sync(app)
+            app.memoryChanged()
             if (run.failed > 0 && runAttemptCount < 3) Result.retry() else Result.success()
         } catch (e: Exception) {
             DiagnosticLog.w("MEMORIA", "análise falhou: ${TurboApp.friendly(e)}")
@@ -150,6 +151,7 @@ class ItemActionReceiver : android.content.BroadcastReceiver() {
                     }
                 }
                 DiagnosticLog.i("MEMORIA", "notificação: ${intent.action?.substringAfterLast('.')} (#$id)")
+                app.memoryChanged()
                 context.getSystemService(NotificationManager::class.java).cancel(intent.getIntExtra(EXTRA_NOTIFICATION, 0))
             } finally { pending.finish() }
         }.start()

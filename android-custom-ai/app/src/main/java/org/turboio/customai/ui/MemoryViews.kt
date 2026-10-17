@@ -77,6 +77,7 @@ class MemoryViews(private val context: Context, private val scope: () -> Lifecyc
     private fun setStatus(i: Item, s: ItemStatus): kotlinx.coroutines.Job = io {
         withContext(Dispatchers.IO) { app.memoryStore.setStatus(i.id, s, System.currentTimeMillis(), if (s == ItemStatus.DONE) "marcada no app" else "") }
         if (s == ItemStatus.DISMISSED) toast("Descartada — não será sugerida de novo")
+        app.memoryChanged()
         loadPending()
     }
 
@@ -85,7 +86,7 @@ class MemoryViews(private val context: Context, private val scope: () -> Lifecyc
         AlertDialog.Builder(context).setTitle("Editar pendência").setView(field)
             .setPositiveButton("Salvar") { _, _ -> io {
                 withContext(Dispatchers.IO) { app.memoryStore.updateItem(i.copy(text = field.text.toString().trim().ifEmpty { i.text }, updatedAt = System.currentTimeMillis())) }
-                loadPending()
+                app.memoryChanged(); loadPending()
             } }.setNegativeButton("Cancelar", null).show()
     }
 
@@ -95,7 +96,7 @@ class MemoryViews(private val context: Context, private val scope: () -> Lifecyc
             val text = field.text.toString().trim()
             if (text.length >= 3) io {
                 val item = withContext(Dispatchers.IO) { app.memory.quickItem(text, System.currentTimeMillis()).also { Reminders.sync(app) } }
-                toast("Anotado: ${item.text}"); loadPending()
+                toast("Anotado: ${item.text}"); app.memoryChanged(); loadPending()
             }
         }.setNegativeButton("Cancelar", null).show()
     }
@@ -105,6 +106,7 @@ class MemoryViews(private val context: Context, private val scope: () -> Lifecyc
         val now = System.currentTimeMillis(); val today = Days.of(now)
         val run = withContext(Dispatchers.IO) { app.memory.process(listOf(Days.shift(today, -1), today), now) }
         withContext(Dispatchers.IO) { Reminders.sync(app) }
+        app.memoryChanged()
         toast("${run.blocks} conversa(s) analisada(s) · ${run.newItems.size} nova(s) pendência(s)" + if (run.failed > 0) " · ${run.failed} falha(s)" else "")
         loadPending()
     }
@@ -118,6 +120,9 @@ class MemoryViews(private val context: Context, private val scope: () -> Lifecyc
         pending.switch("Analisar conversas e criar pendências automaticamente", s.enabled) { v -> save { it.copy(enabled = v) } }
         pending.switch("Avisar quando surgir uma pendência nova", s.notifyNew) { v -> save { it.copy(notifyNew = v) } }
         pending.switch("Mostrar pendências novas nas lentes", s.lensNew) { v -> save { it.copy(lensNew = v) } }
+        pending.switch("Enviar pendências ao app To-do dos óculos (experimental)", s.glassesTodo) { v -> save { it.copy(glassesTodo = v) }; if (v) app.memoryChanged() }
+        pending.hint("Com os óculos conectados, as pendências abertas (até 30) aparecem no To-do nativo dos óculos e no widget do painel, " +
+            "se ele estiver no seu painel. Concluir lá conclui aqui. Não há como apagar itens pelo Bluetooth: concluídas e descartadas são marcadas como feitas.")
         pending.switch("Lembrete antes do prazo (notificação e lentes)", s.reminders) { v -> save { it.copy(reminders = v) } }
         pending.switch("Resumo da manhã", s.morning) { v -> save { it.copy(morning = v) } }
         val morning = pending.field("Horário do resumo da manhã (HH:MM)", "%02d:%02d".format(s.morningHour, s.morningMinute))

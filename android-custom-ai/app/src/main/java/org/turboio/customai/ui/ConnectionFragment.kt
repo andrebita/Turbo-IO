@@ -63,12 +63,54 @@ class ConnectionFragment : Fragment() {
 
         ui.title("Versões")
         ui.text(versionText(), size = 13f)
+        glassesCard(ui)
         return ui.scroll()
+    }
+
+    private lateinit var settingsText: TextView
+    private var height = 0
+    private var distance = 0
+
+    /** Settings the official app changes, limited to evidence-backed values (docs/AJUSTES_DOS_OCULOS.md). */
+    private fun glassesCard(ui: Column) {
+        val c = ui.card()
+        c.title("Ajustes da tela dos óculos (experimental)")
+        c.hint("Os mesmos ajustes do app oficial, só com os valores já observados nele. O app lê os valores atuais antes de mudar " +
+            "e guarda os originais para restaurar. Confira o efeito nas lentes.")
+        settingsText = c.text("", size = 13f)
+        fun done(msg: String?) = view?.post { android.widget.Toast.makeText(requireContext(), msg ?: "Feito — confira nas lentes", android.widget.Toast.LENGTH_SHORT).show() }
+        c.button("Ler ajustes dos óculos", filled = false) { app.glassesSettings.read { done(it ?: "Ajustes lidos") } }
+        c.text("Altura do texto", size = 13f)
+        c.spinner(org.turboio.customai.device.SettingsWire.HEIGHTS, 0, { "Altura $it" }) { height = it }
+        c.text("Distância", size = 13f)
+        c.spinner(org.turboio.customai.device.SettingsWire.DISTANCES, 0, { "Distância $it" }) { distance = it }
+        c.button("Aplicar altura e distância") { app.glassesSettings.setDisplay(height, distance) { done(it) } }
+        c.buttons("Duplo toque abre To-do" to { app.glassesSettings.setDoubleTapTodo(true) { done(it) } },
+            "Desligar" to { app.glassesSettings.setDoubleTapTodo(false) { done(it) } })
+        c.button("Restaurar ajustes originais", filled = false) {
+            AlertDialog.Builder(requireContext()).setTitle("Restaurar?").setMessage("Volta altura, distância e duplo toque aos primeiros valores lidos dos óculos.")
+                .setPositiveButton("Restaurar") { _, _ -> app.glassesSettings.restore { done(it ?: "Restaurado") } }.setNegativeButton("Cancelar", null).show()
+        }
+        c.hint("O tipo de painel (dashboard) não pode ser alterado: o comando não é conhecido. Para trocar, use o app oficial.")
+    }
+
+    private fun renderSettings(s: org.turboio.customai.device.SettingsState) {
+        if (!::settingsText.isInitialized) return
+        val c = s.config
+        settingsText.text = buildString {
+            append(if (c.readAt > 0) "Atual: altura ${c.height ?: "?"} · distância ${c.distance ?: "?"} · duplo toque ${when (c.crownDouble) { 8 -> "abre To-do"; 0 -> "sem ação"; null -> "?"; else -> "função ${c.crownDouble}" }}"
+                else "Ainda não lido")
+            s.original?.let { o -> append("\nOriginais: altura ${o.height ?: "?"} · distância ${o.distance ?: "?"} · duplo toque ${o.crownDouble ?: "?"}") }
+            append("\n").append(s.note)
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { app.status.collect { render(it) } }
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { app.glassesSettings.state.collect { renderSettings(it) } }
+                app.status.collect { render(it) }
+            }
         }
     }
 

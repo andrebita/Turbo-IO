@@ -100,8 +100,8 @@ Descartado não volta: o texto normalizado fica bloqueado para o mesmo bloco.
 
 Também: pendências nas lentes sob demanda (lista numerada), “me lembra de…”/“anota…” por voz (criação imediata, uma
 chamada curta ao modelo para normalizar texto e prazo), “marca a 2 como feita”/“já fiz X” por voz, e botões **Feita**,
-**Descartar** e **Adiar 1 h** nas notificações. O painel nativo dos óculos não é alterável pelo firmware original; a
-entrega nas lentes usa a sessão de texto (negócio 19).
+**Descartar** e **Adiar 1 h** nas notificações, e espelhamento opcional no **To-do nativo dos óculos** (negócio 22,
+mão dupla, ver [AJUSTES_DOS_OCULOS.md](AJUSTES_DOS_OCULOS.md)).
 
 A análise roda em segundo plano (WorkManager, com rede) após cada transcrição, após perguntas à IA e a cada 30 min.
 

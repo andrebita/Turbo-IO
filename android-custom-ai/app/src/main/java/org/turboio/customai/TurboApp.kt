@@ -56,6 +56,8 @@ class TurboApp : Application() {
     lateinit var voice: VoiceAssistant; private set
     lateinit var probe: org.turboio.customai.probe.HardwareProbe; private set
     lateinit var suite: org.turboio.customai.probe.TestSuite; private set
+    lateinit var glassesSettings: org.turboio.customai.device.GlassesSettings; private set
+    lateinit var glassesTodo: org.turboio.customai.memory.GlassesTodoSync; private set
     val probeFiles by lazy { org.turboio.customai.probe.ProbeFiles(this) }
     lateinit var scope: CoroutineScope; private set
     lateinit var random: org.turboio.customai.ble.Randomness; private set
@@ -91,6 +93,9 @@ class TurboApp : Application() {
         display = LensDisplay(session, scope, random)
         probe = org.turboio.customai.probe.HardwareProbe(session, scope, org.turboio.customai.probe.PrefsPendingFlag(this), random, probeFiles)
         suite = org.turboio.customai.probe.TestSuite(probe, org.turboio.customai.probe.PrefsSuiteStore(this))
+        glassesSettings = org.turboio.customai.device.GlassesSettings(session, scope, settings.originalGlassesSettings)
+        glassesTodo = org.turboio.customai.memory.GlassesTodoSync(session, scope, { memoryStore }, random,
+            { settings.memorySettings().let { it.enabled && it.glassesTodo } })
         // The glasses LifeLog channel is shared: probes wait while the journal records from the glasses, and a
         // probe's OFF sequence clears the "start from the glasses menu" flag, so it is re-armed afterwards.
         probe.blocker = { if (ambient.usesGlasses) "A gravação do diário pelos óculos está ativa" else null }
@@ -108,6 +113,7 @@ class TurboApp : Application() {
                 if (ready) {
                     probe.connectionReady()   // re-sends LifeLog OFF if a previous one was not confirmed
                     if (settings.ambientSettings().glassesMenu) ambient.armGlassesMenu()
+                    memoryChanged()
                 } else ambient.connectionLost()
             }
         }
@@ -254,10 +260,14 @@ class TurboApp : Application() {
             }
         }
         if (answer == null) return null   // "já fiz X" that matches no item: an ordinary question for the model
+        if (intent is JournalIntent.Remind || intent is JournalIntent.Complete) memoryChanged()
         val c = settings.aiConfig()
         recordInteraction(question, answer, source, started, c.provider.id, c.model, System.currentTimeMillis() - started, "{\"journal_query\":true}")
         return answer
     }
+
+    /** Pending items changed somewhere (screen, voice, notification, analysis): mirror to the glasses' To-do. */
+    fun memoryChanged() { runCatching { glassesTodo.sync() } }
 
     /** Ids of the last numbered list read out (for "marca a 2 como feita"). */
     @Volatile var lastListed: List<Long> = emptyList()

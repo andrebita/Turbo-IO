@@ -80,8 +80,15 @@ intervalo configurável) → `type3` encerrar. `type3`/`type4` vindos dos óculo
 
 ## Segurança
 
-* **Sem OTA:** negócios 9 (MARS_FOTA) e 18 (transferência de arquivos) não existem no código de envio; a allow-list
-  `Business.OUTBOUND` só permite 13/{2,5,7,12,32}, 15/{1}, 19/{3,5,7}. Teste automatizado comprova a recusa.
+* **Sem OTA:** negócios 9 (MARS_FOTA) e 18 (transferência de arquivos) não existem no código de envio. A allow-list
+  `Business.OUTBOUND` só permite 13/{2,5,7,12,32,162,166,168}, 14/{1,4,8,9,11,14}, 15/{1,4,5,20}, 19/{3,5,7} e 22/{2}.
+  Há ainda uma segunda trava no conteúdo (`contentAllowed`):
+  * 15/20 só aceita os comandos do LifeLog;
+  * 15/4 só aceita a leitura de ajustes;
+  * 15/5 só aceita `display_config` e `crown_config`, com os valores observados no app oficial;
+  * 22/2 só aceita uma pendência por mensagem.
+
+  Testes automatizados comprovam as recusas.
 * **Chaves de API:** cifradas no Android Keystore; nunca em código-fonte, `BuildConfig`, log, backup (`allowBackup=false`,
   regras de extração vazias) ou APK. Campo de chave em branco mantém a salva; a UI só mostra `••••xy`.
 * **Rede:** somente HTTPS (`network_security_config` bloqueia texto claro); endpoints sem credenciais/parâmetros embutidos;

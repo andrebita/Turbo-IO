@@ -23,6 +23,7 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 | [docs/REVERSAO.md](docs/REVERSAO.md) | Voltar ao app oficial / desinstalar com segurança |
 | [docs/DESIGN_DIARIO_E_GRAVACAO.md](docs/DESIGN_DIARIO_E_GRAVACAO.md) | Arquitetura do diário, insights, gravação ambiente e sondas |
 | [docs/MEMORIA_E_ASSISTENTE.md](docs/MEMORIA_E_ASSISTENTE.md) | Memória: pessoas, pendências, proatividade, busca por sentido, revisão semanal |
+| [docs/AJUSTES_DOS_OCULOS.md](docs/AJUSTES_DOS_OCULOS.md) | Pendências no To-do nativo dos óculos; altura do texto, distância e duplo toque |
 
 ## Funcionalidades
 
@@ -47,6 +48,7 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 | **Ligar e desligar a gravação pelo menu dos óculos** (LifeLog) | implementado · mecanismo validado em hardware (G7) |
 | **Sondas de hardware** do LifeLog e da gravação pelo menu (fase 3), com desligamento garantido e pacote de diagnóstico | implementado · **executadas nos óculos**: LifeLog liga sem conta e o áudio (Opus 60 ms, mono) é inteligível; entrega em lotes de 20 s; canal 14 sem áudio — ver [TESTES.md](docs/TESTES.md) |
 | **Bateria de testes guiada** (6 etapas em sequência, instruções na tela, exportação única em ZIP) e teste de **ligar o LifeLog pelos óculos** (G7) | implementado · testado contra óculos emulados · aguardando execução nos óculos |
+| Pendências no **To-do nativo dos óculos** (mão dupla) e **ajustes da tela** (altura do texto, distância, duplo toque abre To-do) | implementado · testado contra óculos emulados · hardware pendente |
 | Atualização de firmware / OTA / transferência de arquivos | **excluído por design** (allow-list testada) |
 
 ### Pendente / próximas fases
