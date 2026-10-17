@@ -12,15 +12,31 @@ object Business {
     const val AI_ASSISTANT = 13   // wake, recorder, audio, transcript, answer, EOF, exit
     const val LAUNCHER = 15       // general status / battery
     const val SUBTITLE = 19       // temporary text display session
+    const val RECORDING = 14      // glasses-menu recording (phase-3 probe)
 
     /** Outbound allow-list: business -> envelope types we may send. Everything else is refused. */
     val OUTBOUND: Map<Int, Set<Int>> = mapOf(
-        AI_ASSISTANT to setOf(2, 5, 7, 12, 32),
-        LAUNCHER to setOf(1),
+        // 162 = LifeLog A2 (start), 166 = A6 (exit), 168 = A8 (realtime page flag)
+        AI_ASSISTANT to setOf(2, 5, 7, 12, 32, 162, 166, 168),
+        // 20 = launcher command, restricted by content to life_log_guide / life_log_switch (see contentAllowed)
+        LAUNCHER to setOf(1, 20),
         SUBTITLE to setOf(3, 5, 7),
+        // enable(14), start/ack(1), stop/ack(4), acks(8, 9, 11) — no delete/format/file commands
+        RECORDING to setOf(1, 4, 8, 9, 11, 14),
     )
 
     fun outboundAllowed(business: Int, type: Int): Boolean = OUTBOUND[business]?.contains(type) == true
+
+    private val LAUNCHER_COMMANDS = setOf("life_log_guide", "life_log_switch")
+
+    /** Second gate on the JSON body for generic command channels. */
+    fun contentAllowed(business: Int, type: Int, json: String): Boolean {
+        if (business == LAUNCHER && type == 20) {
+            val cmd = Regex("^\\{\"cmd\":\"([a-z_]+)\"").find(json)?.groupValues?.get(1)
+            return cmd in LAUNCHER_COMMANDS
+        }
+        return true
+    }
 }
 
 object Json {

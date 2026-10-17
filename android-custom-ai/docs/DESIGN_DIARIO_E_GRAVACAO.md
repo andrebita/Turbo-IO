@@ -1,6 +1,6 @@
 # Design: Diário com Insights (opção 2) e Gravação Contínua (opção 3)
 
-Status: **proposta para aprovação — nada implementado ainda.** Data: 2026-10-16.
+Status: **aprovado (2026-10-17); fases F1–F3 implementadas e testadas na JVM; F3 aguarda execução nos óculos; F4 depende do resultado.**
 
 ## 0. Resumo
 

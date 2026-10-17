@@ -158,8 +158,11 @@ class GlassesSession(
 
     private fun admit(business: Int, envelope: ByteArray): String? {
         if (status.phase != Phase.READY || link == null) return "Óculos não conectado"
-        val type = try { EnvelopeCodec.decode(envelope).type } catch (_: Exception) { return "Envelope inválido" }
-        if (!Business.outboundAllowed(business, type)) return "Comando não permitido (business=$business type=$type)"
+        val decoded = try { EnvelopeCodec.decode(envelope) } catch (_: Exception) { return "Envelope inválido" }
+        val type = decoded.type
+        if (!Business.outboundAllowed(business, type) || !Business.contentAllowed(business, type, decoded.jsonText())) {
+            return "Comando não permitido (business=$business type=$type)"
+        }
         return null
     }
 

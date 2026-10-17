@@ -28,6 +28,7 @@ class DiagnosticsFragment : Fragment() {
     private lateinit var info: TextView
     private lateinit var test: TextView
     private lateinit var log: TextView
+    private lateinit var probeStatus: TextView
     private val refresh: () -> Unit = { view?.post { renderLog() } }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
@@ -39,6 +40,18 @@ class DiagnosticsFragment : Fragment() {
         ui.button("Teste BLE: ler estado dos óculos") { bleTest() }
         ui.button("Teste do provedor de IA (pergunta curta)", filled = false) { aiTest() }
         test = ui.text(size = 13f)
+
+        ui.title("Testes de hardware (fase 3)")
+        ui.hint("Testes curtos e limitados nos canais de áudio do firmware original. Nada é gravado no firmware. " +
+            "Fale frases de teste e avise quem estiver perto. Ao final, exporte o pacote e envie para análise.")
+        ui.button("G1–G3 · LifeLog 30 s") { confirmProbe("LifeLog por 30 s") { app.probe.startLifeLog(30) } }
+        ui.button("G4 · LifeLog 5 min (fale com pausas)", filled = false) { confirmProbe("LifeLog por 5 min") { app.probe.startLifeLog(300) } }
+        ui.button("G14 · Gravação pelo menu dos óculos (até 3 min)", filled = false) { confirmProbe("gravação pelo menu") { app.probe.startRecording14(180) } }
+        ui.button("Parar teste", filled = false) { app.probe.stop() }
+        ui.button("Segurança: desligar LifeLog nos óculos", filled = false) { app.probe.forceLifeLogOff() }
+        probeStatus = ui.text(size = 12.5f, mono = true)
+        ui.button("Exportar último teste (com áudio)", filled = false) { exportProbe(true) }
+        ui.button("Exportar último teste (sem áudio)", filled = false) { exportProbe(false) }
 
         ui.title("Log técnico (sem chaves, endereços ou conteúdo)")
         val row = ui.row()
@@ -71,7 +84,24 @@ class DiagnosticsFragment : Fragment() {
         DiagnosticLog.addListener(refresh)
         renderLog()
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) { app.status.collect { info.text = header() } }
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { app.status.collect { info.text = header() } }
+                launch {
+                    app.probe.state.collect { p ->
+                        probeStatus.text = buildString {
+                            append("Teste: ${p.kind.ifEmpty { "—" }} · ${p.phase}")
+                            if (p.secondsLeft > 0) append(" · ${p.secondsLeft} s")
+                            append("\n${p.note}\nPacotes: ${p.records} · áudio ${p.audioBytes / 1024} KB")
+                            if (p.pendingOff) append("\n⚠ LifeLog pode estar LIGADO nos óculos — desligamento não confirmado")
+                            else if (p.offConfirmed) append("\n✓ LifeLog desligado (confirmado pelos óculos)")
+                            if (p.verdict.isNotEmpty()) append("\nResultado: ${p.verdict}")
+                            if (p.savedAt.isNotEmpty()) append("\nSalvo: ${p.savedAt}")
+                            if (p.events.isNotEmpty()) append("\n— eventos —\n").append(p.events.takeLast(12).joinToString("\n"))
+                        }
+                        probeStatus.setTextColor(statusColor(if (p.pendingOff) false else if (p.phase == "concluído") true else null))
+                    }
+                }
+            }
         }
     }
 
@@ -95,6 +125,22 @@ class DiagnosticsFragment : Fragment() {
             IA: ${ai.provider.id}/${ai.model} · chave ${if (app.settings.hasApiKey(ai.provider)) "presente" else "ausente"}
             Voz: ${app.settings.sttConfig().engine.id} · ${app.voice.state.value.phase}
         """.trimIndent()
+    }
+
+    private fun confirmProbe(what: String, start: () -> String?) {
+        AlertDialog.Builder(requireContext()).setTitle("Iniciar teste: $what?")
+            .setMessage("O teste capta áudio dos óculos e salva no telefone para análise. Use frases de teste e avise quem estiver por perto. " +
+                "Não altera o firmware; o LifeLog é desligado ao final (e de novo na próxima conexão, se necessário).")
+            .setPositiveButton("Iniciar") { _, _ -> start()?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show() } }
+            .setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun exportProbe(audio: Boolean) {
+        val dir = app.probeFiles.latest() ?: run { Toast.makeText(requireContext(), "Nenhum teste salvo ainda", Toast.LENGTH_SHORT).show(); return }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val intent = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.probeFiles.share(dir, audio, header() + "\n\n" + DiagnosticLog.export()) }
+            startActivity(intent)
+        }
     }
 
     private fun renderLog() {

@@ -54,6 +54,8 @@ class TurboApp : Application() {
     lateinit var session: GlassesSession; private set
     lateinit var display: LensDisplay; private set
     lateinit var voice: VoiceAssistant; private set
+    lateinit var probe: org.turboio.customai.probe.HardwareProbe; private set
+    val probeFiles by lazy { org.turboio.customai.probe.ProbeFiles(this) }
     lateinit var scope: CoroutineScope; private set
     val ai = AiClient()
     private val history = ArrayList<ChatMessage>()
@@ -85,12 +87,16 @@ class TurboApp : Application() {
             store = PrefsPeerStore(this),
         )
         display = LensDisplay(session, scope, random)
-        voice = VoiceAssistant(session, scope, random, ::speechInput, { q -> voiceAnswer(q) }, settings::voiceSettings, { !display.active })
+        probe = org.turboio.customai.probe.HardwareProbe(session, scope, org.turboio.customai.probe.PrefsPendingFlag(this), random, probeFiles)
+        voice = VoiceAssistant(session, scope, random, ::speechInput, { q -> voiceAnswer(q) }, settings::voiceSettings, { !display.active && !probe.busy })
         var wasReady = false
         session.onStatus = { s ->
             _status.value = s
             val ready = s.phase == Phase.READY
-            if (ready != wasReady) { wasReady = ready; voice.connectionChanged(ready) }
+            if (ready != wasReady) {
+                wasReady = ready; voice.connectionChanged(ready)
+                if (ready) probe.connectionReady()   // re-sends LifeLog OFF if a previous one was not confirmed
+            }
         }
         runCatching { org.turboio.customai.insights.DailyInsightWorker.schedule(this) }
         DiagnosticLog.i("APP", "Turbo IO Custom AI ${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")

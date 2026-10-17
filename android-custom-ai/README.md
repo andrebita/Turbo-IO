@@ -21,6 +21,7 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 | [docs/TESTES.md](docs/TESTES.md) | Resultados dos testes A/B/C, evidências, roteiro para teste em hardware |
 | [docs/PERMISSOES_E_RISCOS.md](docs/PERMISSOES_E_RISCOS.md) | Permissões, integridade do APK, riscos |
 | [docs/REVERSAO.md](docs/REVERSAO.md) | Voltar ao app oficial / desinstalar com segurança |
+| [docs/DESIGN_DIARIO_E_GRAVACAO.md](docs/DESIGN_DIARIO_E_GRAVACAO.md) | Arquitetura do diário, insights, gravação ambiente e sondas |
 
 ## Funcionalidades
 
@@ -35,7 +36,11 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 | Exibir resposta nas lentes (sessão de texto, negócio 19) | implementado · hardware pendente |
 | Assistente de voz acionado nos óculos (negócio 13) com microfone **dos óculos** → Whisper ou Google STT | implementado · fluxo testado com áudio Opus sintético · hardware pendente |
 | Alternativa: microfone do **telefone** com reconhecimento nativo do Android (sem chave) | implementado · hardware pendente |
-| Telas: Conexão, IA, Testes, Diagnóstico | implementado · compila, lint sem erros |
+| Telas: Conexão, IA, Diário, Testes, Diagnóstico | implementado · compila, lint sem erros |
+| **Diário**: todas as perguntas/respostas, busca sem acentos, exportação Markdown, retenção | implementado · testado (SQLite real) |
+| **Insights do dia** (resumo, destaques, tarefas, decisões, compromissos, pessoas, citações), automático às 21h, nas lentes por voz (“resumo do meu dia”, “o que falei sobre X”) | implementado · testado com modelo simulado |
+| **Gravação ambiente** pelo microfone do telefone → Deepgram (separa falantes) ou OpenAI → diário, só a fala é cobrada, áudio apagado após transcrever | implementado · testado ponta a ponta com transcritor simulado e endpoint real · uso real pendente |
+| **Sondas de hardware** do LifeLog e da gravação pelo menu (fase 3), com desligamento garantido e pacote de diagnóstico | implementado · testado contra óculos emulados · **aguardando execução nos óculos** |
 | Atualização de firmware / OTA / transferência de arquivos | **excluído por design** (allow-list testada) |
 
 ### Pendente / próximas fases
