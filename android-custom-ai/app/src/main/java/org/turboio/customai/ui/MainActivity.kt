@@ -71,5 +71,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val CONTAINER = 0x7f0a7392
         const val EXTRA_TAB = "tab"
+        const val EXTRA_SECTION = "section"
     }
 }

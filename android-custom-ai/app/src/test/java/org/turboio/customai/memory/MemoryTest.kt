@@ -126,6 +126,14 @@ class MemoryTest {
         assertTrue(store.blocks("2026-10-17").single().summary.contains("removida"))
     }
 
+    @Test fun longConversationsAreSplitAndEarlierPartsAnalysedWhileItContinues() = runBlocking {
+        repeat(40) { ambient(9, it, if (it % 2 == 0) "Você" else "Pessoa A", "x".repeat(600)) }   // 40 min without a pause
+        val eng = MemoryEngine(journal, store, ScriptedLlm { _, _ -> """{"categoria":"trabalho","relevancia":0.5,"resumo":"Reunião."}""" }, { MemorySettings() }, zone, maxChars = 6000)
+        assertEquals(listOf(9, 9, 9, 9, 4), eng.drafts(journal.day("2026-10-17")).map { it.entries.size })   // ~608 chars each
+        val run = eng.process(listOf("2026-10-17"), at(9, 40))                       // still talking: last part stays open
+        assertEquals(4, run.blocks)
+    }
+
     @Test fun queriesPendingMorningSearchAndWeekly() = runBlocking {
         ambient(10, 0, "Pessoa A", "Me manda o relatório?"); ambient(10, 1, "Você", "Oi, Marina. Te mando sexta.")
         engine(ScriptedLlm { _, _ -> firstConversation }).process(listOf("2026-10-17"), at(11, 0))

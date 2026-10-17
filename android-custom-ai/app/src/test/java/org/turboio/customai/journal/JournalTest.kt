@@ -171,9 +171,18 @@ class JournalTest {
         assertEquals(JournalIntent.Tasks(-1), JournalIntents.detect("tarefas de ontem"))
         assertEquals(JournalIntent.Search("orcamento", -1), JournalIntents.detect("O que eu falei sobre orçamento ontem?"))
         assertEquals(JournalIntent.Search("viagem para salvador", null), JournalIntents.detect("procure no meu diário por viagem para Salvador"))
+        assertEquals(JournalIntent.Pending(null), JournalIntents.detect("O que eu tenho pendente?"))
+        assertEquals(JournalIntent.Pending(null), JournalIntents.detect("quais são minhas pendências"))
+        assertEquals(JournalIntent.Pending("marina"), JournalIntents.detect("O que tenho pendente com a Marina?"))
+        assertEquals(JournalIntent.Pending("joao"), JournalIntents.detect("o que eu combinei com o João"))
+        assertEquals(JournalIntent.Person("marina"), JournalIntents.detect("O que eu conversei com a Marina?"))
+        assertEquals(JournalIntent.Person("dr paulo".let { "paulo" }), JournalIntents.detect("última conversa com o doutor Paulo"))
+        assertEquals(JournalIntent.Weekly, JournalIntents.detect("Qual o resumo da semana?"))
+        assertEquals(JournalIntent.Weekly, JournalIntents.detect("como foi minha semana"))
         // Ordinary questions must go to the model, not the journal.
         listOf("Qual é a capital do Brasil?", "Me dê insights sobre investimentos", "Quais tarefas priorizar em um projeto?",
-            "Faça um resumo da história do Brasil", "O que eu fiz de errado neste código?", "Como organizar tarefas?")
+            "Faça um resumo da história do Brasil", "O que eu fiz de errado neste código?", "Como organizar tarefas?",
+            "O que fazer com sobras de arroz?", "Quem é o presidente do Brasil?")
             .forEach { assertNull(it, JournalIntents.detect(it)) }
     }
 

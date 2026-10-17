@@ -79,19 +79,24 @@ class MemoryEngine(
     private val settings: () -> MemorySettings,
     private val zone: ZoneId = ZoneId.systemDefault(),
     private val gapMs: Long = 4 * 60_000,
+    private val maxChars: Int = 15_000,
 ) {
     data class Draft(val id: String, val day: String, val entries: List<Entry>) {
         val tsStart get() = entries.first().tsStart
         val tsEnd get() = entries.maxOf { it.tsEnd }
     }
 
-    /** Groups a day's entries into conversations (gap < [gapMs]); journal questions are left out. */
+    /** Groups a day's entries into conversations (gap < [gapMs], long ones split at ~[maxChars]); journal questions are left out. */
     fun drafts(entries: List<Entry>): List<Draft> {
         val usable = entries.filter { !it.metaJson.contains("\"journal_query\":true") }.sortedBy { it.tsStart }
         val out = ArrayList<MutableList<Entry>>()
+        var chars = 0
         for (e in usable) {
             val last = out.lastOrNull()
-            if (last == null || last.first().day != e.day || e.tsStart - last.maxOf { it.tsEnd } >= gapMs) out.add(arrayListOf(e)) else last.add(e)
+            val size = e.text.length + minOf(e.answer.length, 300)
+            if (last == null || last.first().day != e.day || e.tsStart - last.maxOf { it.tsEnd } >= gapMs || chars + size > maxChars) {
+                out.add(arrayListOf(e)); chars = size
+            } else { last.add(e); chars += size }
         }
         return out.map { Draft("${it.first().day}#${it.first().id}", it.first().day, it) }
     }
@@ -117,9 +122,11 @@ class MemoryEngine(
     suspend fun process(days: List<String>, now: Long, force: Boolean = false): MemoryRun {
         var blocks = 0; var failed = 0
         val newItems = ArrayList<Item>(); val closed = ArrayList<Item>(); val named = ArrayList<String>()
+        val closedEarly = HashSet<String>()   // a part followed by another part of the same day is complete
         val today = Days.of(now, zone)
-        for (day in days) for (d in drafts(journal.day(day))) {
-            val isClosed = d.day < today || now - d.tsEnd >= gapMs
+        for (day in days) for (d in drafts(journal.day(day)).let { list -> list.map { it to (it === list.last()) } }.map { (d, last) ->
+            d.also { if (!last) closedEarly.add(d.id) } }) {
+            val isClosed = d.day < today || d.id in closedEarly || now - d.tsEnd >= gapMs
             if (!isClosed) continue
             val h = hash(d)
             val previous = store.block(d.id)

@@ -124,6 +124,35 @@ class SettingsRepository(context: Context) {
             .putBoolean("ambient.glassesMenu", s.glassesMenu).apply()
     }
 
+    fun memorySettings(): org.turboio.customai.memory.MemorySettings {
+        val policies = runCatching {
+            val o = org.json.JSONObject(prefs.getString("memory.policies", "{\"ruido\":\"ignorar\"}") ?: "{}")
+            o.keys().asSequence().associateWith { org.turboio.customai.memory.CategoryPolicy.of(o.getString(it)) }
+        }.getOrDefault(mapOf("ruido" to org.turboio.customai.memory.CategoryPolicy.IGNORE))
+        return org.turboio.customai.memory.MemorySettings(
+            enabled = prefs.getBoolean("memory.enabled", true),
+            notifyNew = prefs.getBoolean("memory.notifyNew", true),
+            lensNew = prefs.getBoolean("memory.lensNew", false),
+            reminders = prefs.getBoolean("memory.reminders", true),
+            reminderLeadMin = prefs.getInt("memory.lead", 15).coerceIn(0, 240),
+            morning = prefs.getBoolean("memory.morning", true),
+            morningHour = prefs.getInt("memory.morningHour", 8).coerceIn(0, 23),
+            morningMinute = prefs.getInt("memory.morningMinute", 0).coerceIn(0, 59),
+            weekly = prefs.getBoolean("memory.weekly", true),
+            weeklyDow = prefs.getInt("memory.weeklyDow", 7).coerceIn(1, 7),
+            weeklyHour = prefs.getInt("memory.weeklyHour", 19).coerceIn(0, 23),
+            policies = policies,
+        )
+    }
+
+    fun saveMemory(s: org.turboio.customai.memory.MemorySettings) {
+        val policies = org.json.JSONObject().apply { s.policies.forEach { (k, v) -> put(k, v.id) } }
+        prefs.edit().putBoolean("memory.enabled", s.enabled).putBoolean("memory.notifyNew", s.notifyNew).putBoolean("memory.lensNew", s.lensNew)
+            .putBoolean("memory.reminders", s.reminders).putInt("memory.lead", s.reminderLeadMin).putBoolean("memory.morning", s.morning)
+            .putInt("memory.morningHour", s.morningHour).putInt("memory.morningMinute", s.morningMinute).putBoolean("memory.weekly", s.weekly)
+            .putInt("memory.weeklyDow", s.weeklyDow).putInt("memory.weeklyHour", s.weeklyHour).putString("memory.policies", policies.toString()).apply()
+    }
+
     fun deepgramKey(): String = secrets.get("key.ambient.deepgram")
     fun hasDeepgramKey(): Boolean = secrets.has("key.ambient.deepgram")
     fun setDeepgramKey(key: String) = secrets.put("key.ambient.deepgram", key.trim())

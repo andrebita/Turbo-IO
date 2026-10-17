@@ -29,6 +29,18 @@ nas lentes (modo microfone do telefone); (2) o prazo da sonda de versão podia d
 autenticação quando a resposta chegava perto de 5 s (teste de regressão `slowButInTimeRepliesStillConnect` falha sem a correção);
 (3) constantes de status BLE do Android 13+ (`BluetoothStatusCodes`), apontadas pelo lint.
 
+### Memória e assistente (0.4.0)
+
+| Teste | Resultado | Onde |
+| --- | --- | --- |
+| Conversa → pessoa com nome por contexto, fala renomeada (e reindexada), compromisso com data absoluta; baixa confiança descartada; conversa inalterada não é reanalisada | ✅ | `MemoryTest.conversationBecomesPersonNamedSpeakerAndDatedCommitment` |
+| Pendência repetida vira atualização (novo prazo), conclusão por evidência, descartada não volta, id inexistente ignorado | ✅ | `duplicatesMergeCompletionsCloseAndDismissedItemsStayGone` |
+| Nome sem evidência ou com confiança < 0,7 ignorado; correção do usuário vence o modelo e vale para o trecho todo | ✅ | `namesNeedEvidenceAndUserCorrectionsWin` |
+| Política “não guardar” apaga as falas; conversa ainda aberta não é analisada | ✅ | `privacyPoliciesAndOpenConversations` |
+| Pendências por pessoa, resumo da manhã (hoje/atrasadas), busca planejada com período e citações, ficha da pessoa, revisão semanal | ✅ | `queriesPendingMorningSearchAndWeekly` |
+| Intenções de voz novas sem capturar perguntas comuns | ✅ | `JournalTest.intents` |
+| Qualidade real da extração com o seu modelo e conversas reais | ⏳ uso real | — |
+
 ### Diário, insights e gravação ambiente (fases 1–3)
 
 | Item | Resultado | Evidência |
@@ -196,8 +208,8 @@ Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar Li
 
 | Campo | Valor |
 | --- | --- |
-| Arquivo | `TurboIO-CustomAI-0.3.2-diario-debug.apk` (versionCode 7; instala por cima da 0.2.x, mesma assinatura e dados) |
-| SHA-256 | ver `TurboIO-CustomAI-0.3.2-diario-debug.apk.sha256` publicado junto |
+| Arquivo | `TurboIO-CustomAI-0.4.0-memoria-debug.apk` (versionCode 8; instala por cima da 0.2.x, mesma assinatura e dados) |
+| SHA-256 | ver `TurboIO-CustomAI-0.4.0-memoria-debug.apk.sha256` publicado junto |
 | Assinatura | certificado *Android Debug* (APK de teste; não é build de loja) |
 | Pacote / alvo | `org.turboio.customai`, minSdk 26, targetSdk 35 |
 | Conteúdo proprietário | nenhum (sem `.so`, sem classes/recursos RayNeo) |

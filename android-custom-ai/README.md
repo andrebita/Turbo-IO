@@ -22,6 +22,7 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 | [docs/PERMISSOES_E_RISCOS.md](docs/PERMISSOES_E_RISCOS.md) | Permissões, integridade do APK, riscos |
 | [docs/REVERSAO.md](docs/REVERSAO.md) | Voltar ao app oficial / desinstalar com segurança |
 | [docs/DESIGN_DIARIO_E_GRAVACAO.md](docs/DESIGN_DIARIO_E_GRAVACAO.md) | Arquitetura do diário, insights, gravação ambiente e sondas |
+| [docs/MEMORIA_E_ASSISTENTE.md](docs/MEMORIA_E_ASSISTENTE.md) | Memória: pessoas, pendências, proatividade, busca por sentido, revisão semanal |
 
 ## Funcionalidades
 
@@ -39,6 +40,9 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 | Telas: Conexão, IA, Diário, Testes, Diagnóstico | implementado · compila, lint sem erros |
 | **Diário**: todas as perguntas/respostas, busca sem acentos, exportação Markdown, retenção | implementado · testado (SQLite real) |
 | **Insights do dia** (resumo, destaques, tarefas, decisões, compromissos, pessoas, citações), automático às 21h, nas lentes por voz (“resumo do meu dia”, “o que falei sobre X”) | implementado · testado com modelo simulado |
+| **Memória** (0.4.0): cada conversa vira pessoas (nome descoberto pelo contexto, só com evidência), **pendências persistentes** com prazo, origem e conclusão automática, e filtro de privacidade por tipo de conversa | implementado · testado com modelo simulado e SQLite real · uso real pendente |
+| **Assistente proativo**: aviso de pendência nova, lembrete antes do prazo, resumo da manhã, revisão semanal (notificação e lentes) | implementado · compila e passa no lint · uso real pendente |
+| **Perguntas à memória** por voz ou texto: “minhas pendências”, “o que tenho com a Marina”, “o que falei de custos semana passada”, “resumo da semana” | implementado · testado com modelo simulado |
 | **Gravação ambiente** pelos **microfones dos óculos** (LifeLog em tempo real) ou pelo do telefone → Deepgram (separa falantes) ou OpenAI → diário; “você” identificado pelo sensor de voz dos óculos; só a fala é cobrada; áudio apagado após transcrever | implementado · formato e sinais validados em hardware; gravação de diário pelos óculos ainda sem uso real |
 | **Ligar e desligar a gravação pelo menu dos óculos** (LifeLog) | implementado · mecanismo validado em hardware (G7) |
 | **Sondas de hardware** do LifeLog e da gravação pelo menu (fase 3), com desligamento garantido e pacote de diagnóstico | implementado · **executadas nos óculos**: LifeLog liga sem conta e o áudio (Opus 60 ms, mono) é inteligível; entrega em lotes de 20 s; canal 14 sem áudio — ver [TESTES.md](docs/TESTES.md) |

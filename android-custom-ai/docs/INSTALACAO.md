@@ -73,3 +73,19 @@ resposta nas lentes. Diga “encerrar” / “pode fechar” para fechar. A aba 
 
 * **Remover acentos no display:** ative se as lentes mostrarem quadrados no lugar de “ã, ç, é”.
 * **Manter conexão com a tela desligada:** inicia um serviço em primeiro plano (notificação “Turbo IO conectado”).
+
+## 7. Memória e pendências (aba **Diário**)
+
+A aba Diário tem quatro seções: **Dia** (linha do tempo e insights), **Pendências**, **Pessoas** e **Semana**.
+
+* Depois de cada conversa (≈ 5 min de silêncio), o app analisa o que foi dito com o provedor de IA configurado e cria
+  pendências (tarefas, compromissos, decisões, coisas a acompanhar) com prazo, pessoa e a frase de origem. Ele também
+  marca como feita uma pendência quando a conversa mostra isso (“já mandei o relatório”).
+* Nomes: “Pessoa A” vira um nome quando a conversa deixa claro quem é (“oi, Marina”). Para corrigir ou indicar, toque
+  longo na fala na linha do tempo → **Quem está falando?**. A sua escolha vale para todas as falas daquele trecho.
+* Proatividade (notificações, e lentes quando conectados): pendência nova, lembrete 15 min antes do prazo, resumo da
+  manhã às 08:00, revisão no domingo às 19:00. Tudo configurável em Pendências → Configurações da memória.
+* Privacidade por tipo de conversa (trabalho, família, saúde…): **Incluir**, **Ignorar** (fica no diário, fora de
+  pendências e resumos) ou **Não guardar** (as falas são apagadas depois de classificadas).
+* Por voz ou em Semana → Perguntar: “minhas pendências”, “o que tenho pendente com a Marina”, “o que conversei com o
+  João”, “o que falei de custos semana passada”, “resumo da semana”.

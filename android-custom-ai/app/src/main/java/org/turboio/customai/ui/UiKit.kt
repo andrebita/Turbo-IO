@@ -99,6 +99,17 @@ class Column(val context: Context) {
     }
 
     fun row(): LinearLayout = add(LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL })
+
+    /** Equal-width small buttons side by side. */
+    fun buttons(vararg actions: Pair<String, () -> Unit>): LinearLayout {
+        val row = row()
+        for ((label, action) in actions) row.addView(MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = label; isAllCaps = false; textSize = 13f; setOnClickListener { action() }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
+        return row
+    }
+
+    fun clear() = root.removeAllViews()
 }
 
 fun statusColor(ok: Boolean?): Int = when (ok) {

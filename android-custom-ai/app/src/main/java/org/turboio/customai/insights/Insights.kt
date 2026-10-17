@@ -123,6 +123,8 @@ class InsightEngine(
     private val modelTag: () -> Pair<String, String>,   // provider, model (part of cache key)
     private val windowChars: Int = 20_000,
     private val now: () -> Long = System::currentTimeMillis,
+    /** Entry ids left out of the daily insight (memory: ignored categories and conversations without content). */
+    private val exclude: (String) -> Set<Long> = { emptySet() },
 ) {
     data class Result(val insight: DayInsight, val text: String, val cached: Boolean, val windows: Int)
 
@@ -136,7 +138,8 @@ class InsightEngine(
     }
 
     private fun speakerPrefix(e: Entry): String = try {
-        when (org.json.JSONObject(e.metaJson).optString("speaker")) { "wearer" -> "Você: "; "other" -> "Outra pessoa: "; else -> "Ambiente: " }
+        val meta = org.json.JSONObject(e.metaJson)
+        if (meta.optString("person").isNotEmpty()) "" else when (meta.optString("speaker")) { "wearer" -> "Você: "; "other" -> "Outra pessoa: "; else -> "Ambiente: " }
     } catch (_: Exception) { "Ambiente: " }
 
     fun windows(entries: List<Entry>): List<String> {
@@ -164,7 +167,8 @@ class InsightEngine(
     }
 
     suspend fun day(day: String, force: Boolean = false): Result {
-        val entries = store.day(day).filter { !it.metaJson.contains("\"journal_query\":true") }
+        val excluded = exclude(day)
+        val entries = store.day(day).filter { !it.metaJson.contains("\"journal_query\":true") && it.id !in excluded }
         if (entries.isEmpty()) return Result(DayInsight(resumo = "Nenhum registro em ${Days.label(day)}."), "Nenhum registro em ${Days.label(day)}.", true, 0)
         val (provider, model) = modelTag()
         val windows = windows(entries)

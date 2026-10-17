@@ -31,6 +31,7 @@ ou leitura de notificações. `<queries>` só consulta a versão de `com.rayneo.
 | Firmware | Não existe código de OTA/arquivos; allow-list de negócios testada; nenhuma etapa grava no firmware |
 | Disputa de conexão com o app oficial | Use um cliente por vez; procedimento de troca em [REVERSAO.md](REVERSAO.md) |
 | Perguntas/áudio enviados a terceiros | Só para o provedor configurado pelo usuário, via HTTPS; na gravação ambiente, só os trechos com fala, e só após o consentimento; áudio bruto apagado após a transcrição |
+| Texto das conversas analisado pela IA (memória) | Só texto, nunca áudio, ao provedor de IA configurado; uma chamada por conversa; categorias marcadas “não guardar” têm as falas apagadas; desligável em Diário → Pendências → Configurações da memória |
 | Vazamento de chave | Keystore AES-GCM, sem backup, sem log, sem exibição; apagar dados/desinstalar remove |
 | Compatibilidade com Strix OS 1.0.5.5 | Protocolo validado antes do 1.0.5.5; **teste em hardware pendente** (Teste C) |
 | Uso dirigindo/andando | Respostas curtas; não use o display de forma que comprometa a segurança |

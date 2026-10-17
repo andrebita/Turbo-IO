@@ -97,13 +97,13 @@ class DiagnosticsFragment : Fragment() {
         ui.title("Reversão")
         ui.button("Apagar todos os dados deste app", filled = false) {
             AlertDialog.Builder(requireContext()).setTitle("Apagar dados?")
-                .setMessage("Remove chaves de API, configurações, o diário e o óculos salvo deste app. O app oficial e o firmware não são afetados.")
+                .setMessage("Remove chaves de API, configurações, o diário, a memória (pessoas e pendências) e o óculos salvo deste app. O app oficial e o firmware não são afetados.")
                 .setPositiveButton("Apagar") { _, _ ->
                     if (app.settings.ambientSettings().glassesMenu) {   // tell the glasses the phone-side LifeLog setup is gone
                         app.settings.saveAmbient(app.settings.ambientSettings().copy(glassesMenu = false)); app.ambient.armGlassesMenu()
                     }
                     app.session.forget(); app.settings.wipe(); app.clearHistory()
-                    viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { app.journal.wipe() } }
+                    viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { app.journal.wipe() }; runCatching { app.memoryStore.wipe() } }
                     app.ambient.stop(); app.ambient.wipe()
                     ConnectionService.stop(requireContext())
                     DiagnosticLog.i("APP", "dados locais apagados pelo usuário")

@@ -112,6 +112,7 @@ class TurboApp : Application() {
             }
         }
         runCatching { org.turboio.customai.insights.DailyInsightWorker.schedule(this) }
+        runCatching { org.turboio.customai.memory.MemorySchedule.all(this) }
         DiagnosticLog.i("APP", "Turbo IO Custom AI ${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
     }
 
@@ -136,7 +137,36 @@ class TurboApp : Application() {
     val insights: InsightEngine by lazy {
         InsightEngine(journal, { system, user, maxTokens -> completeForInsights(system, user, maxTokens) }, {
             val c = settings.aiConfig(); c.provider.id to settings.journalSettings().insightsModel.ifBlank { c.model }
-        })
+        }, exclude = { day -> excludedFromInsights(day) })
+    }
+
+    /** Persistent memory (docs/MEMORIA_E_ASSISTENTE.md): conversations, people, open items, proactive delivery. */
+    val memoryStore: org.turboio.customai.memory.MemoryStore by lazy { org.turboio.customai.memory.MemoryStore(sqlDb) }
+    val memory: org.turboio.customai.memory.MemoryEngine by lazy {
+        org.turboio.customai.memory.MemoryEngine(journal, memoryStore, { s, u, m -> completeForInsights(s, u, m) }, settings::memorySettings)
+    }
+    val memoryQueries: org.turboio.customai.memory.MemoryQueries by lazy {
+        org.turboio.customai.memory.MemoryQueries(journal, memoryStore, { s, u, m -> completeForInsights(s, u, m) })
+    }
+
+    /** Ignored categories and conversations without content stay out of the daily insight. */
+    private fun excludedFromInsights(day: String): Set<Long> {
+        val s = settings.memorySettings()
+        if (!s.enabled) return emptySet()
+        return memoryStore.blocks(day).filter { s.policy(it.category) != org.turboio.customai.memory.CategoryPolicy.INCLUDE || it.relevance < 0.2 }
+            .flatMap { it.entryIds }.toSet()
+    }
+
+    /** This week's review (cached per week unless [force]). */
+    suspend fun weeklyReview(force: Boolean = false): org.turboio.customai.memory.MemoryQueries.Weekly? = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val week = memoryQueries.weekStart(now).toString()
+        if (!force) journal.latestInsight(week, "weekly")?.let { return@withContext org.turboio.customai.memory.MemoryQueries.Weekly(org.json.JSONObject(it.json), it.text) }
+        memory.process(listOf(Days.shift(Days.of(now), -1), Days.of(now)), now)
+        val w = memoryQueries.weekly(now) { d -> journal.latestInsight(d) } ?: return@withContext null
+        val c = settings.aiConfig()
+        journal.saveInsight(org.turboio.customai.journal.StoredInsight(week, "weekly", "w-" + now, w.json.toString(), w.text, c.provider.id, c.model, now))
+        w
     }
 
     /** One-shot completion without chat history (insights, journal search). Optional cheaper insights model. */
@@ -178,6 +208,7 @@ class TurboApp : Application() {
                     provider = provider, model = model, latencyMs = latency, metaJson = meta))
             }.onFailure { DiagnosticLog.w("DIARIO", "falha ao registrar interação: ${it.javaClass.simpleName}") }
         }
+        if (!meta.contains("journal_query")) runCatching { org.turboio.customai.memory.MemoryWorker.kick(this) }
     }
 
     /** Voice entry point: journal questions are answered from the journal; everything else goes to the model. */
@@ -192,12 +223,18 @@ class TurboApp : Application() {
         val today = Days.of(System.currentTimeMillis())
         val started = System.currentTimeMillis()
         DiagnosticLog.i("DIARIO", "pergunta sobre o diário: ${intent.javaClass.simpleName}")
+        val memoryOn = settings.memorySettings().enabled
         val answer = withContext(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
             when (intent) {
                 is JournalIntent.Summary -> insights.day(Days.shift(today, intent.dayOffset.toLong())).insight.lens(400)
-                is JournalIntent.Tasks -> insights.day(Days.shift(today, intent.dayOffset.toLong())).insight.tarefas
+                is JournalIntent.Tasks -> if (memoryOn) memoryQueries.pendingAnswer(now) else insights.day(Days.shift(today, intent.dayOffset.toLong())).insight.tarefas
                     .let { if (it.isEmpty()) "Nenhuma tarefa registrada." else "Tarefas: " + it.take(5).joinToString("; ") }
-                is JournalIntent.Search -> insights.ask(question, intent.term, intent.dayOffset?.let { Days.shift(today, it.toLong()) })
+                is JournalIntent.Pending -> memoryQueries.pendingAnswer(now, intent.person)
+                is JournalIntent.Person -> memoryQueries.personAnswer(intent.name, now)
+                is JournalIntent.Weekly -> weeklyReview()?.text?.let { DisplayText.clean(it).take(500) } ?: "Ainda não há conteúdo suficiente nesta semana."
+                is JournalIntent.Search -> if (memoryOn) memoryQueries.search(question, now)
+                    else insights.ask(question, intent.term, intent.dayOffset?.let { Days.shift(today, it.toLong()) })
             }
         }
         val c = settings.aiConfig()

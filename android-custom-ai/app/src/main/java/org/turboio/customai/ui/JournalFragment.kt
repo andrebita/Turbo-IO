@@ -107,10 +107,41 @@ class JournalFragment : Fragment() {
             DailyInsightWorker.schedule(requireContext()); toast("Configurações salvas")
         }
         ui.hint("Tudo fica no telefone. Para gerar insights, o texto do dia é enviado ao provedor de IA configurado.")
-        return ui.scroll()
+        // Sections: Dia (this column) · Pendências · Pessoas · Semana (memory, docs/MEMORIA_E_ASSISTENTE.md).
+        memory = MemoryViews(requireContext()) { viewLifecycleOwner.lifecycleScope }
+        val dayView = ui.scroll()
+        val views = listOf(dayView, memory.pendingView, memory.peopleView, memory.weekView)
+        val tabs = com.google.android.material.button.MaterialButtonToggleGroup(requireContext()).apply { isSingleSelection = true; isSelectionRequired = true }
+        val labels = listOf("Dia", "Pendências", "Pessoas", "Semana")
+        val ids = labels.map { View.generateViewId() }
+        labels.forEachIndexed { i, label ->
+            tabs.addView(MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+                id = ids[i]; text = label; isAllCaps = false; textSize = 13f; setPadding(0, paddingTop, 0, paddingBottom)
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        val frame = android.widget.FrameLayout(requireContext())
+        views.forEach { frame.addView(it, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)) }
+        tabs.addOnButtonCheckedListener { _, id, checked ->
+            if (!checked) return@addOnButtonCheckedListener
+            val index = ids.indexOf(id)
+            views.forEachIndexed { i, v -> v.visibility = if (i == index) View.VISIBLE else View.GONE }
+            when (index) { 1 -> memory.loadPending(); 2 -> memory.loadPeople(); 3 -> memory.loadWeek() }
+        }
+        selectSection = { name -> tabs.check(ids[when (name) { "pending" -> 1; "people" -> 2; "week" -> 3; else -> 0 }]) }
+        val pad = ui.dp(12)
+        return LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(tabs, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { setMargins(pad, pad / 2, pad, 0) })
+            addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
     }
 
+    private lateinit var memory: MemoryViews
+    private var selectSection: (String) -> Unit = {}
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        selectSection(activity?.intent?.getStringExtra(MainActivity.EXTRA_SECTION) ?: "day")
+        activity?.intent?.removeExtra(MainActivity.EXTRA_SECTION)
         load()
         app.ambient.refresh()
         viewLifecycleOwner.lifecycleScope.launch {
@@ -166,9 +197,9 @@ class JournalFragment : Fragment() {
             val body = if (e.kind == EntryKind.INTERACTION) "Você: ${e.text}\nIA: ${e.answer}" else e.text
             val tv = c.text("$head\n${body.take(1200)}", size = 13.5f)
             tv.setPadding(0, c.dp(6), 0, c.dp(6))
-            tv.setOnLongClickListener { confirmDelete(e); true }
+            tv.setOnLongClickListener { entryMenu(e); true }
         }
-        c.hint("Toque longo em um registro para apagá-lo.")
+        c.hint("Toque longo em uma fala para dizer quem está falando ou para apagá-la.")
         timeline.addView(c.root)
     }
 
@@ -202,6 +233,15 @@ class JournalFragment : Fragment() {
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/markdown")
                 .putExtra(Intent.EXTRA_SUBJECT, "Diário ${Days.label(day)}").putExtra(Intent.EXTRA_TEXT, md), "Exportar diário"))
         }
+    }
+
+    private fun entryMenu(e: Entry) {
+        val labelled = e.kind == EntryKind.AMBIENT && runCatching { org.json.JSONObject(e.metaJson).optString("label").let { it.isNotEmpty() && it != "Você" } }.getOrDefault(false)
+        if (!labelled) { confirmDelete(e); return }
+        AlertDialog.Builder(requireContext()).setTitle(e.text.substringBefore(":").take(40))
+            .setItems(arrayOf("Quem está falando?", "Apagar esta fala")) { _, which ->
+                if (which == 0) memory.assignSpeaker(e) { load() } else confirmDelete(e)
+            }.show()
     }
 
     private fun confirmDelete(e: Entry) {

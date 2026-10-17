@@ -32,6 +32,10 @@
 | `voice` | Rodada de voz no negócio 13 | sequência completa com áudio Opus sintético |
 | `display` | Limpeza de Markdown, paginação, sessão de texto do negócio 19 | sim |
 | `security`, `diag` | Keystore, redator de segredos, log | redator na JVM |
+| `journal`, `insights` | Diário (SQLite + FTS4), insights do dia, intenções de voz | SQLite real (JDBC) |
+| `ambient` | Gravação ambiente: fontes (óculos LifeLog, telefone), segmentos, fatias, transcrição, falantes | pipeline completo com transcritor simulado |
+| `memory` | Conversas → pessoas, pendências, conclusões; busca planejada; manhã/semana; lembretes ([MEMORIA_E_ASSISTENTE.md](MEMORIA_E_ASSISTENTE.md)) | motor e consultas com modelo simulado |
+| `probe` | Sondas de hardware e bateria de testes | contra óculos emulados |
 | `ui`, `service` | Telas e serviço em primeiro plano | compilação + lint |
 
 ## Sequência de conexão (idêntica ao cliente HarmonyOS validado)

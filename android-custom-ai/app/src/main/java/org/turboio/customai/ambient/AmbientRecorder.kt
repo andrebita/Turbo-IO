@@ -213,7 +213,7 @@ class TranscriptionWorker(context: Context, params: WorkerParameters) : Coroutin
     override suspend fun doWork(): Result {
         val app = applicationContext as TurboApp
         return when (val outcome = app.ambient.processor.processPending()) {
-            is AmbientProcessor.Outcome.Done -> { app.ambient.refresh(); Result.success() }
+            is AmbientProcessor.Outcome.Done -> { app.ambient.refresh(); runCatching { org.turboio.customai.memory.MemoryWorker.kick(app) }; Result.success() }
             is AmbientProcessor.Outcome.Retry -> { app.ambient.refresh(); if (runAttemptCount < 10) Result.retry() else Result.failure() }
             is AmbientProcessor.Outcome.Stopped -> { app.ambient.refresh(); DiagnosticLog.w("AMBIENTE", "fila pausada: ${outcome.message}"); Result.failure() }
         }
