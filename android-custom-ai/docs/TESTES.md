@@ -10,7 +10,7 @@ Legenda: ✅ executado e aprovado · ⚠️ executado com ressalva · ⏳ penden
 | --- | --- | --- |
 | Compilação (AGP 8.13.2, Kotlin 2.2.21, compileSdk/targetSdk 35, minSdk 26) | ✅ | `./gradlew assembleDebug` |
 | Lint Android | ✅ 0 erros (avisos cosméticos: i18n/KTX/versões) | `./gradlew lintDebug` |
-| Testes unitários | ✅ **148 testes** executados, 0 falhas (+ 4 testes de rede ao vivo, opcionais) | `./gradlew testDebugUnitTest` |
+| Testes unitários | ✅ **150 testes** executados, 0 falhas (+ 4 testes de rede ao vivo, opcionais) | `./gradlew testDebugUnitTest` |
 | Protocolo = referência HarmonyOS | ✅ vetores de ouro + vetores gerados executando o TypeScript original (`tools/harmony-vectors.mjs`) | `HarmonyCrossTest`, `ProtocolTest` |
 | Referência HarmonyOS em si | ✅ 48 testes do `harmony-sdk` (protocolo, autenticação, voz) passam neste ambiente | `node --test harmony-sdk/tests/{protocol-codec,auth-calculations,guest-exchange,business-commands,version-exchange,voice-session,launcher-status}.test.mjs` |
 | Sessão BLE completa contra óculos emulados | ✅ handshake em 2 links, bond após prova, status/bateria, conta vinculada recusada, prova falsa recusada, troca de identidade bloqueada, reconexão automática, timeout | `GlassesSessionTest` |
@@ -235,7 +235,7 @@ notificações) e `log.txt`; “Exportar bateria de recursos” junta tudo num Z
 | F9–F11 | Tempo; To-do dos óculos (item de teste, marcado como feito no fim); reação ao abrir o To-do |
 | F12–F13 | Teleprompter pelo celular (preparo → iniciar → pausar → continuar → velocidade → sair); teleprompter aberto pelo menu dos óculos (só observação) |
 | F14–F16 | Painel: leitura; cartão (instala, 25 s, remove); tipo simples/completo (troca, 25 s, volta) |
-| F17–F20 | Aceno e balanço; leitura dos ajustes da tela; gravação de 40 s pelos óculos para o diário; olhar para cima acende a tela (liga, testa e volta ao que estava) |
+| F17–F20 | Aceno e balanço; leitura dos ajustes da tela; gravação de 40 s pelos óculos para o diário; ângulo de “olhar para cima” (muda, testa e volta ao que estava) |
 
 #### Resultado da bateria de recursos nos óculos (2026-10-17, 15:27–15:41, rev. 6/7, Strix OS 1.0.5.5)
 
@@ -254,6 +254,23 @@ notificações) e `log.txt`; “Exportar bateria de recursos” junta tudo num Z
 | F17 aceno | ½ cartão aparece e o aceno é aceito nos óculos | 21/33 enviado; nenhum 21/34 de volta | Resposta do gesto não chega ao telefone; exige captura do app oficial |
 | F18 ajustes | leitura ok | `wakeupConfig`, `headGestures`, `crownConfig` presentes | Rev. 8 registra esses grupos para entender o acionamento da voz |
 | F19 gravação | ✗ | — | Falta aceitar o consentimento (Diário → Gravação ambiente) |
+
+#### Segunda rodada (2026-10-17, 16:44–16:59, rev. 8/9)
+
+| Etapa | Resultado | Evidência | Ação na rev. 10 |
+| --- | --- | --- | --- |
+| F1 texto (A oficial, B bilíngue, C antigo) | A e B mostram o texto de abertura do app de Legendas (“During conversations, live caption…”); C mostrou o texto em português uma vez | os óculos não respondem a 19/5 | Padrão volta ao formato antigo (`mode 3`), com pausa de 1,2 s e o mesmo texto reenviado a cada 2 s; F1 compara repetido × uma vez × oficial |
+| F2 tamanho/posição | ✓ | 19/8 com `effective_config` | — |
+| F4/F5 voz | “Hey RayNeo” acorda, 5 s de áudio chegam (13/1 → 13/3) | Google HTTP 401: a chave do Gemini não serve no Google Cloud | Novo motor “Microfone dos óculos → Gemini”; com chave recusada no Google, o app usa Gemini ou Deepgram sozinho |
+| F6/F7 notificação | ✓ | 21/2 sem resposta, cartão aparece | — |
+| F9–F11 | ✓ | — | — |
+| F12/F13 teleprompter | ✗ “Something went wrong” | 18 (informação do arquivo) ignorada também como `.txt`; 20/1 `chunkid 0` sem resposta | Precisa de captura do app oficial |
+| F14 painel leitura | ✓ “cartão 2, completo” | — | — |
+| F15 cartão próprio | ✗ | `widget_install` sem resposta (firmware sem `widgets_v2`) | Desativado neste firmware; atualização automática desliga sozinha |
+| F16 tipo de painel | ✓ troca confirmada por releitura (`simple_mode 1`) | 15/19 `dashboard_update value 0` | A volta ao tipo original agora acontece mesmo se a etapa for interrompida |
+| F17 aceno | balanço chegou (21/34 `cmd 2`); aceno não | — | — |
+| F18 ajustes | ✓ | `wakeupConfig={"headupSwitch":1,"headupDegree":20,"crownSwitch":0}`, `crownConfig` com `direction` | Ângulo de “olhar para cima” implementado; `direction` preservado |
+| F19 gravação | ✗ sem aviso de consentimento | — | O aviso aparece ao iniciar a etapa |
 
 ### Recursos novos da 0.4.0 (conferir nas lentes)
 

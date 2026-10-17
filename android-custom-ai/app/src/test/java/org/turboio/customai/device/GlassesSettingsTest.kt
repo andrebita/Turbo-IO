@@ -128,4 +128,39 @@ class GlassesSettingsTest {
         assertFalse(Business.contentAllowed(15, 5, """{"cmd":"head_gestures","payload":{"value":2,"mode":0,"data":""}}"""))
         assertFalse(Business.contentAllowed(15, 5, """{"cmd":"head_gestures","payload":{"value":1,"mode":0,"data":"{}"}}"""))
     }
+
+    /** The groups Strix OS 1.0.5.5 reported in the feature test (2026-10-17). */
+    private fun strix(headup: Int, degree: Int) = """{"generalSettings":{"displayConfig":{"height":1,"distance":2},""" +
+        """"crownConfig":{"direction":0,"double":8,"longPress":1},"headGestures":{"enabled":1,"mode":0},""" +
+        """"wakeupConfig":{"headupSwitch":$headup,"headupDegree":$degree,"crownSwitch":0}}}"""
+
+    @Test fun lookUpAngleWrittenVerifiedAndCrownDirectionKept() = runTest {
+        val originals = MemoryOriginals()
+        val s = GlassesSettings(port, this, originals)
+        var result: String? = "?"
+        s.setWake(degree = 35) { result = it }
+        runCurrent(); port.glasses(15, 4, strix(1, 20)); runCurrent()
+        val sent = JSONObject(port.sent.last().second.jsonText())
+        assertEquals("wakeup_config", sent.getString("cmd"))
+        assertEquals(JSONObject("""{"headupSwitch":1,"headupDegree":35,"crownSwitch":0}""").toString(), data(port.sent.lastIndex).toString())
+        port.glasses(15, 6, """{"cmd":"wakeup_config","payload":{"value":0}}"""); runCurrent()
+        port.glasses(15, 4, strix(1, 35)); runCurrent()
+        assertNull(result); assertEquals(35, s.state.value.config.wakeDegree)
+        assertEquals(20, originals.c!!.wakeDegree)                                  // restore point
+        assertEquals(null, s.state.value.config.wakeup)                            // screen wake is not the voice wake word
+        // Not applied → reported.
+        s.setWake(headup = false) { result = it }
+        runCurrent(); port.glasses(15, 4, strix(1, 35)); runCurrent()
+        port.glasses(15, 6, """{"cmd":"wakeup_config","payload":{"value":0}}"""); runCurrent()
+        port.glasses(15, 4, strix(1, 35)); runCurrent()
+        assertTrue(result!!, result!!.startsWith("Os óculos não aplicaram"))
+        // Double-tap keeps the direction field read from the glasses.
+        s.setDoubleTapTodo(false) { result = it }
+        runCurrent(); port.glasses(15, 4, strix(1, 35)); runCurrent()
+        assertEquals(JSONObject("""{"direction":0,"double":0,"longPress":1}""").toString(), data(port.sent.lastIndex).toString())
+        // Gate.
+        assertTrue(Business.contentAllowed(15, 5, SettingsWire.wake(1, 40, 0)))
+        assertFalse(Business.contentAllowed(15, 5, SettingsWire.wake(1, 90, 0)))
+        assertFalse(Business.contentAllowed(15, 5, """{"cmd":"wakeup_config","payload":{"value":0,"mode":0,"data":"{\\"headupSwitch\\":1}"}}"""))
+    }
 }

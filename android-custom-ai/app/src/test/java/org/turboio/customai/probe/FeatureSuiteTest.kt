@@ -95,4 +95,10 @@ class FeatureSuiteTest {
             """{"results":{"channels":[{"alternatives":[{"transcript":" Qual é a capital da França? ","confidence":0.98}]}]}}"""))
         assertEquals("", DeepgramSpeechTranscriber.parseDeepgram("{}"))
     }
+
+    @Test fun geminiTranscriptParse() {
+        assertEquals("Qual é a capital da França?", org.turboio.customai.stt.GeminiSpeechTranscriber.parseGemini(
+            """{"candidates":[{"content":{"parts":[{"text":"pensando…","thought":true},{"text":" Qual é a capital da França? "}]}}]}"""))
+        assertEquals("", org.turboio.customai.stt.GeminiSpeechTranscriber.parseGemini("{}"))
+    }
 }

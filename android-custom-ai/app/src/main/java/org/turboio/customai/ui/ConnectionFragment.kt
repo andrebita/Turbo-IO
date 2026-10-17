@@ -74,6 +74,9 @@ class ConnectionFragment : Fragment() {
     private lateinit var distanceSpinner: android.widget.Spinner
     private var heightChoices: List<Int> = emptyList()
     private var distanceChoices: List<Int> = emptyList()
+    private lateinit var wakeSpinner: android.widget.Spinner
+    private var wakeChoices: List<Int> = emptyList()
+    private var wakeDegree = 20
 
     /** Settings the official app changes, limited to evidence-backed values (docs/AJUSTES_DOS_OCULOS.md). */
     private fun glassesCard(ui: Column) {
@@ -93,10 +96,18 @@ class ConnectionFragment : Fragment() {
         c.button("Aplicar altura e distância") { app.glassesSettings.setDisplay(height, distance) { done(it) } }
         c.buttons("Duplo toque abre To-do" to { app.glassesSettings.setDoubleTapTodo(true) { done(it) } },
             "Desligar" to { app.glassesSettings.setDoubleTapTodo(false) { done(it) } })
-        c.text("Acender a tela ao olhar para cima (gestos de cabeça)", size = 13f)
-        c.buttons("Ligar" to { app.glassesSettings.setHeadGestures(true) { done(it ?: "Ligado — olhe para cima para acender a tela") } },
-            "Desligar" to { app.glassesSettings.setHeadGestures(false) { done(it ?: "Desligado") } })
-        c.hint("O ângulo de ativação ainda não aparece aqui: assim que os óculos informarem o campo (veja “Valores lidos” abaixo), ele entra nesta tela.")
+        c.text("Acender a tela ao olhar para cima", size = 13f)
+        c.buttons("Ligar" to { app.glassesSettings.setWake(headup = true) { done(it ?: "Ligado — olhe para cima para acender a tela") } },
+            "Desligar" to { app.glassesSettings.setWake(headup = false) { done(it ?: "Desligado") } })
+        wakeSpinner = c.spinner(listOf(0), 0, { "" }) {}
+        c.button("Aplicar ângulo", filled = false) { app.glassesSettings.setWake(degree = wakeDegree) { done(it ?: "Ângulo de $wakeDegree° aplicado — confira olhando para cima") } }
+        c.buttons("Botão acende a tela: ligar" to { app.glassesSettings.setWake(crown = true) { done(it) } },
+            "desligar" to { app.glassesSettings.setWake(crown = false) { done(it) } })
+        c.hint("Mesmo grupo de ajustes que os óculos informam (wakeupConfig). O app relê depois de mudar; se os óculos não aplicarem, avisa. " +
+            "“Restaurar ajustes originais” volta também estes valores.")
+        c.text("Gestos de cabeça (aceno/balanço)", size = 13f)
+        c.buttons("Ligar" to { app.glassesSettings.setHeadGestures(true) { done(it) } },
+            "Desligar" to { app.glassesSettings.setHeadGestures(false) { done(it) } })
         c.button("Restaurar ajustes originais", filled = false) {
             AlertDialog.Builder(requireContext()).setTitle("Restaurar?").setMessage("Volta altura, distância e duplo toque aos primeiros valores lidos dos óculos.")
                 .setPositiveButton("Restaurar") { _, _ -> app.glassesSettings.restore { done(it ?: "Restaurado") } }.setNegativeButton("Cancelar", null).show()
@@ -201,6 +212,17 @@ class ConnectionFragment : Fragment() {
         val gs = app.glassesSettings; val c = gs.state.value.config
         val heights = gs.heights()
         val distances = (gs.distances() + org.turboio.customai.device.SettingsWire.TRY_DISTANCE).distinct().sorted()
+        val degrees = (org.turboio.customai.device.SettingsWire.WAKE_DEGREES + listOfNotNull(c.wakeDegree)).distinct().sorted()
+        if (::wakeSpinner.isInitialized && degrees != wakeChoices) {
+            wakeChoices = degrees
+            wakeSpinner.adapter = android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item,
+                degrees.map { "Ângulo $it°" + if (it == c.wakeDegree) " (atual)" else "" })
+            wakeSpinner.setSelection(degrees.indexOf(c.wakeDegree ?: 20).coerceAtLeast(0))
+            wakeSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) { wakeDegree = degrees[pos] }
+                override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
+            }
+        }
         if (heights == heightChoices && distances == distanceChoices) return
         heightChoices = heights; distanceChoices = distances
         val known = gs.distances()
@@ -228,7 +250,8 @@ class ConnectionFragment : Fragment() {
             if (c.readAt > 0) append("Palavra de ativação: ${when (c.wakeup) { true -> "ligada"; false -> "desligada"; null -> "não informada" }}\n")
             append(if (c.readAt > 0) "Atual: altura ${c.height ?: "?"} · distância ${c.distance ?: "?"} · duplo toque ${when (c.crownDouble) { 8 -> "abre To-do"; 0 -> "sem ação"; null -> "?"; else -> "função ${c.crownDouble}" }}"
                 else "Ainda não lido")
-            if (c.headEnabled != null) append("\nOlhar para cima acende a tela: ${if (c.headEnabled == true) "ligado" else "desligado"} (modo ${c.headMode ?: "?"})")
+            if (c.hasWake) append("\nOlhar para cima acende a tela: ${if (c.wakeHeadup == 1) "ligado" else "desligado"} · ângulo ${c.wakeDegree}° · botão acende: ${if (c.wakeCrown == 1) "sim" else "não"}")
+            if (c.headEnabled != null) append("\nGestos de cabeça: ${if (c.headEnabled == true) "ligados" else "desligados"} (modo ${c.headMode ?: "?"})")
             if (s.details.isNotEmpty()) append("\nValores lidos: ${s.details}")
             s.original?.let { o -> append("\nOriginais: altura ${o.height ?: "?"} · distância ${o.distance ?: "?"} · duplo toque ${o.crownDouble ?: "?"}") }
             append("\n").append(s.note)

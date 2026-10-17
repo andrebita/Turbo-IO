@@ -15,6 +15,7 @@ import org.turboio.customai.ai.AiAnswer
 import org.turboio.customai.ai.AiClient
 import org.turboio.customai.ai.AiException
 import org.turboio.customai.ai.ChatMessage
+import org.turboio.customai.ai.ProviderKind
 import org.turboio.customai.ble.AndroidBondManager
 import org.turboio.customai.ble.DeviceInfo
 import org.turboio.customai.ble.GattLink
@@ -391,6 +392,10 @@ class TurboApp : Application() {
         lastCardAt = now
         val outcome = dashboard.showCard(text)
         if (outcome.startsWith("Cartão no painel")) lastCard = text
+        if (outcome == org.turboio.customai.device.Dashboard.NOT_SUPPORTED && settings.dashboardCard) {
+            settings.dashboardCard = false
+            DiagnosticLog.i("PAINEL", "cartão automático desligado: não suportado por estes óculos")
+        }
         return "\"$text\": $outcome"
     }
 
@@ -424,16 +429,28 @@ class TurboApp : Application() {
                 }
                 override fun cancel() = recognizer.cancel()
             }
-            SttEngine.GLASSES_OPENAI, SttEngine.GLASSES_GOOGLE, SttEngine.GLASSES_DEEPGRAM -> object : SpeechInput {
+            SttEngine.GLASSES_OPENAI, SttEngine.GLASSES_GOOGLE, SttEngine.GLASSES_DEEPGRAM, SttEngine.GLASSES_GEMINI -> object : SpeechInput {
                 override val usesGlassesMic = true
                 override suspend fun transcribe(pcm: ByteArray): String {
                     val key = settings.sttKey(config.engine)
+                    val gemini = { org.turboio.customai.stt.GeminiSpeechTranscriber(config, settings.apiKey(ProviderKind.GEMINI),
+                        settings.modelFor(ProviderKind.GEMINI)) }
                     val transcriber = when (config.engine) {
                         SttEngine.GLASSES_OPENAI -> OpenAiTranscriber(config, key)
                         SttEngine.GLASSES_DEEPGRAM -> org.turboio.customai.stt.DeepgramSpeechTranscriber(config, key)
+                        SttEngine.GLASSES_GEMINI -> gemini()
                         else -> GoogleSpeechTranscriber(config, key)
                     }
-                    return transcriber.transcribe(pcm)
+                    return try { transcriber.transcribe(pcm) } catch (e: SttException) {
+                        // A Gemini/AI Studio key in the Google Cloud field is rejected ("API keys are not supported"):
+                        // fall back to Gemini (the same kind of key) or Deepgram, whichever is configured.
+                        if (config.engine != SttEngine.GLASSES_GOOGLE || e.message?.contains("não serve para esta API") != true) throw e
+                        when {
+                            settings.hasApiKey(ProviderKind.GEMINI) -> { DiagnosticLog.w("STT", "chave recusada pelo Google Cloud; usando o Gemini"); gemini().transcribe(pcm) }
+                            settings.hasDeepgramKey() -> { DiagnosticLog.w("STT", "chave recusada pelo Google Cloud; usando a Deepgram"); org.turboio.customai.stt.DeepgramSpeechTranscriber(config, settings.deepgramKey()).transcribe(pcm) }
+                            else -> throw e
+                        }
+                    }
                 }
             }
         }

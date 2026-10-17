@@ -106,7 +106,10 @@ object Business {
         return when (cmd) {
             // Known levels plus values the glasses reported themselves and the experimental third depth (0–5 / 0–3).
             "display_config" -> keys == setOf("height", "distance") && data.optInt("height", -1) in 0..5 && data.optInt("distance", -1) in 0..3
-            "crown_config" -> keys == setOf("double", "longPress") && data.optInt("double", -1) in setOf(0, 8) && data.optInt("longPress", -1) in 0..64
+            "wakeup_config" -> keys == setOf("headupSwitch", "headupDegree", "crownSwitch") && data.optInt("headupSwitch", -1) in 0..1 &&
+                data.optInt("crownSwitch", -1) in 0..1 && data.optInt("headupDegree", -1) in 0..60
+            "crown_config" -> (keys == setOf("double", "longPress") || (keys == setOf("direction", "double", "longPress") && data.optInt("direction", -1) in 0..8)) &&
+                data.optInt("double", -1) in setOf(0, 8) && data.optInt("longPress", -1) in 0..64
             else -> false
         }
     }
@@ -173,7 +176,7 @@ object Commands {
 
     /** Text formats for 19/5: "legacy" (HarmonyOS client, older firmware), "official" (template of the official app's
      *  own subtitle preview on 1.0.5.5/1.0.6: final text, mode 0), "bilingual" (official with the translation line). */
-    val TEXT_FORMATS = listOf("official", "bilingual", "legacy")
+    val TEXT_FORMATS = listOf("legacy", "official", "bilingual")
 
     fun displayText(sid: String, value: String, format: String = "legacy"): String {
         val t = text(value, 96)

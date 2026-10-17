@@ -19,7 +19,8 @@ enum class SttEngine(val id: String, val label: String) {
     PHONE_ANDROID("android", "Android nativo · microfone do telefone (sem chave)"),
     GLASSES_OPENAI("openai", "Microfone dos óculos → OpenAI (Whisper / gpt-4o-transcribe)"),
     GLASSES_GOOGLE("google", "Microfone dos óculos → Google Cloud Speech-to-Text"),
-    GLASSES_DEEPGRAM("deepgram", "Microfone dos óculos → Deepgram (usa a chave do ambiente)");
+    GLASSES_DEEPGRAM("deepgram", "Microfone dos óculos → Deepgram (usa a chave do ambiente)"),
+    GLASSES_GEMINI("gemini", "Microfone dos óculos → Gemini (usa a chave do Gemini da IA)");
 
     val usesGlassesMic: Boolean get() = this != PHONE_ANDROID
     companion object { fun fromId(id: String?) = entries.firstOrNull { it.id == id } ?: PHONE_ANDROID }
@@ -137,6 +138,46 @@ class DeepgramSpeechTranscriber(private val config: SttConfig, private val apiKe
             out.write("fmt ".toByteArray()); i32(16); i16(1); i16(1); i32(16000); i32(32000); i16(2); i16(16)
             out.write("data".toByteArray()); i32(pcm.size); out.write(pcm)
             return out.toByteArray()
+        }
+    }
+}
+
+/** Gemini generateContent with the utterance as inline WAV audio; same key and model as the AI provider. */
+class GeminiSpeechTranscriber(private val config: SttConfig, private val apiKey: String, private val model: String, private val timeoutSeconds: Int = 30) : BatchTranscriber {
+    override suspend fun transcribe(pcm: ByteArray): String {
+        if (apiKey.isBlank()) throw SttException("Informe a chave do Gemini na aba IA (provedor Google Gemini)")
+        if (!Regex("^[A-Za-z0-9._-]{1,80}$").matches(model)) throw SttException("Modelo do Gemini inválido")
+        val body = JSONObject().put("contents", org.json.JSONArray().put(JSONObject().put("role", "user").put("parts", org.json.JSONArray()
+            .put(JSONObject().put("text", PROMPT.format(config.language)))
+            .put(JSONObject().put("inline_data", JSONObject().put("mime_type", "audio/wav")
+                .put("data", Base64.getEncoder().encodeToString(DeepgramSpeechTranscriber.wav(pcm))))))))
+            .put("generationConfig", JSONObject().put("temperature", 0).put("maxOutputTokens", 400)).toString()
+        val started = System.currentTimeMillis()
+        val (status, text) = timed(timeoutSeconds) {
+            val c = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent").openConnection() as HttpURLConnection
+            try {
+                c.requestMethod = "POST"; c.doOutput = true; c.connectTimeout = 15000; c.readTimeout = timeoutSeconds * 1000
+                c.instanceFollowRedirects = false
+                c.setRequestProperty("x-goog-api-key", apiKey)
+                c.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                c.outputStream.use { it.write(body.toByteArray()) }
+                val code = c.responseCode
+                code to String((if (code >= 400) c.errorStream else c.inputStream)?.use { it.readNBytesCompat(1 shl 20) } ?: ByteArray(0))
+            } finally { c.disconnect() }
+        }
+        DiagnosticLog.i("STT", "Gemini HTTP $status em ${System.currentTimeMillis() - started} ms")
+        if (status !in 200..299) throw error("Gemini", status, text)
+        return parseGemini(text)
+    }
+
+    companion object {
+        private const val PROMPT = "Transcreva exatamente o que é dito neste áudio (idioma: %s). Responda somente com a transcrição, sem comentários. " +
+            "Se não houver fala, responda com uma linha vazia."
+
+        fun parseGemini(body: String): String {
+            val parts = JSONObject(body).optJSONArray("candidates")?.optJSONObject(0)?.optJSONObject("content")?.optJSONArray("parts") ?: return ""
+            return (0 until parts.length()).mapNotNull { parts.optJSONObject(it)?.takeIf { p -> !p.optBoolean("thought") }?.optString("text") }
+                .joinToString(" ").trim()
         }
     }
 }

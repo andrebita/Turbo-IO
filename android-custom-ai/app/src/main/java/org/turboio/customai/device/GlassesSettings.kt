@@ -24,7 +24,15 @@ import org.turboio.customai.protocol.Json
 object SettingsWire {
     const val READ = """{"cmd":"request_general_settings","payload":{"value":0,"mode":0,"data":""}}"""
     fun display(height: Int, distance: Int) = command("display_config", """{"distance":$distance,"height":$height}""")
-    fun crown(double: Int, longPress: Int) = command("crown_config", """{"double":$double,"longPress":$longPress}""")
+    /** [direction] (Strix OS 1.0.5.5) is sent back exactly as read; omitted when the glasses do not report it. */
+    fun crown(double: Int, longPress: Int, direction: Int? = null) = command("crown_config",
+        if (direction == null) """{"double":$double,"longPress":$longPress}""" else """{"direction":$direction,"double":$double,"longPress":$longPress}""")
+    /** Screen wake: all three keys always sent, the ones not being changed exactly as read. */
+    fun wake(headup: Int, degree: Int, crown: Int) = command("wakeup_config", """{"headupSwitch":$headup,"headupDegree":$degree,"crownSwitch":$crown}""")
+    /** Look-up angles offered (degrees); the value read from the glasses is always offered too. */
+    val WAKE_DEGREES = listOf(10, 15, 20, 25, 30, 35, 40)
+    val WAKE_DEGREE_RANGE = 0..60
+
     /** Head gestures on/off keeping the mode read from the glasses (iOS client form: value + mode, empty data). */
     fun head(enabled: Boolean, mode: Int) = "{\"cmd\":\"head_gestures\",\"payload\":{\"value\":${if (enabled) 1 else 0},\"mode\":$mode,\"data\":\"\"}}"
     private fun command(cmd: String, data: String) = "{\"cmd\":\"$cmd\",\"payload\":{\"value\":0,\"mode\":0,\"data\":${Json.quote(data)}}}"
@@ -51,7 +59,11 @@ data class GlassesConfig(val height: Int? = null, val distance: Int? = null, val
                          /** Voice wake-up (“Hey RayNeo”) if the glasses report it; key name not documented, so several are tried. */
                          val wakeup: Boolean? = null, val keys: String = "",
                          /** Head gestures (screen on when looking up): on/off and mode, as the glasses report them. */
-                         val headEnabled: Boolean? = null, val headMode: Int? = null) {
+                         val headEnabled: Boolean? = null, val headMode: Int? = null,
+                         /** Screen wake (Strix OS 1.0.5.5 "wakeupConfig"): look up to wake, its angle in degrees, button press wakes. */
+                         val wakeHeadup: Int? = null, val wakeDegree: Int? = null, val wakeCrown: Int? = null,
+                         val crownDirection: Int? = null) {
+    val hasWake get() = wakeHeadup != null && wakeDegree != null && wakeCrown != null
     val hasDisplay get() = height != null && distance != null
     val hasCrown get() = crownDouble != null && crownLongPress != null
 
@@ -67,21 +79,22 @@ data class GlassesConfig(val height: Int? = null, val distance: Int? = null, val
             val display = obj(root, "displayConfig", "display_config")
             val crown = obj(root, "crownConfig", "crown_config")
             val head = obj(root, "headGestures", "head_gestures")
+            val wake = obj(root, "wakeupConfig", "wakeup_config")
             return GlassesConfig(int(display, "height"), int(display, "distance"), int(crown, "double"), int(crown, "longPress"), at,
                 wakeup(root), root.keys().asSequence().toList().sorted().joinToString(","),
-                int(head, "enabled")?.let { it != 0 }, int(head, "mode"))
+                int(head, "enabled")?.let { it != 0 }, int(head, "mode"),
+                int(wake, "headupSwitch"), int(wake, "headupDegree"), int(wake, "crownSwitch"), int(crown, "direction"))
         }
 
-        private val WAKE_KEYS = setOf("voiceWakeup", "voice_wakeup", "ai_voice_wakeup", "voiceWakeUp", "aiVoiceWakeup", "wakeup", "wakeUp", "enabled", "enable")
+        private val WAKE_KEYS = setOf("voiceWakeup", "voice_wakeup", "ai_voice_wakeup", "voiceWakeUp", "aiVoiceWakeup", "wakeup", "wakeUp")
 
         /** First boolean-ish value under a wake-up key, searched one level deep. */
         fun wakeup(o: JSONObject): Boolean? {
             for (k in o.keys()) {
                 val v = o.opt(k)
                 if (k in WAKE_KEYS) when (v) { is Boolean -> return v; is Number -> return v.toInt() != 0 }
-                // Strix OS 1.0.5.5 reports a "wakeupConfig" group; inside it, look for an on/off value.
-                if (v is JSONObject && (k == "wakeupConfig" || k.contains("wake", ignoreCase = true))) wakeup(v)?.let { return it }
-                else if (v is JSONObject && k != "headGestures") WAKE_KEYS.firstOrNull { v.has(it) && it.contains("wake", true) }?.let { wakeup(v)?.let { b -> return b } }
+                // "wakeupConfig" is the SCREEN wake (look up / button), not the voice wake word.
+                if (v is JSONObject && k != "wakeupConfig" && k != "headGestures") wakeup(v)?.let { return it }
             }
             return null
         }
@@ -139,9 +152,11 @@ class GlassesSettings(
         val config = GlassesConfig.parse(reply, clock())
         if (config.hasDisplay) learned.add(config.height?.takeIf { it in SettingsWire.HEIGHT_RANGE }, config.distance?.takeIf { it in SettingsWire.DISTANCE_RANGE })
         var original = _state.value.original
-        if (original == null || (!original.hasDisplay && config.hasDisplay) || (!original.hasCrown && config.hasCrown)) {
+        if (original == null || (!original.hasDisplay && config.hasDisplay) || (!original.hasCrown && config.hasCrown) || (!original.hasWake && config.hasWake)) {
             original = GlassesConfig(original?.height ?: config.height, original?.distance ?: config.distance,
-                original?.crownDouble ?: config.crownDouble, original?.crownLongPress ?: config.crownLongPress, clock())
+                original?.crownDouble ?: config.crownDouble, original?.crownLongPress ?: config.crownLongPress, clock(),
+                wakeHeadup = original?.wakeHeadup ?: config.wakeHeadup, wakeDegree = original?.wakeDegree ?: config.wakeDegree,
+                wakeCrown = original?.wakeCrown ?: config.wakeCrown)
             originals.save(original)
         }
         val root = reply.optJSONObject("generalSettings") ?: reply
@@ -189,11 +204,30 @@ class GlassesSettings(
         if (original != null && original !in setOf(0, 8)) return@launch done("O duplo toque já tem outra função nos óculos; altere pelo app oficial")
         done(write("crown_config") { c ->
             if (!c.hasCrown || c.crownDouble !in setOf(0, 8)) return@write null
-            SettingsWire.crown(if (on) 8 else 0, c.crownLongPress!!)
+            SettingsWire.crown(if (on) 8 else 0, c.crownLongPress!!, c.crownDirection)
         })
     }
 
-    /** Screen on when looking up (head gestures). The mode is sent back exactly as read; the result is read back. */
+    /**
+     * Screen wake (look up to wake, angle, button press). Experimental write of the group the glasses report
+     * ("wakeupConfig" → "wakeup_config", same pattern as display_config/crown_config); read back to verify.
+     */
+    fun setWake(headup: Boolean? = null, degree: Int? = null, crown: Boolean? = null, done: (String?) -> Unit = {}) = scope.launch {
+        val error = write("wakeup_config") { c ->
+            if (!c.hasWake) return@write null
+            val h = headup?.let { if (it) 1 else 0 } ?: c.wakeHeadup!!
+            val d = degree ?: c.wakeDegree!!
+            val k = crown?.let { if (it) 1 else 0 } ?: c.wakeCrown!!
+            if (d !in SettingsWire.WAKE_DEGREE_RANGE || h !in 0..1 || k !in 0..1) null else SettingsWire.wake(h, d, k)
+        }
+        if (error != null) return@launch done(error)
+        val c = _state.value.config
+        val ok = (headup == null || c.wakeHeadup == (if (headup) 1 else 0)) && (degree == null || c.wakeDegree == degree) &&
+            (crown == null || c.wakeCrown == (if (crown) 1 else 0))
+        done(if (ok) null else "Os óculos não aplicaram (relido: olhar para cima ${c.wakeHeadup ?: "?"}, ângulo ${c.wakeDegree ?: "?"}°, botão ${c.wakeCrown ?: "?"})".also { note(it) })
+    }
+
+    /** Head gestures (headGestures group; NOT the look-up screen wake). The mode is sent back exactly as read; the result is read back. */
     fun setHeadGestures(enabled: Boolean, done: (String?) -> Unit = {}) = scope.launch {
         val error = write("head_gestures") { c ->
             if (c.headEnabled == null) return@write null
@@ -227,8 +261,10 @@ class GlassesSettings(
         var error: String? = null
         if (o.hasDisplay && o.height in SettingsWire.HEIGHT_RANGE && o.distance in SettingsWire.DISTANCE_RANGE)
             error = write("display_config") { c -> if (c.hasDisplay) SettingsWire.display(o.height!!, o.distance!!) else null }
+        if (error == null && o.hasWake && o.wakeDegree in SettingsWire.WAKE_DEGREE_RANGE)
+            error = write("wakeup_config") { c -> if (c.hasWake) SettingsWire.wake(o.wakeHeadup!!, o.wakeDegree!!, o.wakeCrown!!) else null }
         if (error == null && o.hasCrown && o.crownDouble in setOf(0, 8))
-            error = write("crown_config") { c -> if (c.hasCrown) SettingsWire.crown(o.crownDouble!!, c.crownLongPress!!) else null }
+            error = write("crown_config") { c -> if (c.hasCrown) SettingsWire.crown(o.crownDouble!!, c.crownLongPress!!, c.crownDirection) else null }
         done(error)
     }
 

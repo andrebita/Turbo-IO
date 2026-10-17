@@ -62,7 +62,20 @@ class DiagnosticsFragment : Fragment() {
         featNote = fc.field("Observação (opcional): o que apareceu, mensagem de erro…", multiline = true)
         val f = app.features
         featButtons["begin"] = fc.button("Começar bateria de recursos") { f.begin() }
-        featButtons["start"] = fc.button("Iniciar esta etapa") { f.start()?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show() } }
+        featButtons["start"] = fc.button("Iniciar esta etapa") {
+            // The recording step needs the ambient-recording consent; ask for it here instead of failing.
+            if (f.current?.id == "F19" && !app.settings.ambientSettings().consent) {
+                AlertDialog.Builder(requireContext()).setTitle("Antes de gravar o ambiente")
+                    .setMessage("A gravação capta a sua voz e a de outras pessoas por perto. Avise quem estiver com você e respeite a LGPD e as regras do local. " +
+                        "Só os trechos com fala vão ao serviço de transcrição configurado; o áudio é apagado depois.")
+                    .setPositiveButton("Entendi e aceito") { _, _ ->
+                        app.settings.saveAmbient(app.settings.ambientSettings().copy(consent = true))
+                        f.start()?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show() }
+                    }.setNegativeButton("Cancelar", null).show()
+                return@button
+            }
+            f.start()?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show() }
+        }
         featButtons["stop"] = fc.button("Parar esta etapa", filled = false) { f.stop() }
         featButtons["verdict"] = fc.buttons("✓ Funcionou" to { verdict(true) }, "✗ Não funcionou" to { verdict(false) })
         featButtons["unsure"] = fc.buttons("Não deu para ver" to { verdict(null) }, "Repetir" to { f.repeatStep() })

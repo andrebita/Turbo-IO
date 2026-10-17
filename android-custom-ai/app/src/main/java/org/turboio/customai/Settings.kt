@@ -72,6 +72,7 @@ class SettingsRepository(context: Context) {
         return when (engine) {
             SttEngine.GLASSES_OPENAI -> apiKey(ProviderKind.OPENAI)
             SttEngine.GLASSES_DEEPGRAM -> deepgramKey()
+            SttEngine.GLASSES_GEMINI -> apiKey(ProviderKind.GEMINI)
             else -> ""
         }
     }
@@ -93,10 +94,10 @@ class SettingsRepository(context: Context) {
         fontSize = prefs.getInt("display.fontSize", 2).coerceIn(1, 3),
         position = prefs.getString("display.position", "center")?.takeIf { it in setOf("center", "top", "bottom") } ?: "center",
         maxLines = prefs.getInt("display.maxLines", 5).coerceIn(1, 5),
-        textFormat = prefs.getString("display.textFormat", "official")?.takeIf { it in Commands.TEXT_FORMATS } ?: "official",
+        textFormat = prefs.getString("display.textFormat2", "legacy")?.takeIf { it in Commands.TEXT_FORMATS } ?: "legacy",
     )
 
-    fun setTextFormat(format: String) = prefs.edit().putString("display.textFormat", format).apply()
+    fun setTextFormat(format: String) = prefs.edit().putString("display.textFormat2", format).apply()
 
     fun setDisplayLayout(fontSize: Int, position: String, maxLines: Int) =
         prefs.edit().putInt("display.fontSize", fontSize).putString("display.position", position).putInt("display.maxLines", maxLines).apply()
@@ -189,12 +190,14 @@ class SettingsRepository(context: Context) {
         override fun load(): org.turboio.customai.device.GlassesConfig? {
             if (!prefs.contains("glasses.orig.at")) return null
             fun i(k: String) = if (prefs.contains(k)) prefs.getInt(k, 0) else null
-            return org.turboio.customai.device.GlassesConfig(i("glasses.orig.height"), i("glasses.orig.distance"), i("glasses.orig.double"), i("glasses.orig.long"), prefs.getLong("glasses.orig.at", 0))
+            return org.turboio.customai.device.GlassesConfig(i("glasses.orig.height"), i("glasses.orig.distance"), i("glasses.orig.double"), i("glasses.orig.long"), prefs.getLong("glasses.orig.at", 0),
+                wakeHeadup = i("glasses.orig.wakeHeadup"), wakeDegree = i("glasses.orig.wakeDegree"), wakeCrown = i("glasses.orig.wakeCrown"))
         }
         override fun save(c: org.turboio.customai.device.GlassesConfig) {
             val e = prefs.edit().putLong("glasses.orig.at", c.readAt)
             fun put(k: String, v: Int?) { if (v != null) e.putInt(k, v) else e.remove(k) }
             put("glasses.orig.height", c.height); put("glasses.orig.distance", c.distance); put("glasses.orig.double", c.crownDouble); put("glasses.orig.long", c.crownLongPress)
+            put("glasses.orig.wakeHeadup", c.wakeHeadup); put("glasses.orig.wakeDegree", c.wakeDegree); put("glasses.orig.wakeCrown", c.wakeCrown)
             e.apply()
         }
     }

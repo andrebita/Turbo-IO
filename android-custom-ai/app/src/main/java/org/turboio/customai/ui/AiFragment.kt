@@ -72,7 +72,7 @@ class AiFragment : Fragment() {
         val voice = settings.voiceSettings()
         ui.switch("Assistente de voz ativo (ao acionar nos óculos)", voice.enabled) { settings.setVoiceEnabled(it) }
         ui.switch("Remover acentos no display (use se aparecerem quadrados)", voice.stripAccents) { settings.setStripAccents(it) }
-        val formats = listOf("official" to "Formato do app oficial (padrão)", "bilingual" to "Oficial com linha de tradução", "legacy" to "Formato antigo (HarmonyOS)")
+        val formats = listOf("legacy" to "Formato antigo, repetido (padrão)", "official" to "Formato do app oficial", "bilingual" to "Oficial com linha de tradução")
         ui.text("Formato do texto nas lentes (a etapa F1 da bateria mostra os três)", size = 13f)
         ui.spinner(formats, formats.indexOfFirst { it.first == settings.displaySettings().textFormat }.coerceAtLeast(0), { it.second }) { settings.setTextFormat(it.first) }
         ui.text("Texto nas lentes (experimental; se os óculos recusarem, volta ao padrão)", size = 13f)
@@ -123,6 +123,7 @@ class AiFragment : Fragment() {
         loadAmbient()
         sttKeyState.text = when {
             engine == SttEngine.PHONE_ANDROID -> "Sem chave necessária"
+            engine == SttEngine.GLASSES_GEMINI -> if (settings.hasApiKey(ProviderKind.GEMINI)) "Usa a chave do Gemini salva no provedor de IA (modelo ${settings.modelFor(ProviderKind.GEMINI)})" else "Salve a chave do Gemini no provedor de IA (acima)"
             engine == SttEngine.GLASSES_DEEPGRAM -> if (settings.hasDeepgramKey()) "Usa a chave Deepgram da transcrição do ambiente (abaixo)" else "Informe a chave Deepgram abaixo, em “Transcrição do ambiente”"
             settings.hasSttKey(engine) -> "Chave salva: ${Redactor.mask(settings.sttKey(engine))}"
             engine == SttEngine.GLASSES_OPENAI && settings.hasApiKey(ProviderKind.OPENAI) -> "Usará a chave OpenAI do provedor de IA"

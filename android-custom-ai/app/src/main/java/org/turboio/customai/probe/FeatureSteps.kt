@@ -31,13 +31,16 @@ object FeatureSteps {
 
     fun all(app: TurboApp): List<FeatureStep> = listOf(
         FeatureStep("F1", "Texto nas lentes (3 formatos)",
-            "O app mostra o texto de teste em três formatos, um depois do outro: A, B e C. Anote quais apareceram nas lentes.",
+            "O app mostra o texto de teste três vezes: A (formato antigo, repetido a cada 2 s — o novo padrão), B (formato antigo, enviado uma vez) " +
+                "e C (formato do app oficial). Anote quais apareceram nas lentes e se ficaram na tela.",
             "Quais letras apareceram (A, B, C)? Os acentos (ã, ç, é) apareceram certos? Escreva na observação.", timeoutSeconds = 120) { run ->
             ready(app)?.let { return@FeatureStep it }
             val base = app.settings.displaySettings().copy(fontSize = 2, position = "center", maxLines = 5, lingerSeconds = 6)
-            val results = listOf("A" to "official", "B" to "bilingual", "C" to "legacy").map { (letter, format) ->
+            val variants = listOf(Triple("A", "legacy", true), Triple("B", "legacy", false), Triple("C", "official", true))
+            val results = variants.map { (letter, format, resend) ->
                 run.cue("Formato $letter: olhe as lentes")
-                "$letter ($format): " + show(app, "$letter: olá! Ação, coração, café e pão.", base.copy(textFormat = format))
+                "$letter ($format${if (resend) ", repetido" else ", uma vez"}): " +
+                    show(app, "$letter: olá! Ação, coração, café e pão.", base.copy(textFormat = format, resend = resend))
             }
             results.joinToString("\n") + "\nFormato em uso no app: ${app.settings.displaySettings().textFormat} (troque na aba IA)"
         },
@@ -175,10 +178,15 @@ object FeatureSteps {
             val (snap, why) = app.dashboard.read()
             val current = snap?.simple ?: return@FeatureStep "Leitura: ${snap?.let { "os óculos não informam o tipo (simple_mode)" } ?: why}"
             val changed = app.dashboard.setSimpleMode(!current) { if (app.settings.dashboardSimpleOriginal == null) app.settings.dashboardSimpleOriginal = it }
-            run.countdown(25, "Olhe o painel: deve estar no tipo ${if (current) "completo" else "simples"}")
-            val back = app.dashboard.setSimpleMode(current)
-            if (back.startsWith("Painel agora") || back.startsWith("O painel já")) app.settings.dashboardSimpleOriginal = null
-            "Tipo lido: ${if (current) "simples" else "completo"}\nTroca: $changed\nVolta: $back"
+            try {
+                run.countdown(25, "Olhe o painel: deve estar no tipo ${if (current) "completo" else "simples"}")
+            } finally {
+                // Runs even when the step is stopped: the dashboard always goes back to the type it had.
+                val back = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { app.dashboard.setSimpleMode(current) }
+                if (back.startsWith("Painel agora") || back.startsWith("O painel já")) app.settings.dashboardSimpleOriginal = null
+                DiagnosticLog.i("PAINEL", "F16 volta: $back")
+            }
+            "Tipo lido: ${if (current) "simples" else "completo"}\nTroca: $changed\nVolta ao tipo original: ver log (PAINEL)"
         },
         FeatureStep("F17", "Aceno e balanço de cabeça",
             "Aparecem dois cartões nos óculos. No primeiro, ACENE (sim). No segundo, BALANCE a cabeça (não). Até 40 s cada.",
@@ -200,19 +208,29 @@ object FeatureSteps {
                 "Altura ${c.height ?: "?"} · distância ${c.distance ?: "?"} · duplo toque ${c.crownDouble ?: "?"} · toque longo ${c.crownLongPress ?: "?"} · palavra de ativação ${c.wakeup ?: "?"}" +
                 "\nValores lidos: ${app.glassesSettings.state.value.details}"
         },
-        FeatureStep("F20", "Olhar para cima acende a tela",
-            "O app liga o gesto de cabeça (se estiver desligado). Deixe a tela dos óculos apagar, depois olhe para cima. " +
-                "Em 40 s o app volta o ajuste ao que estava.",
-            "A tela acendeu ao olhar para cima? Em que ângulo, mais ou menos? (escreva na observação)", timeoutSeconds = 120) { run ->
+        FeatureStep("F20", "Olhar para cima: ângulo",
+            "O app muda o ângulo de “olhar para cima acende a tela” para 35°, dá 40 s para você testar (deixe a tela apagar e olhe para cima) " +
+                "e volta ao ângulo e ao estado que estavam.",
+            "Com 35° foi preciso levantar mais a cabeça do que antes? A tela acendeu? (escreva na observação)", timeoutSeconds = 120) { run ->
             ready(app)?.let { return@FeatureStep it }
-            suspend fun set(on: Boolean) = suspendCancellableCoroutine<String?> { cont -> app.glassesSettings.setHeadGestures(on) { e -> if (cont.isActive) cont.resume(e) } }
+            suspend fun wake(headup: Boolean? = null, degree: Int? = null) =
+                suspendCancellableCoroutine<String?> { cont -> app.glassesSettings.setWake(headup, degree) { e -> if (cont.isActive) cont.resume(e) } }
             val readError = suspendCancellableCoroutine<String?> { cont -> app.glassesSettings.read { e -> if (cont.isActive) cont.resume(e) } }
-            val before = app.glassesSettings.state.value.config.headEnabled
-                ?: return@FeatureStep "Os óculos não informaram o gesto de cabeça${readError?.let { " ($it)" } ?: ""}\nValores lidos: ${app.glassesSettings.state.value.details}"
-            val turnOn = if (before) "já estava ligado" else set(true) ?: "ligado pelo app"
-            run.countdown(40, "Deixe a tela apagar e olhe para cima")
-            val back = if (before) "mantido ligado" else set(false) ?: "desligado de novo (como estava)"
-            "Antes: ${if (before) "ligado" else "desligado"}\nLigar: $turnOn\nDepois: $back\nValores lidos: ${app.glassesSettings.state.value.details}"
+            val before = app.glassesSettings.state.value.config
+            if (!before.hasWake) return@FeatureStep "Os óculos não informaram wakeupConfig${readError?.let { " ($it)" } ?: ""}\nValores lidos: ${app.glassesSettings.state.value.details}"
+            val test = if (before.wakeDegree == 35) 25 else 35
+            try {
+                val on = if (before.wakeHeadup == 1) "já estava ligado" else wake(headup = true) ?: "ligado pelo app"
+                val change = wake(degree = test) ?: "ângulo $test° aplicado (relido)"
+                run.countdown(40, "Ângulo $test°: deixe a tela apagar e olhe para cima")
+                return@FeatureStep "Antes: ${if (before.wakeHeadup == 1) "ligado" else "desligado"}, ${before.wakeDegree}°\nLigar: $on\nMudar: $change"
+            } finally {
+                // Runs even when the step is stopped: the angle and switch go back to what they were.
+                val back = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                    wake(headup = before.wakeHeadup == 1, degree = before.wakeDegree) ?: "restaurado (${before.wakeDegree}°)"
+                }
+                DiagnosticLog.i("AJUSTES", "F20 volta: $back")
+            }
         },
         FeatureStep("F19", "Diário: gravar pelos óculos",
             "O app grava 40 s pelos microfones dos óculos para o diário. Converse ou leia algo em voz alta. A transcrição chega ao Diário em alguns minutos. " +

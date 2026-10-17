@@ -134,6 +134,7 @@ object DashboardWire {
 }
 
 class Dashboard(private val port: GlassesPort, private val random: Randomness, private val timeoutMs: Long = 20_000) : BusinessListener {
+    companion object { const val NOT_SUPPORTED = "Estes óculos não aceitam cartões próprios no painel (firmware sem widgets_v2); nada foi enviado" }
     private val lock = Mutex()
     @Volatile private var pendingSeq = 0L
     @Volatile private var pendingCmd = ""
@@ -192,6 +193,8 @@ class Dashboard(private val port: GlassesPort, private val random: Randomness, p
     suspend fun showCard(text: String): String = lock.withLock {
         val install = runCatching { DashboardWire.install(text) }.getOrElse { return@withLock "Texto do cartão: 1 a ${DashboardWire.CARD_MAX} caracteres" }
         val (before, why) = readLocked(); before ?: return@withLock why
+        // Strix OS 1.0.5.5 lists numeric widgets only and never answered widget_install (feature test, 2026-10-17).
+        if (!before.config.has("widgets_v2")) return@withLock NOT_SUPPORTED
         before.widgets.firstOrNull { it.id == DashboardWire.CARD_ID }?.let { if (it.type != "a2ui") return@withLock "Já existe um cartão com o mesmo id que não é deste app; nada foi alterado" }
         val (r, error) = request("widget_install", install)
         if (error != null) return@withLock "Falha ao enviar: $error"

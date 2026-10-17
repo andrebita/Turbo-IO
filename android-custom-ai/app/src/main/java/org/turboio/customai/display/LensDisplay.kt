@@ -32,7 +32,9 @@ fun newSid(random: Randomness): String = Hex.encode(random.bytes(16))
 
 data class DisplaySettings(val pageSeconds: Int = 5, val lingerSeconds: Int = 6, val stripAccents: Boolean = false, val pageChars: Int = 90,
                            val fontSize: Int = 2, val position: String = "center", val maxLines: Int = 5,
-                           val textFormat: String = "official") {
+                           val textFormat: String = "legacy",
+                           /** Re-send the page every 2 s while it is shown (the glasses may drop the first one while Subtitles opens). */
+                           val resend: Boolean = true) {
     val standardLayout get() = fontSize == 2 && position == "center" && maxLines == 5
 }
 
@@ -104,12 +106,18 @@ class LensDisplay(
         }
         if (code == -1) { closeSession(); return fail("Os óculos não confirmaram a exibição (10 s)") }
         if (code != 1 && code != 2) { closeSession(); return fail("Os óculos recusaram a exibição (código $code)") }
-        delay(400)   // the glasses open their Subtitles app at the same moment; text sent at once may be lost
+        delay(1200)  // the glasses open their Subtitles app at the same moment; text sent at once may be lost
         for ((index, page) in pages.withIndex()) {
             if (closedByGlasses) { sid = ""; return fail("Exibição encerrada nos óculos") }
-            port.sendEnvelope(Business.SUBTITLE, 5, Commands.displayText(sid, page, settings.textFormat))?.let { closeSession(); return fail("Falha ao enviar texto: $it") }
-            _state.value = DisplayState.Showing(index + 1, pages.size, page)
-            delay(if (index == pages.lastIndex) settings.lingerSeconds * 1000L else settings.pageSeconds * 1000L)
+            val total = if (index == pages.lastIndex) settings.lingerSeconds * 1000L else settings.pageSeconds * 1000L
+            var shown = 0L
+            while (shown < total) {
+                if (closedByGlasses) { sid = ""; return fail("Exibição encerrada nos óculos") }
+                port.sendEnvelope(Business.SUBTITLE, 5, Commands.displayText(sid, page, settings.textFormat))?.let { closeSession(); return fail("Falha ao enviar texto: $it") }
+                if (shown == 0L) _state.value = DisplayState.Showing(index + 1, pages.size, page)
+                val step = if (settings.resend) minOf(2000L, total - shown) else total - shown
+                delay(step); shown += step
+            }
         }
         closeSession()
         _state.value = DisplayState.Done(pages.size)

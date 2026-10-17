@@ -58,7 +58,7 @@ The app lives in [`android-custom-ai/`](android-custom-ai/README.md).
 | Providers: OpenAI, Gemini, Anthropic, any OpenAI-compatible endpoint (model, endpoint, instructions, token limit, timeout, conversation context) | implemented · request formats and real endpoints tested |
 | Short pt-BR answers: Markdown/emoji cleanup, paging, optional accent stripping | implemented · tested |
 | Answers on the lenses (text session), with text size, position and line count | implemented · hardware pending |
-| Voice assistant triggered on the glasses. **Glasses mic:** OpenAI (Whisper / gpt-4o-transcribe), Deepgram Nova-3 (same key as ambient recording) or Google Cloud Speech-to-Text. **Phone mic:** Android's built-in recognizer, no key needed | implemented · flow tested with synthetic Opus audio · hardware pending |
+| Voice assistant triggered on the glasses. **Glasses mic:** Gemini (same key as the AI), Deepgram Nova-3 (same key as ambient recording), OpenAI (Whisper / gpt-4o-transcribe) or Google Cloud Speech-to-Text. **Phone mic:** Android's built-in recognizer, no key needed | implemented · flow tested with synthetic Opus audio · hardware pending |
 | "Hey RayNeo" wake word, enabled with the official app's command (turning it off requires the official app) | implemented · hardware pending |
 | Free-phrase tasks: "I need to buy bread tomorrow" becomes a dated pending item | implemented · tested |
 
@@ -88,11 +88,11 @@ The app lives in [`android-custom-ai/`](android-custom-ai/README.md).
 | **Google Maps turn-by-turn** on the lenses ("200 m · Main St") | implemented · hardware pending |
 | Pending items in the glasses' native **To-do** app, two-way: completing an item there completes it on the phone | implemented · hardware pending |
 | **Teleprompter**: drive the glasses' built-in teleprompter from the phone. Paste text or open a `.txt`, then start, pause, resume, change speed and exit | implemented · wire bytes match the HarmonyOS reference · hardware pending |
-| **Dashboard card** with a short pending-items summary ("3 pend · 15:00 Call"), refreshed when items change | implemented · hardware pending |
-| **Dashboard type** (simple/complete), with restore. Experimental: no other client has changed this setting yet | implemented · hardware pending |
+| **Dashboard card** with a short pending-items summary ("3 pend · 15:00 Call") | not supported by Strix OS 1.0.5.5 (no answer to `widget_install`); disabled there |
+| **Dashboard type** (simple/complete), with restore | ✅ change confirmed by read-back on the glasses |
 | **Nod / shake cards**: confirm (nod) or discard (shake) items found in conversations | implemented · hardware pending |
 | **Weather** on the home screen, from Open-Meteo (free, no key) | implemented · hardware pending |
-| Display height/distance, double-tap-opens-To-do and screen-on-when-looking-up settings: read first, restorable (wake angle pending) | implemented · hardware pending |
+| Display height/distance, double-tap-opens-To-do, and look-up-to-wake with its angle (`wakeupConfig`): read first, verified, restorable | implemented · hardware pending |
 | Reacting to what you open on the glasses (opening To-do triggers a sync) | implemented · hardware pending |
 
 ### Diagnostics
@@ -123,7 +123,7 @@ export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 148 unit tests with no lint errors.
+Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 150 unit tests with no lint errors.
 
 ## Documentation
 
