@@ -17,7 +17,7 @@ object DiagnosticLog {
     }
 
     private val FORMAT = ThreadLocal.withInitial { SimpleDateFormat("HH:mm:ss.SSS", Locale.US) }
-    private const val CAPACITY = 600
+    private const val CAPACITY = 2000
     private val entries = ArrayDeque<Entry>()
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
 

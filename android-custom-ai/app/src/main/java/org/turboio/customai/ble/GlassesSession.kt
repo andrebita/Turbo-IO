@@ -93,6 +93,7 @@ class GlassesSession(
     private var retries = 0
     private var unauthenticatedTx = 0
     private var unauthenticatedRx = 0
+    private var binaryFrames = 0
     private var stageDeadline: Cancellable? = null
 
     private class Pending(val frame: ByteArray, val done: (String?) -> Unit, val group: Any? = null)
@@ -342,7 +343,9 @@ class GlassesSession(
         val envelope = try { EnvelopeCodec.decode(packet.payload) } catch (_: Exception) {
             DiagnosticLog.d(tag, "envelope não reconhecido business=${packet.businessId} bytes=${packet.payload.size}"); return
         }
-        DiagnosticLog.d(tag, "RX business=${packet.businessId} type=${envelope.type} json=${envelope.json.size}B bin=${envelope.binary.size}B")
+        // Audio frames arrive ~16 per second: summarised so they do not push everything else out of the log.
+        if (envelope.binary.isEmpty()) DiagnosticLog.d(tag, "RX business=${packet.businessId} type=${envelope.type} json=${envelope.json.size}B")
+        else if (binaryFrames++ % 200 == 0) DiagnosticLog.d(tag, "RX business=${packet.businessId} type=${envelope.type} json=${envelope.json.size}B bin=${envelope.binary.size}B (quadro de áudio nº $binaryFrames; 1 a cada 200 no log)")
         if (packet.businessId == Business.LAUNCHER && envelope.type == 1) launcherStatus(envelope)
         if (status.phase == Phase.READY) businessListeners.forEach { runCatching { it.onBusiness(packet.businessId, envelope) } }
     }
