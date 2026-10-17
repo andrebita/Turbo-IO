@@ -98,6 +98,12 @@ geral não traz chaves de versão, por isso “Óculos (status)” mostra “—
 | **G5** Desligamento após matar o app | ⏳ | — |
 | **G14** Gravação pelo menu (canal 14) | ❌ nenhum áudio em 3 min; os óculos responderam `life_log_guide_launch` | log 22:50:14–22:51:02 |
 
+Observação do usuário: ao iniciar o LifeLog **manualmente nos óculos**, as lentes mostram “Please complete LifeLog
+settings on your phone”. Iniciado por este app (`life_log_switch`), o LifeLog funciona mesmo assim (G1/G2). No teste
+G14 os óculos enviaram `life_log_guide_launch` (15/21), provavelmente o pedido para o telefone abrir essa
+configuração. Hipótese a testar: o `life_log_guide` que a sonda desliga ao final (valor 0) seria a marca de
+“configuração concluída”.
+
 Consequências aplicadas na 0.2.1:
 * A análise usa a duração real de cada quadro (TOC) para o VAD, a taxa esperada e a duração do áudio, e informa o
   padrão de entrega (lotes × contínua).
