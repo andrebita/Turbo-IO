@@ -39,6 +39,7 @@ autenticação quando a resposta chegava perto de 5 s (teste de regressão `slow
 | Política “não guardar” apaga as falas; conversa ainda aberta não é analisada | ✅ | `privacyPoliciesAndOpenConversations` |
 | Pendências por pessoa, resumo da manhã (hoje/atrasadas), busca planejada com período e citações, ficha da pessoa, revisão semanal | ✅ | `queriesPendingMorningSearchAndWeekly` |
 | Intenções de voz novas sem capturar perguntas comuns | ✅ | `JournalTest.intents` |
+| Telas Pendências, Pessoas e Semana no Android 11 (emulador), sem erros no log | ✅ | `docs/screenshots/android11-memoria-*.jpg` |
 | Qualidade real da extração com o seu modelo e conversas reais | ⏳ uso real | — |
 
 ### Diário, insights e gravação ambiente (fases 1–3)
