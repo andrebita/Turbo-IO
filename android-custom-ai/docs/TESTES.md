@@ -127,6 +127,19 @@ Pacote `turboio-testes-20261017-0918.zip`, seis etapas. A análise de áudio foi
   de 5 min: provavelmente um toque na haste abriu/fechou esse app.
 * **15/3** traz `mic_status` (1 quando o LifeLog liga o microfone), `screen_status` e `brightness_change`.
 
+#### Terceira bateria (2026-10-17, 10:21–10:32, app 0.3.1, tudo em tempo real)
+
+| Etapa | Ligado (A1 → OFF) | Áudio recebido | Maior intervalo |
+| --- | --- | --- | --- |
+| G1–G3, 40 s contados do áudio (A1 em 23,8 s) | 40,2 s | 40,6 s | 320 ms |
+| G4, 5 min | 300,3 s | 300,5 s | 130 ms |
+| G7 (ainda em lotes nesta versão) | 30,5 s | 23,8 s | 9,2 s |
+| G5 | OFF reenviado e confirmado em 0,6 s | — | — |
+
+**Em tempo real não houve perda** em 5 min. O G7 passou a usar tempo real na 0.3.2. No G7 os óculos ligaram,
+desligaram (pelo menu) e religaram o LifeLog (`life_log_switch` 1 → 0 → 1) antes do A1: a gravação do diário trata o
+0 como fim e o novo A1 como nova gravação.
+
 Consequências aplicadas na 0.2.1:
 * A análise usa a duração real de cada quadro (TOC) para o VAD, a taxa esperada e a duração do áudio, e informa o
   padrão de entrega (lotes × contínua).
@@ -183,8 +196,8 @@ Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar Li
 
 | Campo | Valor |
 | --- | --- |
-| Arquivo | `TurboIO-CustomAI-0.3.1-diario-debug.apk` (versionCode 6; instala por cima da 0.2.x, mesma assinatura e dados) |
-| SHA-256 | ver `TurboIO-CustomAI-0.3.1-diario-debug.apk.sha256` publicado junto |
+| Arquivo | `TurboIO-CustomAI-0.3.2-diario-debug.apk` (versionCode 7; instala por cima da 0.2.x, mesma assinatura e dados) |
+| SHA-256 | ver `TurboIO-CustomAI-0.3.2-diario-debug.apk.sha256` publicado junto |
 | Assinatura | certificado *Android Debug* (APK de teste; não é build de loja) |
 | Pacote / alvo | `org.turboio.customai`, minSdk 26, targetSdk 35 |
 | Conteúdo proprietário | nenhum (sem `.so`, sem classes/recursos RayNeo) |

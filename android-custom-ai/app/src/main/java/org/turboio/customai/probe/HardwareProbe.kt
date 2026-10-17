@@ -161,6 +161,7 @@ class HardwareProbe(
      */
     fun startLifeLogFromGlasses(waitSeconds: Int = 90, captureSeconds: Int = 30): String? {
         begin("lifelog-glasses")?.let { return it }
+        realtimePage = true                                 // as the journal recorder: cached mode drops audio on OFF
         taskId = Hex.encode(random.bytes(16))
         pending.set(true)
         job = scope.launch {

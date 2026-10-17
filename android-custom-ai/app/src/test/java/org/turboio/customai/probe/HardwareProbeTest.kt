@@ -182,6 +182,7 @@ class HardwareProbeTest {
         port.glasses(15, 21, """{"cmd":"life_log_switch_result","payload":{"value":0}}"""); runCurrent()
         port.glasses(13, 161); runCurrent()
         assertEquals(listOf("13/162", "13/168"), port.trace().drop(2))
+        assertTrue(cmd(3).getBoolean("inRealtimePage"))
         lifeLogFrames(31).let { f -> port.glasses(13, 163, """{"taskId":"t","mode":1,"frameCount":31}""", f.fold(ByteArray(0)) { a, b -> a + b }) }
         advanceTimeBy(3000); runCurrent()
         assertEquals(3, probe.state.value.audioSeconds)
