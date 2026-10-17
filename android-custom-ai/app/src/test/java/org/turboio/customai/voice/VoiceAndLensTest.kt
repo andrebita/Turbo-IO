@@ -38,6 +38,13 @@ class FakePort : GlassesPort {
         listeners.forEach { it.onBusiness(business, Envelope(type, 0, json.toByteArray(), binary)) }
     }
     fun trace(): List<String> = sent.map { (b, e) -> "$b/${e.type}" }
+    private val raws = ArrayList<(Int, ByteArray) -> Unit>()
+    override fun addRawListener(listener: (business: Int, payload: ByteArray) -> Unit) { raws.add(listener) }
+    /** A packet as it arrives from the glasses (envelope or not); envelopes also reach the business listeners. */
+    fun raw(business: Int, payload: ByteArray) {
+        raws.forEach { it(business, payload) }
+        runCatching { EnvelopeCodec.decode(payload) }.getOrNull()?.let { e -> listeners.forEach { it.onBusiness(business, e) } }
+    }
 }
 
 val fixedRandom = object : Randomness { override fun bytes(count: Int) = ByteArray(count) { 0x5a } }

@@ -37,7 +37,7 @@ class TestSuiteTest {
         advanceTimeBy(2000); runCurrent()
         assertEquals(1, suite.state.value.index); assertFalse(suite.state.value.running)
         assertEquals("G1-G3", suite.state.value.results.single().id); assertTrue(suite.state.value.results.single().done)
-        repeat(2) { suite.skip() }
+        repeat(4) { suite.skip() }
         assertEquals("G5", suite.state.value.current!!.id)
         assertNull(suite.startStep()); runCurrent()
         assertTrue(flag.value)
@@ -46,13 +46,13 @@ class TestSuiteTest {
         val port2 = FakePort()
         val probe2 = HardwareProbe(port2, this, flag, fixedRandom, MemorySink(), clock = { testScheduler.currentTime })
         val suite2 = TestSuite(probe2, store)
-        assertTrue(suite2.state.value.running); assertEquals(3, suite2.state.value.index)
+        assertTrue(suite2.state.value.running); assertEquals(5, suite2.state.value.index)
         probe2.connectionReady(); runCurrent()
         port2.glasses(15, 21, """{"cmd":"life_log_switch_result","payload":{"value":0}}"""); runCurrent()
         advanceTimeBy(2000); runCurrent()
         val s = suite2.state.value
         assertTrue(s.finished); assertFalse(s.running)
-        assertEquals(listOf("G1-G3", "G7", "G4", "G5"), s.results.map { it.id })
+        assertEquals(listOf("G1-G3", "G7", "G8", "G14", "G4", "G5"), s.results.map { it.id })
         assertTrue(s.results.last().verdict.contains("confirmado")); assertEquals(1000L, s.startedAt)
         probe.stop(); advanceTimeBy(20_000); runCurrent()
     }

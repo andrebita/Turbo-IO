@@ -98,6 +98,8 @@ class GlassesSession(
     private class Pending(val frame: ByteArray, val done: (String?) -> Unit)
 
     override fun addBusinessListener(listener: BusinessListener) = scheduler.post { businessListeners.add(listener) }
+    private val rawListeners = ArrayList<(Int, ByteArray) -> Unit>()
+    override fun addRawListener(listener: (business: Int, payload: ByteArray) -> Unit) { scheduler.post { rawListeners.add(listener) } }
     override val isReady: Boolean get() = status.phase == Phase.READY
 
     private fun publish(transform: (SessionStatus) -> SessionStatus) {
@@ -290,6 +292,7 @@ class GlassesSession(
             return
         }
         if (packet.businessId == Business.HANDSHAKE) { DiagnosticLog.d(tag, "handshake tardio bytes=${packet.payload.size}"); return }
+        if (status.phase == Phase.READY) rawListeners.forEach { runCatching { it(packet.businessId, packet.payload) } }
         val envelope = try { EnvelopeCodec.decode(packet.payload) } catch (_: Exception) {
             DiagnosticLog.d(tag, "envelope não reconhecido business=${packet.businessId} bytes=${packet.payload.size}"); return
         }

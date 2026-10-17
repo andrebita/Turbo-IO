@@ -48,4 +48,6 @@ interface GlassesPort {
     val isReady: Boolean
     fun send(business: Int, envelope: ByteArray, done: (String?) -> Unit)
     fun addBusinessListener(listener: BusinessListener)
+    /** Every packet received after READY, before envelope decoding (observation probes, file messages). */
+    fun addRawListener(listener: (business: Int, payload: ByteArray) -> Unit) {}
 }

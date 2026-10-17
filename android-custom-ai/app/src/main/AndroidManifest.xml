@@ -63,6 +63,17 @@
 
         <receiver android:name=".memory.ItemActionReceiver" android:exported="false" />
 
+        <!-- Only bound by the system after the user grants "Acesso a notificações" to this app. -->
+        <service
+            android:name=".service.NotificationMirrorService"
+            android:exported="true"
+            android:label="Turbo IO — notificações nos óculos"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".service.ConnectionService"
             android:exported="false"

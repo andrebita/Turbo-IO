@@ -61,6 +61,7 @@ class TurboApp : Application() {
     lateinit var glassesTodo: org.turboio.customai.memory.GlassesTodoSync; private set
     lateinit var nativeNotifier: org.turboio.customai.device.NativeNotifier; private set
     lateinit var weather: org.turboio.customai.device.GlassesWeather; private set
+    val mirrorPolicy by lazy { org.turboio.customai.device.MirrorPolicy(packageName, { settings.mirrorApps }, { settings.navOn }) }
     val probeFiles by lazy { org.turboio.customai.probe.ProbeFiles(this) }
     lateinit var scope: CoroutineScope; private set
     lateinit var random: org.turboio.customai.ble.Randomness; private set
@@ -306,6 +307,25 @@ class TurboApp : Application() {
                 if (outcome != org.turboio.customai.device.NativeNotifier.Outcome.NO_REPLY && outcome != org.turboio.customai.device.NativeNotifier.Outcome.FAILED) return@launch
             }
             if (!display.active) display.show(if (title == "Turbo IO") text else "$title: $text", settings.displaySettings())
+        }
+    }
+
+    /** From the notification listener (any thread): chosen apps → native card; Maps navigation → lens text. */
+    fun mirrorNotification(n: org.turboio.customai.device.MirrorPolicy.Incoming) {
+        if (!session.isReady) return
+        scope.launch {
+            if (n.pkg == org.turboio.customai.device.MirrorPolicy.MAPS && !settings.navOn && !settings.mirrorOn) return@launch
+            if (n.pkg != org.turboio.customai.device.MirrorPolicy.MAPS && !settings.mirrorOn) return@launch
+            when (val a = synchronized(mirrorPolicy) { mirrorPolicy.decide(n) }) {
+                is org.turboio.customai.device.MirrorPolicy.Action.Card -> {
+                    val outcome = nativeNotifier.show(a.title, a.text, a.appName)
+                    if (outcome == org.turboio.customai.device.NativeNotifier.Outcome.NO_REPLY && !display.active)
+                        display.show("${a.appName} · ${a.title}: ${a.text}".take(270), settings.displaySettings())
+                }
+                is org.turboio.customai.device.MirrorPolicy.Action.Nav ->
+                    display.show(a.text, settings.displaySettings().copy(lingerSeconds = 5, pageSeconds = 5))
+                is org.turboio.customai.device.MirrorPolicy.Action.Skip -> Unit
+            }
         }
     }
 

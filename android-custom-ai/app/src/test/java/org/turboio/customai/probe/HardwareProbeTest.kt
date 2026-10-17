@@ -212,6 +212,20 @@ class HardwareProbeTest {
         assertTrue(sink.analysis!!.report.getString("reason").contains("não iniciaram"))
     }
 
+    @Test fun observationRecordsEverythingSendsNothingAndDropsAncsText() = runTest {
+        val sink = MemorySink()
+        val probe = HardwareProbe(port, this, MemoryFlag(), fixedRandom, sink, clock = { testScheduler.currentTime })
+        probe.startObserve(10); runCurrent()
+        port.raw(19, org.turboio.customai.protocol.EnvelopeCodec.encode(9, """{"sid":"x","asr":true}"""))
+        port.raw(21, org.turboio.customai.protocol.EnvelopeCodec.encode(1, """{"title":"mensagem privada"}"""))
+        port.raw(18, byteArrayOf(0x12, 0x03, 0x0a, 0x01, 0x41))                       // not an envelope
+        advanceTimeBy(11_000); runCurrent()
+        assertTrue(port.sent.isEmpty())
+        val keys = sink.analysis!!.report.getJSONObject("byType")
+        assertEquals(1, keys.getInt("19/9")); assertEquals(1, keys.getInt("21/1")); assertEquals(1, keys.getInt("18/-1"))
+        assertFalse(sink.analysis!!.report.getJSONObject("jsonKeys").toString().contains("privada"))
+    }
+
     @Test fun glassesInitiatedLifeLogTimesOutAndStillSwitchesOff() = runTest {
         val sink = MemorySink()
         val probe = HardwareProbe(port, this, MemoryFlag(), fixedRandom, sink, clock = { testScheduler.currentTime })

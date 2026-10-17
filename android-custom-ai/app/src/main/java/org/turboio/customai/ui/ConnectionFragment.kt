@@ -91,6 +91,15 @@ class ConnectionFragment : Fragment() {
             AlertDialog.Builder(requireContext()).setTitle("Restaurar?").setMessage("Volta altura, distância e duplo toque aos primeiros valores lidos dos óculos.")
                 .setPositiveButton("Restaurar") { _, _ -> app.glassesSettings.restore { done(it ?: "Restaurado") } }.setNegativeButton("Cancelar", null).show()
         }
+        c.title("Notificações do celular nos óculos (experimental)")
+        c.hint("Mostra nos óculos as notificações dos apps que você escolher (cartão nativo dos óculos). O conteúdo não é guardado " +
+            "nem registrado. É preciso liberar o acesso às notificações para o Turbo IO nas configurações do Android.")
+        c.button("Liberar acesso às notificações", filled = false) {
+            runCatching { startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        }
+        c.switch("Enviar notificações dos apps escolhidos", app.settings.mirrorOn) { app.settings.mirrorOn = it }
+        c.switch("Navegação do Google Maps nas lentes", app.settings.navOn) { app.settings.navOn = it }
+        c.button("Escolher apps", filled = false) { chooseApps() }
         c.title("Tempo na tela inicial dos óculos (experimental)")
         val city = c.field("Cidade (ex.: São Paulo)", app.settings.weatherCity)
         c.switch("Atualizar a cada hora com os óculos conectados", app.settings.weatherOn) { on ->
@@ -130,6 +139,23 @@ class ConnectionFragment : Fragment() {
                 done("Resultado: ${r.label}")
             }
         }
+    }
+
+    private fun chooseApps() {
+        val seen = (app.settings.notifyingApps + app.settings.mirrorApps).sorted()
+        if (seen.isEmpty()) {
+            AlertDialog.Builder(requireContext()).setTitle("Nenhum app ainda")
+                .setMessage("Libere o acesso às notificações e aguarde chegar alguma notificação; os apps aparecem aqui.").setPositiveButton("OK", null).show()
+            return
+        }
+        val pm = requireContext().packageManager
+        val names = seen.map { pkg -> org.turboio.customai.device.MirrorPolicy.name(pkg,
+            runCatching { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }.getOrNull()) }
+        val chosen = BooleanArray(seen.size) { seen[it] in app.settings.mirrorApps }
+        AlertDialog.Builder(requireContext()).setTitle("Apps que vão para os óculos")
+            .setMultiChoiceItems(names.toTypedArray(), chosen) { _, i, on -> chosen[i] = on }
+            .setPositiveButton("Salvar") { _, _ -> app.settings.mirrorApps = seen.filterIndexed { i, _ -> chosen[i] }.toSet() }
+            .setNegativeButton("Cancelar", null).show()
     }
 
     private fun renderSettings(s: org.turboio.customai.device.SettingsState) {

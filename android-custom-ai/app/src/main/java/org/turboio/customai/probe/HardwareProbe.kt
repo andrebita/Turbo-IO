@@ -90,7 +90,7 @@ class HardwareProbe(
     private var bytes = 0L
     private var job: Job? = null
 
-    init { port.addBusinessListener(this) }
+    init { port.addBusinessListener(this); port.addRawListener { b, payload -> observed(b, payload) } }
 
     private companion object { val CONTEXT_TYPES = setOf(3, 24) }
 
@@ -98,6 +98,38 @@ class HardwareProbe(
     /** Returns a reason when another user of the LifeLog channel (the journal recorder) is active. */
     var blocker: () -> String? = { null }
     private val isLifeLog: Boolean get() = kind.startsWith("lifelog")
+
+    // ------------------------------------------------------------------ observation (native apps, G8)
+    /**
+     * Records everything the glasses send for [seconds] while the user opens their native apps (Legendas, Assistente de
+     * conversa, Teleprompter, Gravador). Nothing is sent. Other apps' notification text (21/1) is not kept.
+     */
+    fun startObserve(seconds: Int): String? {
+        begin("observe")?.let { return it }
+        audioAt = clock()                                    // the on-screen script follows elapsed time
+        job = scope.launch {
+            event("observando: abra os apps nativos nos óculos, um por vez")
+            countdown(seconds)
+            finish("tempo do teste concluído")
+        }
+        return null
+    }
+
+    private val seenTypes = HashSet<String>()
+
+    private fun observed(business: Int, payload: ByteArray) {
+        if (!active || kind != "observe") return
+        val env = runCatching { org.turboio.customai.protocol.EnvelopeCodec.decode(payload) }.getOrNull()
+        val type = env?.type ?: -1
+        val private = business == Business.NOTIFICATION && type == 1
+        val json = when { private -> "{\"redacted\":\"ANCS\"}"; env != null -> Redactor.redact(env.jsonText()); else -> "" }
+        val binary = when { private -> ByteArray(0); env != null -> env.binary.copyOf(); else -> payload.copyOf() }
+        if (bytes + binary.size > 40L * 1024 * 1024) return
+        records.add(ProbeRecord(clock() - startedAt, business, type, json, binary)); bytes += binary.size
+        if (seenTypes.add("$business/$type") || (business == Business.LAUNCHER && type == 24)) {
+            event("← $business/$type ${if (env == null) "(não-envelope ${payload.size} B)" else json.take(140)}${if (binary.isNotEmpty() && env != null) " +${binary.size}B" else ""}")
+        }
+    }
 
     /** Called on the probe's scope after each probe (including a pending-OFF re-send) is saved. */
     fun addFinishedListener(listener: (ProbeState) -> Unit) { finishedListeners.add(listener) }
@@ -120,7 +152,7 @@ class HardwareProbe(
         blocker()?.let { return it }
         if (!port.isReady) return "Conecte os óculos primeiro"
         kind = k; active = true; stopping = false; a2Sent = false; recUuid = ""; recCompleted = false
-        switchSent = false; trigger = ""; audioAt = -1L; realtimePage = false
+        switchSent = false; trigger = ""; audioAt = -1L; realtimePage = false; seenTypes.clear()
         records.clear(); events.clear(); bytes = 0
         startedAt = clock()
         _state.value = ProbeState(kind = k, phase = "iniciando", pendingOff = pending.get(), runs = _state.value.runs)
@@ -278,6 +310,7 @@ class HardwareProbe(
 
     // ------------------------------------------------------------------ receive path
     override fun onBusiness(business: Int, envelope: Envelope) {
+        if (kind == "observe" && active) return                       // the raw listener records everything
         if (business != Business.AI_ASSISTANT && business != Business.LAUNCHER && business != Business.RECORDING) return
         val json = envelope.jsonText()
         val body = runCatching { JSONObject(json) }.getOrNull()

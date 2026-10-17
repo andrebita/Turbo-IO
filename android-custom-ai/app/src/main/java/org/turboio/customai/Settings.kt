@@ -176,6 +176,24 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    /** Phone notifications of the chosen apps → glasses; Google Maps navigation → lens text. */
+    var mirrorOn: Boolean
+        get() = prefs.getBoolean("mirror.on", false)
+        set(v) { prefs.edit().putBoolean("mirror.on", v).apply() }
+    var navOn: Boolean
+        get() = prefs.getBoolean("mirror.nav", false)
+        set(v) { prefs.edit().putBoolean("mirror.nav", v).apply() }
+    var mirrorApps: Set<String>
+        get() = prefs.getStringSet("mirror.apps", emptySet())?.toSet() ?: emptySet()
+        set(v) { prefs.edit().putStringSet("mirror.apps", v.toSet()).apply() }
+    /** Package names (only) of apps that posted notifications recently, for the choice list. */
+    val notifyingApps: Set<String> get() = prefs.getStringSet("mirror.seen", emptySet())?.toSet() ?: emptySet()
+    fun rememberNotifyingApp(pkg: String) {
+        val seen = notifyingApps
+        if (pkg in seen || seen.size >= 60) return
+        prefs.edit().putStringSet("mirror.seen", seen + pkg).apply()
+    }
+
     var weatherOn: Boolean
         get() = prefs.getBoolean("weather.on", false)
         set(v) { prefs.edit().putBoolean("weather.on", v).apply() }
