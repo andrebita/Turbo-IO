@@ -166,6 +166,10 @@ class AmbientPipelineTest {
         assertEquals(0, byEnergy.wearer); assertEquals("proximidade", byEnergy.method)
         assertNull(Speakers.attribute(words, plan, ByteArray(500), IntArray(500) { 2000 }, manifest(false, true)).wearer)   // ambiguous
         assertNull(Speakers.attribute(words, plan, ByteArray(500), levels, manifest(false, headMounted = false)).wearer)    // phone mic
+        // VPU on for everyone (ambiguous) → falls back to proximity instead of giving up.
+        val allVpu = ByteArray(500) { FrameFlags.WEARER.toByte() }
+        val fallback = Speakers.attribute(words, plan, allVpu, levels, manifest(providesWearer = true, headMounted = true))
+        assertEquals(0, fallback.wearer); assertEquals("vpu-ambiguo→proximidade", fallback.method)
         val u = Speakers.utterances(words, byVpu, plan, manifest(true, true))
         assertEquals(10, u.size)
         assertEquals("Pessoa A" to "other", u[0].label to u[0].speaker); assertEquals("Você" to "wearer", u[1].label to u[1].speaker)

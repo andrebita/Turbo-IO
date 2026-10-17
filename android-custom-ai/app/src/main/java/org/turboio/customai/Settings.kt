@@ -115,11 +115,13 @@ class SettingsRepository(context: Context) {
         deleteRaw = prefs.getBoolean("ambient.deleteRaw", true),
         wifiOnly = prefs.getBoolean("ambient.wifiOnly", false),
         consent = prefs.getBoolean("ambient.consent", false),
+        glassesMenu = prefs.getBoolean("ambient.glassesMenu", false),
     )
 
     fun saveAmbient(s: AmbientSettings) {
         prefs.edit().putString("ambient.provider", s.provider.id).putString("ambient.openai.model", s.openAiModel.trim())
-            .putBoolean("ambient.deleteRaw", s.deleteRaw).putBoolean("ambient.wifiOnly", s.wifiOnly).putBoolean("ambient.consent", s.consent).apply()
+            .putBoolean("ambient.deleteRaw", s.deleteRaw).putBoolean("ambient.wifiOnly", s.wifiOnly).putBoolean("ambient.consent", s.consent)
+            .putBoolean("ambient.glassesMenu", s.glassesMenu).apply()
     }
 
     fun deepgramKey(): String = secrets.get("key.ambient.deepgram")
@@ -148,4 +150,5 @@ data class AmbientSettings(
     val deleteRaw: Boolean = true,      // approved: delete raw audio after transcription
     val wifiOnly: Boolean = false,      // approved: mobile data allowed
     val consent: Boolean = false,
+    val glassesMenu: Boolean = false,   // the glasses menu starts/stops journal recording (LifeLog guide flag on)
 )

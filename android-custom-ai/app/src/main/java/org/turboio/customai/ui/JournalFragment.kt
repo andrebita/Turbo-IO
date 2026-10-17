@@ -49,8 +49,10 @@ class JournalFragment : Fragment() {
         val amb = ui.card()
         amb.title("Gravação ambiente (experimental)")
         ambientStatus = amb.text("", size = 13f)
-        amb.hint("Fonte atual: microfone do telefone. A fonte dos óculos (LifeLog/gravação) será liberada após os testes de validação (fase 3).")
-        amb.button("Iniciar gravação ambiente") { startAmbient() }
+        amb.hint("Pelos óculos: usa os microfones dos óculos (LifeLog do firmware original) e separa a sua voz da dos outros. " +
+            "Pelo telefone: usa o microfone do celular.")
+        amb.button("Gravar pelos óculos") { startAmbient(glasses = true) }
+        amb.button("Gravar pelo microfone do telefone", filled = false) { startAmbient(glasses = false) }
         amb.button("Parar gravação", filled = false) { app.ambient.stop() }
         amb.button("Transcrever pendentes agora", filled = false) { org.turboio.customai.ambient.AmbientRecorder.enqueue(app); app.ambient.refresh() }
         amb.button("Tentar novamente as que falharam", filled = false) { app.ambient.retryFailed() }
@@ -60,6 +62,12 @@ class JournalFragment : Fragment() {
         val a = app.settings.ambientSettings()
         amb.switch("Apagar o áudio após transcrever", a.deleteRaw) { app.settings.saveAmbient(app.settings.ambientSettings().copy(deleteRaw = it)) }
         amb.switch("Transcrever só no Wi-Fi", a.wifiOnly) { app.settings.saveAmbient(app.settings.ambientSettings().copy(wifiOnly = it)) }
+        amb.switch("Ligar e desligar pelo menu dos óculos", a.glassesMenu) { on ->
+            if (on && !app.settings.ambientSettings().consent) toast("Aceite o aviso de consentimento (toque em Gravar pelos óculos) para o menu dos óculos funcionar")
+            app.settings.saveAmbient(app.settings.ambientSettings().copy(glassesMenu = on)); app.ambient.armGlassesMenu()
+        }
+        amb.hint("Com esta opção, abrir o LifeLog no menu dos óculos começa a gravar o diário (com o app aberto ou a conexão mantida em segundo plano), " +
+            "e fechá-lo nos óculos para a gravação. Desligue antes de desinstalar o app.")
 
         val card = ui.card()
         card.title("Insights do dia")
@@ -121,21 +129,21 @@ class JournalFragment : Fragment() {
         }
     }
 
-    private fun startAmbient() {
+    private fun startAmbient(glasses: Boolean) {
         if (!app.settings.ambientSettings().consent) {
             AlertDialog.Builder(requireContext()).setTitle("Antes de gravar o ambiente")
                 .setMessage("A gravação capta a sua voz e a de outras pessoas por perto. Avise quem estiver com você e respeite a LGPD e as regras do local. " +
                     "O áudio fica no telefone e só os trechos com fala são enviados ao serviço de transcrição configurado (Deepgram/OpenAI). " +
                     "O áudio é apagado após a transcrição (configurável). Você pode pausar a qualquer momento.")
                 .setPositiveButton("Entendi e aceito") { _, _ ->
-                    app.settings.saveAmbient(app.settings.ambientSettings().copy(consent = true)); startAmbient()
+                    app.settings.saveAmbient(app.settings.ambientSettings().copy(consent = true)); startAmbient(glasses)
                 }.setNegativeButton("Cancelar", null).show()
             return
         }
-        (activity as? MainActivity)?.requestPermissionsIfNeeded()
+        if (!glasses) (activity as? MainActivity)?.requestPermissionsIfNeeded()
         val provider = app.settings.ambientSettings().provider
         if (provider == org.turboio.customai.ambient.AmbientProvider.DEEPGRAM && !app.settings.hasDeepgramKey()) toast("Aviso: informe a chave da Deepgram na aba IA; o áudio ficará na fila até lá")
-        app.ambient.startPhoneMic()?.let { toast(it) }
+        (if (glasses) app.ambient.startGlasses() else app.ambient.startPhoneMic())?.let { toast(it) }
     }
 
     private fun load() {

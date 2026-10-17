@@ -11,6 +11,10 @@ Nada deste app altera o firmware, o app oficial ou dados de outros apps. Reverte
 
 ## Remover o app completamente
 
+0. Se ativou **Diário → “Ligar e desligar pelo menu dos óculos”**, desligue essa opção com os óculos conectados. Ela
+   deixa nos óculos a marca de “LifeLog configurado no telefone” (`life_log_guide`); desligar a opção a remove.
+   (“Apagar todos os dados deste app” também a remove, se os óculos estiverem conectados.) Sem isso, o menu dos
+   óculos ligaria o LifeLog sem nenhum app para receber o áudio; o próprio app oficial redefine essa marca.
 1. (Opcional) **Diagnóstico → Apagar todos os dados deste app** — remove chaves de API, configurações e óculos salvo.
 2. Execute os passos 2–4 acima, se quiser voltar ao app oficial.
 3. Android → Configurações → Apps → **Turbo IO IA → Desinstalar** (ou `adb uninstall org.turboio.customai`).

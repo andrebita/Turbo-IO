@@ -22,6 +22,8 @@ import io.github.jaredmdobson.concentus.OpusApplication
 import io.github.jaredmdobson.concentus.OpusEncoder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import org.turboio.customai.display.sendEnvelope
 import org.turboio.customai.TurboApp
 import org.turboio.customai.diag.DiagnosticLog
 import org.turboio.customai.service.ConnectionService
@@ -92,7 +94,8 @@ class AmbientRecorder(private val app: TurboApp) {
     }
     private val _status = MutableStateFlow(AmbientStatus())
     val status: StateFlow<AmbientStatus> = _status
-    private var source: AudioSource? = null
+    @Volatile private var source: AudioSource? = null
+    @Volatile private var lifeLog: LifeLogSource? = null   // kept after stop until the glasses confirm OFF
     private var ingest: AmbientIngest? = null
     private var segments = 0
 
@@ -105,30 +108,71 @@ class AmbientRecorder(private val app: TurboApp) {
     }
 
     fun startPhoneMic(): String? {
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return "Permita o uso do microfone"
+        return begin(PhoneMicSource(), "Gravando pelo microfone do telefone")
+    }
+
+    /** Glasses microphones via LifeLog; [fromGlasses] = the user started it on the glasses menu (A1 already received). */
+    fun startGlasses(fromGlasses: Boolean = false): String? {
+        if (!app.session.isReady) return "Conecte os óculos primeiro"
+        if (app.probe.busy) return "Há um teste de hardware em andamento"
+        val src = LifeLogSource(app.session, app.scope, org.turboio.customai.probe.PrefsPendingFlag(app), app.random,
+            realtime = true, startedOnGlasses = fromGlasses, keepGuide = { app.settings.ambientSettings().glassesMenu },
+            onEnded = { reason -> stop(reason) })
+        lifeLog = src
+        return begin(src, if (fromGlasses) "Gravando pelos óculos (ligado no menu dos óculos)" else "Gravando pelos microfones dos óculos")
+    }
+
+    private fun begin(src: AudioSource, note: String): String? {
         if (_status.value.recording) return "Já está gravando"
         if (!app.settings.ambientSettings().consent) return "Aceite o aviso de consentimento primeiro"
-        if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return "Permita o uso do microfone"
         if (storageBytes() > 1_500L * 1024 * 1024) return "Mais de 1,5 GB de áudio aguardando transcrição; transcreva antes de gravar mais"
-        ConnectionService.start(app)   // foreground service (microphone type) keeps capture alive with the screen off
-        val src = PhoneMicSource()
+        ConnectionService.start(app)   // foreground service keeps capture alive with the screen off
         val sink = threadedSink()
         ingest = AmbientIngest(root, src, { dir, m -> segments++; processor.onSealed(dir, m); enqueue(app); refresh() })
         return try {
-            src.start(sink); source = src
-            _status.value = _status.value.copy(recording = true, source = src.id, startedAt = System.currentTimeMillis(),
-                note = "Gravando pelo microfone do telefone", error = "")
-            DiagnosticLog.i("AMBIENTE", "gravação ambiente iniciada (microfone do telefone)")
+            source = src
+            src.start(sink)
+            _status.value = _status.value.copy(recording = true, source = src.id, startedAt = System.currentTimeMillis(), note = note, error = "")
+            DiagnosticLog.i("AMBIENTE", "gravação ambiente iniciada (${src.id})")
             null
-        } catch (e: Exception) { ingest = null; e.message ?: "Falha ao iniciar o microfone" }
+        } catch (e: Exception) { source = null; ingest = null; e.message ?: "Falha ao iniciar a gravação" }
     }
 
-    fun stop() {
+    /** True while the glasses LifeLog is in use by the ambient recorder (hardware probes must wait). */
+    val usesGlasses: Boolean get() = (source as? LifeLogSource)?.running == true
+
+    /** LAUNCHER/AI_ASSISTANT traffic from the glasses: forwarded to the active LifeLog source, or starts one from the glasses menu. */
+    fun onGlasses(business: Int, envelope: org.turboio.customai.protocol.Envelope) {
+        lifeLog?.let { if (it.running || it.stopping) { it.onBusiness(business, envelope); if (it.running) return } }
+        if (business != org.turboio.customai.protocol.Business.AI_ASSISTANT || envelope.type != 161) return
+        val s = app.settings.ambientSettings()
+        if (!s.glassesMenu || !s.consent || _status.value.recording || app.probe.busy) return
+        handler.post {
+            if (_status.value.recording) return@post
+            startGlasses(fromGlasses = true)?.let { DiagnosticLog.w("AMBIENTE", "não iniciou pelo menu dos óculos: $it") }
+        }
+    }
+
+    /** "Start from the glasses menu": the guide flag tells the glasses the phone-side LifeLog setup is done. */
+    fun armGlassesMenu() {
+        if (!app.session.isReady || app.probe.busy || usesGlasses) return
+        val on = app.settings.ambientSettings().glassesMenu
+        app.scope.launch {
+            app.session.sendEnvelope(org.turboio.customai.protocol.Business.LAUNCHER, 20, org.turboio.customai.probe.LifeLogWire.launcher("life_log_guide", on))
+            DiagnosticLog.i("AMBIENTE", if (on) "menu dos óculos habilitado para o diário" else "menu dos óculos desabilitado")
+        }
+    }
+
+    fun connectionLost() { if (source is LifeLogSource) stop("conexão com os óculos perdida") }
+
+    fun stop(reason: String = "parada pelo usuário") {
         val src = source ?: return
         source = null
         src.stop()
         handler.post { ingest?.seal("stop"); ingest = null; refresh() }
-        _status.value = _status.value.copy(recording = false, note = "Gravação parada; transcrição em fila")
-        DiagnosticLog.i("AMBIENTE", "gravação ambiente parada")
+        _status.value = _status.value.copy(recording = false, note = "Gravação parada ($reason); transcrição em fila")
+        DiagnosticLog.i("AMBIENTE", "gravação ambiente parada: $reason")
         if (!app.settings.keepConnected || !app.session.isReady) ConnectionService.stop(app)
     }
 

@@ -95,6 +95,8 @@ class HardwareProbe(
     private companion object { val CONTEXT_TYPES = setOf(3, 24) }
 
     val busy: Boolean get() = active
+    /** Returns a reason when another user of the LifeLog channel (the journal recorder) is active. */
+    var blocker: () -> String? = { null }
     private val isLifeLog: Boolean get() = kind.startsWith("lifelog")
 
     /** Called on the probe's scope after each probe (including a pending-OFF re-send) is saved. */
@@ -115,6 +117,7 @@ class HardwareProbe(
 
     private fun begin(k: String): String? {
         if (active) return "Já há um teste em andamento"
+        blocker()?.let { return it }
         if (!port.isReady) return "Conecte os óculos primeiro"
         kind = k; active = true; stopping = false; a2Sent = false; recUuid = ""; recCompleted = false
         switchSent = false; trigger = ""; audioAt = -1L; realtimePage = false

@@ -66,7 +66,7 @@ Os emuladores deste ambiente não têm Bluetooth nem aceleração de hardware; s
 
 ## Teste C — RayNeo iO (hardware real)
 
-**Status: 🟡 PARCIAL — primeira evidência em hardware real (2026-10-16, 22:19–22:53).** Itens sem evidência
+**Status: 🟡 PARCIAL — evidência em hardware real (2026-10-16 e 2026-10-17).** Itens sem evidência
 continuam não aprovados.
 
 Ambiente: Samsung Galaxy **SM-S938B, Android 16 (API 36)**, app 0.2.0-diario, RayNeo iO com **firmware original**
@@ -92,12 +92,12 @@ geral não traz chaves de versão, por isso “Óculos (status)” mostra “—
 | --- | --- | --- |
 | **G1** LifeLog sem conta oficial | ✅ **aprovado** (3 execuções) | `life_log_switch_result value 0` → A1 (13/161) → A2/A8 enviados; OFF confirmado pelos óculos ao final de todas |
 | **G2** Formato do áudio | ✅ **aprovado** | 433 quadros de 240 B, TOC config 11 = **SILK banda larga, 60 ms, mono** (não 20 ms como se supunha); 433/433 decodificam a 16 kHz; 433 × 60 ms = 26,0 s = todo o intervalo A2→OFF, sem perdas; a transcrição local do `decoded.wav` (Whisper *small*, no contêiner de análise, sem envio a terceiros) devolve a narração do usuário em português com sentido |
-| **G3** Máscaras | ❌ **não servem como sinal de fala nem de “você”** (provisório) | `vadMask` ligado em 82 % dos quadros com fala e em 86 % dos silenciosos; `vpuMask` em 54 % × 44 %; nenhuma defasagem de −25 a +25 quadros melhora a concordância. Só o usuário falava, então falta o trecho com outra pessoa |
-| **G4** Continuidade | 🟡 entrega **em lotes a cada 20 s** (`mode:1`, `inRealtimePage:false`): ~11 envelopes de 31 quadros (≈ 20 s de áudio) em ~2 s, e o resto é enviado após o OFF. Latência de ~20 s, sem lacunas. Execução de 5 min **encerrada pelos próprios óculos** em ~2 min (`life_log_switch value 0` + A5 `rc:0`), logo após três mensagens 15/24 cujo conteúdo não era registrado | log 22:47:20–22:49:23 |
-| **G4b** `inRealtimePage:true` | ⏳ etapa 2 da bateria (0.2.2) | — |
-| **G7** Ligar pelos óculos | ⏳ etapa 3 da bateria (0.2.2) | — |
-| **G5** Desligamento após matar o app | ⏳ | — |
-| **G14** Gravação pelo menu (canal 14) | ❌ nenhum áudio em 3 min; os óculos responderam `life_log_guide_launch` | log 22:50:14–22:51:02 |
+| **G3** Máscaras | ✅ **em escala de frase** (revisto na bateria de 17/10) | ver abaixo: `vpuMask` ≈ 0,8–1,0 nas falas do usuário e **0,0** quando outra pessoa fala; `vadMask` com recall ~0,9 e ~1 s de atraso/rabicho. Quadro a quadro não servem (precisão ~0,5) |
+| **G4** Continuidade | ✅ 5 min completos com os óculos no rosto (288 s de áudio em 291,7 s), em lotes a cada ~19 s | bateria 17/10, etapa 5 |
+| **G4b** `inRealtimePage:true` | ✅ **tempo real**: um quadro de 60 ms por envelope (`mode:0`), 16,8 quadros/s, maior intervalo 301 ms, nada perdido | bateria 17/10, etapa 2 |
+| **G7** Ligar pelos óculos | ✅ com a marca `life_log_guide` = 1 enviada pelo app, abrir o LifeLog no menu (app `com.rayneo.liteos.ai_memory`) faz os óculos ligarem sozinhos (`life_log_switch` = 1 → A1) e o áudio chega, **sem o aviso** | bateria 17/10, etapa 3 |
+| **G5** Desligamento após matar o app | ✅ ao reabrir e conectar, o OFF pendente foi reenviado e confirmado pelos óculos em 0,3 s | bateria 17/10, etapa 6 |
+| **G14** Gravação pelo menu (canal 14) | ❌ / não se aplica: o item do menu é o próprio LifeLog; sem a marca `life_log_guide` os óculos mostram “Please complete LifeLog settings on your phone” e enviam `life_log_guide_launch` (duas vezes) | log 22:50:14–22:51:02; bateria 17/10, etapa 4 |
 
 Observação do usuário: ao iniciar o LifeLog **manualmente nos óculos**, as lentes mostram “Please complete LifeLog
 settings on your phone”. Iniciado por este app (`life_log_switch`), o LifeLog funciona mesmo assim (G1/G2). No teste
@@ -105,13 +105,31 @@ G14 os óculos enviaram `life_log_guide_launch` (15/21), provavelmente o pedido 
 configuração. Hipótese a testar: o `life_log_guide` que a sonda desliga ao final (valor 0) seria a marca de
 “configuração concluída”.
 
+#### Bateria de testes (2026-10-17, 09:06–09:18, app 0.2.2)
+
+Pacote `turboio-testes-20261017-0918.zip`, seis etapas. A análise de áudio foi feita no contêiner de trabalho
+(Whisper *small* local, sem envio a terceiros) e as cópias do áudio foram apagadas depois.
+
+* **A1 demora e varia**: de 4 s a 22 s após o `life_log_switch` (21 s nas etapas 1 e 2). No modo em cache, o que não
+  foi entregue até o OFF se perde em parte: na etapa 1 chegaram só 3,7 s dos 18,7 s; na etapa 3, 23,8 s de 30,5 s.
+  Em tempo real (etapa 2) nada se perdeu. **Decisão: a gravação do diário usa tempo real.**
+* **Máscaras (G3)**, numa conversa real de 5 min com outra pessoa presente: em janelas de 5 s, `vadMask`/`vpuMask` ficam
+  em 0 nos silêncios e perto de 1 na fala. Num trecho em que só a outra pessoa falava, `vadMask` = 1,0 e `vpuMask` =
+  0,0; nas respostas do usuário, `vpuMask` voltou a 0,8–1,0. Quadro a quadro, a concordância com a energia fica em 0,69
+  (as máscaras atrasam ~1 s e têm rabicho). O 1º teste (16/10) não mostrou isso; tinha 26 s e só o usuário narrando.
+* **Ligar pelos óculos (G7)**: confirmada a hipótese do `life_log_guide`. Com a marca em 1, o menu liga o LifeLog e o
+  app só aceita a tarefa. Sem ela (etapa 4), aparece o aviso. As mensagens 15/24 `glass_preview` mostram a navegação
+  no menu (`scence`, `app.name = com.rayneo.liteos.ai_memory`, `action` 1/2), o que explica o encerramento do 1º teste
+  de 5 min: provavelmente um toque na haste abriu/fechou esse app.
+* **15/3** traz `mic_status` (1 quando o LifeLog liga o microfone), `screen_status` e `brightness_change`.
+
 Consequências aplicadas na 0.2.1:
 * A análise usa a duração real de cada quadro (TOC) para o VAD, a taxa esperada e a duração do áudio, e informa o
   padrão de entrega (lotes × contínua).
 * Durante uma sonda, as mensagens de estado do *launcher* (15/3 e 15/24) passam a ser gravadas, com endereços
   Bluetooth mascarados, para explicar por que os óculos encerram o LifeLog.
-* As máscaras dos óculos **não** serão usadas para cortar fala nem para identificar “você” até um G3 com outra
-  pessoa falando dizer o contrário. Vale o VAD do próprio app e a separação de falantes da Deepgram.
+* ~~As máscaras dos óculos não serão usadas~~ — revisto na 0.3.0: o `vpuMask` entra na atribuição de “você” por
+  frase (com a proximidade como reserva); o corte de fala continua pelo VAD do próprio app.
 
 ### Roteiro para executar no seu aparelho
 
@@ -158,8 +176,8 @@ Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar Li
 
 | Campo | Valor |
 | --- | --- |
-| Arquivo | `TurboIO-CustomAI-0.2.2-diario-debug.apk` (versionCode 4; instala por cima da 0.2.x, mesma assinatura e dados) |
-| SHA-256 | ver `TurboIO-CustomAI-0.2.2-diario-debug.apk.sha256` publicado junto |
+| Arquivo | `TurboIO-CustomAI-0.3.0-diario-debug.apk` (versionCode 5; instala por cima da 0.2.x, mesma assinatura e dados) |
+| SHA-256 | ver `TurboIO-CustomAI-0.3.0-diario-debug.apk.sha256` publicado junto |
 | Assinatura | certificado *Android Debug* (APK de teste; não é build de loja) |
 | Pacote / alvo | `org.turboio.customai`, minSdk 26, targetSdk 35 |
 | Conteúdo proprietário | nenhum (sem `.so`, sem classes/recursos RayNeo) |
@@ -167,7 +185,7 @@ Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar Li
 ## Limitações conhecidas
 
 * Conexão, autenticação *guest* e LifeLog comprovados em hardware real (Android 16); display nas lentes, voz e reversão ainda sem evidência (Teste C parcial).
-* Áudio do LifeLog chega em lotes a cada ~20 s: serve ao diário, não a conversa em tempo real.
+* Gravação do diário pelos óculos (0.3.0) ainda sem uso real: falta medir bateria e estabilidade em horas (G6).
 * Um cliente por vez: o app oficial precisa estar desvinculado enquanto este app é usado.
 * VAD por energia no microfone dos óculos (limiar 450 RMS) pode precisar de ajuste.
 * Reconhecimento pelo microfone do telefone com o app em segundo plano depende do serviço de voz do sistema.

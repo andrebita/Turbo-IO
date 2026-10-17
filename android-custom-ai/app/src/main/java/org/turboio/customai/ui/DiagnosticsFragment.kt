@@ -100,6 +100,9 @@ class DiagnosticsFragment : Fragment() {
             AlertDialog.Builder(requireContext()).setTitle("Apagar dados?")
                 .setMessage("Remove chaves de API, configurações, o diário e o óculos salvo deste app. O app oficial e o firmware não são afetados.")
                 .setPositiveButton("Apagar") { _, _ ->
+                    if (app.settings.ambientSettings().glassesMenu) {   // tell the glasses the phone-side LifeLog setup is gone
+                        app.settings.saveAmbient(app.settings.ambientSettings().copy(glassesMenu = false)); app.ambient.armGlassesMenu()
+                    }
                     app.session.forget(); app.settings.wipe(); app.clearHistory()
                     viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { app.journal.wipe() } }
                     app.ambient.stop(); app.ambient.wipe()

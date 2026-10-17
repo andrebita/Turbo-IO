@@ -1,6 +1,6 @@
 # Design: Diário com Insights (opção 2) e Gravação Contínua (opção 3)
 
-Status: **aprovado (2026-10-17); fases F1–F3 implementadas e testadas na JVM; F3 aguarda execução nos óculos; F4 depende do resultado.**
+Status: **aprovado (2026-10-17); F1–F3 implementadas; sondas F3 executadas nos óculos (G1, G2, G3, G4, G4b, G5, G7 ✅); F4 implementada na 0.3.0 (fonte LifeLog em tempo real, ligar pelo menu dos óculos); G6 pendente.**
 
 ## 0. Resumo
 
@@ -284,6 +284,18 @@ inteligível), **G3 ❌ provisório** (`vadMask`/`vpuMask` não acompanham a fal
 **G4 🟡** (lotes a cada 20 s com `inRealtimePage:false`; os óculos encerraram a execução de 5 min em ~2 min),
 **G14 ❌** (sem áudio). Pendentes: G4b (`inRealtimePage:true`), G4 com os óculos no rosto, G5, G6.
 
+Bateria de 2026-10-17: **G3 ✅ em escala de frase** (`vpuMask` ≈ 1 nas falas de quem usa e 0 quando outra pessoa
+fala; ~1 s de atraso), **G4 ✅** (5 min sem interrupção), **G4b ✅** (`inRealtimePage:true` = um quadro por envelope,
+sem perda), **G5 ✅**, **G7 ✅** (com `life_log_guide` = 1, o menu dos óculos liga o LifeLog sozinho), **G14 ❌**
+(não é um canal separado no iO). Os itens “G3 ❌” e “não gravar as máscaras” acima ficam superados.
+
+Implementação F4 (0.3.0): `LifeLogSource` liga o LifeLog em **tempo real**, junta ~1 s de quadros por lote, data
+cada quadro pela contagem desde o A1 (também em rajadas de cache) e fecha o segmento se o fluxo parar por mais de 3 s.
+Grava `DEVICE_VAD` e `WEARER` por quadro; a atribuição de “você” usa o `vpuMask` por falante e, se ambíguo, a
+proximidade. Com a opção “Ligar e desligar pelo menu dos óculos”, o app deixa `life_log_guide` = 1 (reenviado a cada
+conexão e após cada sonda); um A1 vindo dos óculos inicia a gravação do diário e `life_log_switch` = 0 ou A5 a
+encerra. Probe e diário não usam o canal ao mesmo tempo; o desligamento pendente (G5) vale para os dois.
+
 Ligar pelos óculos (pedido do usuário): ligado manualmente, o LifeLog dos óculos exibe “Please complete LifeLog
 settings on your phone” e envia `life_log_guide_launch` ao telefone. Se o G7 confirmar, a fonte LifeLog da F4 trata
 esse pedido como “começar a gravar” (com o consentimento já dado no app) e desliga quando os óculos mandarem
@@ -306,7 +318,7 @@ como alternativa.
 | **F1** | Opção 2 completa: diário, registro das interações, busca, exportação, insights map-reduce, comandos de voz, aba Diário | não (validação final nas lentes) |
 | **F2** | Pipeline de áudio completo com a fonte **microfone do telefone**: segmentos, VAD, fatiamento, Ogg/Opus, fila de transcrição, entradas `ambient` nos insights | não (testável no telefone) |
 | **F3** | Sondas de diagnóstico LifeLog e canal 14 (G1–G5, G14) com exportação de pacote | **sim — você executa** |
-| **F4** | Fonte de produção escolhida (LifeLog ou 14), conectada ao pipeline da F2; testes G6 | **sim** |
+| **F4** | Fonte de produção: LifeLog em tempo real, ligar pelo menu dos óculos — **implementada (0.3.0)**; falta G6 | **sim** |
 
 Testes automatizados previstos: fatiamento com regiões sintéticas (bordas, corte forçado, sobreposição),
 deduplicação na junção, filtro de alucinação, Ogg/Opus validado contra a libopus de referência, retomada da fila

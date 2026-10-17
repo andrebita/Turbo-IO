@@ -58,6 +58,7 @@ class TurboApp : Application() {
     lateinit var suite: org.turboio.customai.probe.TestSuite; private set
     val probeFiles by lazy { org.turboio.customai.probe.ProbeFiles(this) }
     lateinit var scope: CoroutineScope; private set
+    lateinit var random: org.turboio.customai.ble.Randomness; private set
     val ai = AiClient()
     private val history = ArrayList<ChatMessage>()
     private val _status = MutableStateFlow(SessionStatus())
@@ -76,7 +77,7 @@ class TurboApp : Application() {
         settings = SettingsRepository(this)
         val scheduler = HandlerScheduler("turboio-glasses")
         scope = CoroutineScope(SupervisorJob() + scheduler.handler.asCoroutineDispatcher())
-        val random = SecureRandomness()
+        random = SecureRandomness()
         val identity = PhoneIdentity(this)
         session = GlassesSession(
             scheduler = scheduler,
@@ -90,6 +91,13 @@ class TurboApp : Application() {
         display = LensDisplay(session, scope, random)
         probe = org.turboio.customai.probe.HardwareProbe(session, scope, org.turboio.customai.probe.PrefsPendingFlag(this), random, probeFiles)
         suite = org.turboio.customai.probe.TestSuite(probe, org.turboio.customai.probe.PrefsSuiteStore(this))
+        // The glasses LifeLog channel is shared: probes wait while the journal records from the glasses, and a
+        // probe's OFF sequence clears the "start from the glasses menu" flag, so it is re-armed afterwards.
+        probe.blocker = { if (ambient.usesGlasses) "A gravação do diário pelos óculos está ativa" else null }
+        probe.addFinishedListener { if (settings.ambientSettings().glassesMenu) ambient.armGlassesMenu() }
+        session.addBusinessListener { business, envelope ->
+            if (business == org.turboio.customai.protocol.Business.LAUNCHER || business == org.turboio.customai.protocol.Business.AI_ASSISTANT) ambient.onGlasses(business, envelope)
+        }
         voice = VoiceAssistant(session, scope, random, ::speechInput, { q -> voiceAnswer(q) }, settings::voiceSettings, { !display.active && !probe.busy })
         var wasReady = false
         session.onStatus = { s ->
@@ -97,7 +105,10 @@ class TurboApp : Application() {
             val ready = s.phase == Phase.READY
             if (ready != wasReady) {
                 wasReady = ready; voice.connectionChanged(ready)
-                if (ready) probe.connectionReady()   // re-sends LifeLog OFF if a previous one was not confirmed
+                if (ready) {
+                    probe.connectionReady()   // re-sends LifeLog OFF if a previous one was not confirmed
+                    if (settings.ambientSettings().glassesMenu) ambient.armGlassesMenu()
+                } else ambient.connectionLost()
             }
         }
         runCatching { org.turboio.customai.insights.DailyInsightWorker.schedule(this) }

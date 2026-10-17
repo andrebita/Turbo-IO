@@ -4,8 +4,9 @@ import org.turboio.customai.journal.searchNormalize
 
 /**
  * Who is "Você"? Diarization labels (0, 1, …) are anonymous and valid only inside one request.
- *  1. VPU (glasses vpuMask, hypothesis: wearer's own voice) — fraction of each speaker's words on VPU frames;
- *  2. proximity — head-mounted mics hear the wearer much louder: mean RMS per speaker;
+ *  1. VPU (glasses vpuMask: on hardware it follows the wearer's voice at utterance level, ~1 s late) — fraction of
+ *     each speaker's words on VPU frames;
+ *  2. proximity — head-mounted mics hear the wearer much louder: mean RMS per speaker (also when VPU is ambiguous);
  *  3. otherwise unknown. Never guess: an ambiguous result stays "unknown".
  */
 object Speakers {
@@ -29,21 +30,27 @@ object Speakers {
             }
             val ranked = score.entries.sortedByDescending { it.value }
             val best = ranked.first(); val second = ranked.getOrNull(1)?.value ?: 0.0
-            return if (best.value >= 0.6 && bySpeaker.getValue(best.key).size >= 3 && second < 0.3) Attribution(best.key, "vpu", best.value)
-            else Attribution(null, "vpu-ambiguo", best.value)
+            if (best.value >= 0.6 && bySpeaker.getValue(best.key).size >= 3 && second < 0.3) return Attribution(best.key, "vpu", best.value)
+            proximity(bySpeaker, plan, levels, m) { inRange(it) }?.let { return it.copy(method = "vpu-ambiguo→" + it.method) }
+            return Attribution(null, "vpu-ambiguo", best.value)
         }
+        return proximity(bySpeaker, plan, levels, m) { inRange(it) } ?: Attribution(null, "indeterminado", 0.0)
+    }
+
+    /** Head-mounted mics hear the wearer much louder: decided only on a clear ratio, else null. */
+    private fun proximity(bySpeaker: Map<Int, List<Word>>, plan: ChunkPlan, levels: IntArray, m: SegmentManifest, inRange: (Int) -> Boolean): Attribution? {
         if (m.headMounted && bySpeaker.size >= 2) {
             val level = bySpeaker.filter { it.value.size >= 3 }.mapValues { (_, ws) ->
-                val r = ws.flatMap { frames(plan, it).filter(::inRange) }
+                val r = ws.flatMap { frames(plan, it).filter(inRange) }
                 if (r.isEmpty()) 0.0 else r.sumOf { levels[it].toDouble() } / r.size
             }
             if (level.size >= 2) {
                 val ranked = level.entries.sortedByDescending { it.value }
                 val ratio = ranked[0].value / maxOf(1.0, ranked[1].value)
-                return if (ratio >= 1.8) Attribution(ranked[0].key, "proximidade", minOf(1.0, (ratio - 1) / 2)) else Attribution(null, "proximidade-ambigua", 0.0)
+                return if (ratio >= 1.8) Attribution(ranked[0].key, "proximidade", minOf(1.0, (ratio - 1) / 2)) else null
             }
         }
-        return Attribution(null, "indeterminado", 0.0)
+        return null
     }
 
     /** Groups consecutive words of one speaker (split on pauses > [pauseMs]) into journal utterances with wall times. */
