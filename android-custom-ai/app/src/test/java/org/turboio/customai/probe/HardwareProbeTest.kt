@@ -194,6 +194,23 @@ class HardwareProbeTest {
         assertEquals(31, report.getInt("audioFrames")); assertFalse(flag.value)
     }
 
+    @Test fun scriptedTestCountsFromTheFirstAudioAndGivesUpWithoutIt() = runTest {
+        val sink = MemorySink()
+        val probe = HardwareProbe(port, this, MemoryFlag(), fixedRandom, sink, clock = { testScheduler.currentTime })
+        probe.startLifeLog(10, realtimePage = true, countFromAudio = true); runCurrent()
+        advanceTimeBy(20_000); runCurrent()
+        assertEquals("aguardando o áudio dos óculos", probe.state.value.phase)
+        port.glasses(13, 161); runCurrent()                                   // A1 after 20 s
+        advanceTimeBy(9_000); runCurrent()
+        assertEquals("capturando", probe.state.value.phase)                    // 10 s counted from the audio, not the switch
+        advanceTimeBy(13_000); runCurrent()
+        assertEquals("tempo do teste concluído", sink.analysis!!.report.getString("reason"))
+        port.sent.clear()
+        probe.startLifeLog(10, countFromAudio = true); runCurrent()
+        advanceTimeBy(52_000); runCurrent()
+        assertTrue(sink.analysis!!.report.getString("reason").contains("não iniciaram"))
+    }
+
     @Test fun glassesInitiatedLifeLogTimesOutAndStillSwitchesOff() = runTest {
         val sink = MemorySink()
         val probe = HardwareProbe(port, this, MemoryFlag(), fixedRandom, sink, clock = { testScheduler.currentTime })

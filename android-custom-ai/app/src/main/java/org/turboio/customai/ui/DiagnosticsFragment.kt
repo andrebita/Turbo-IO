@@ -50,12 +50,12 @@ class DiagnosticsFragment : Fragment() {
         test = ui.text(size = 13f)
 
         ui.title("Bateria de testes nos óculos (recomendado)")
-        ui.hint("Todos os testes de hardware em sequência (cerca de 15 min), com instruções entre eles, e um único arquivo " +
+        ui.hint("Todos os testes de hardware em sequência (cerca de 10 min), com instruções entre eles, e um único arquivo " +
             "para enviar no final. Nada é gravado no firmware; o LifeLog é desligado ao fim de cada etapa.")
         val suiteCard = ui.card()
         suiteText = suiteCard.text(size = 14f)
         cueText = suiteCard.text(size = 20f).apply { setTypeface(typeface, android.graphics.Typeface.BOLD) }
-        btnBegin = suiteCard.button("Começar bateria") { confirmProbe("bateria completa (≈ 15 min)") { app.suite.begin(); null } }
+        btnBegin = suiteCard.button("Começar bateria") { confirmProbe("bateria completa (≈ 10 min)") { app.suite.begin(); null } }
         btnStep = suiteCard.button("Iniciar esta etapa") { app.suite.startStep()?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show() } }
         btnStopStep = suiteCard.button("Parar esta etapa", filled = false) { app.probe.stop() }
         btnSkip = suiteCard.button("Pular etapa", filled = false) { app.suite.skip() }
@@ -68,7 +68,6 @@ class DiagnosticsFragment : Fragment() {
         ui.button("G1–G3 · LifeLog 30 s") { confirmProbe("LifeLog por 30 s") { app.probe.startLifeLog(30) } }
         ui.button("G4 · LifeLog 5 min (fale com pausas)", filled = false) { confirmProbe("LifeLog por 5 min") { app.probe.startLifeLog(300) } }
         ui.button("G4b · LifeLog em tempo real 60 s", filled = false) { confirmProbe("LifeLog em tempo real por 60 s") { app.probe.startLifeLog(60, realtimePage = true) } }
-        ui.button("G14 · Gravação pelo menu dos óculos (até 3 min)", filled = false) { confirmProbe("gravação pelo menu") { app.probe.startRecording14(180) } }
         ui.button("Parar teste", filled = false) { app.probe.stop() }
         ui.button("Segurança: desligar LifeLog nos óculos", filled = false) { app.probe.forceLifeLogOff() }
         probeStatus = ui.text(size = 12.5f, mono = true)

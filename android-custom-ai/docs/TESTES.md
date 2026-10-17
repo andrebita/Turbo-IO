@@ -105,7 +105,11 @@ G14 os óculos enviaram `life_log_guide_launch` (15/21), provavelmente o pedido 
 configuração. Hipótese a testar: o `life_log_guide` que a sonda desliga ao final (valor 0) seria a marca de
 “configuração concluída”.
 
-#### Bateria de testes (2026-10-17, 09:06–09:18, app 0.2.2)
+#### Bateria de testes (2026-10-17, 09:06–09:18, app 0.2.2; repetida às 09:48–10:08 com a 0.3.0)
+
+A repetição deu os mesmos resultados: G4b com 55,7 s de áudio contínuo (maior intervalo 333 ms), G7 com os óculos
+ligando sozinhos pelo menu, G14 com o aviso de configuração, G4 com 286 s em 5 min, G5 confirmado; A1 levou 19,7 s
+na etapa 1 e 4,3–4,5 s nas demais.
 
 Pacote `turboio-testes-20261017-0918.zip`, seis etapas. A análise de áudio foi feita no contêiner de trabalho
 (Whisper *small* local, sem envio a terceiros) e as cópias do áudio foram apagadas depois.
@@ -156,16 +160,19 @@ Toque **Começar bateria** e depois **Iniciar esta etapa** em cada passo; as ins
 captura, um texto grande diz o que fazer (ex.: “SILÊNCIO total”). Cada etapa é uma sonda limitada no tempo que desliga
 o LifeLog ao final. Ao terminar, toque **Exportar todos os testes (1 arquivo)**: o ZIP traz uma pasta por etapa
 (relatório, eventos, áudio bruto, WAV e o log técnico daquele momento), `resumo.txt` e o log atual. Etapas podem ser
-puladas. Duração total: cerca de 15 min.
+puladas. Duração total: cerca de 10 min. Desde a 0.3.1 todas as etapas usam o modo em tempo real e os roteiros contam
+o tempo a partir do primeiro áudio (os óculos levam de 4 s a 22 s para começar).
 
 | # | Etapa | O que fazer | O que responde |
 | --- | --- | --- | --- |
-| 1 | **G1–G3 · LifeLog 40 s com roteiro** | seguir o texto na tela: você fala, silêncio, outra pessoa fala, alternância | aceitação, formato e se `vadMask`/`vpuMask` distinguem fala e “você” |
-| 2 | **G4b · tempo real 60 s** | falar o tempo todo | `inRealtimePage:true` faz o áudio chegar a cada ~2 s em vez de 20 s? |
-| 3 | **G7 · ligar pelos óculos** | em até 90 s, ligar o LifeLog pelo menu dos óculos; anotar o que aparece nas lentes | o app só liga a marca `life_log_guide` e espera. Se os óculos pedirem a configuração (`life_log_guide_launch`), o app liga o LifeLog; se ligarem sozinhos (A1 ou `life_log_switch` = 1), o app aceita. O relatório traz `trigger` |
-| 4 | **G14 · gravação pelo menu** | começar e parar uma gravação pelo menu dos óculos | o canal 14 entrega áudio? |
-| 5 | **G4 · LifeLog 5 min** | óculos no rosto, conversar com pausas | cadência, lacunas e por que os óculos encerram (15/3, 15/24 agora gravados) |
-| 6 | **G5 · fechar à força** | quando aparecer “áudio: 10 s”, forçar a parada do app; reabrir e conectar | o app reenvia o desligamento sozinho; a etapa conclui após a reconexão (o progresso da bateria fica salvo) |
+| 1 | **G1–G3 · LifeLog 40 s com roteiro** | seguir o texto na tela: você fala, silêncio, outra pessoa fala, alternância | formato e se `vadMask`/`vpuMask` distinguem fala e “você” |
+| 2 | **G7 · ligar pelos óculos** | em até 90 s, ligar o LifeLog pelo menu dos óculos | com a marca `life_log_guide` = 1, os óculos ligam sozinhos (A1 ou `life_log_switch` = 1) e o app aceita; o relatório traz `trigger` |
+| 3 | **G4 · LifeLog 5 min** | óculos no rosto, conversar com pausas | continuidade em tempo real, lacunas, por que os óculos encerram (15/3, 15/24) |
+| 4 | **G5 · fechar à força** | quando aparecer “áudio: 10 s”, forçar a parada do app; reabrir e conectar | o app reenvia o desligamento sozinho; a etapa conclui após a reconexão (o progresso da bateria fica salvo) |
+
+O G14 (gravação pelo menu) saiu da bateria na 0.3.1: no iO o item do menu é o próprio LifeLog, e sem a marca
+`life_log_guide` os óculos só mostram “Please complete LifeLog settings on your phone” (comportamento esperado,
+repetido nas duas baterias). O G4b virou o padrão e continua como botão avulso.
 
 Os botões avulsos continuam disponíveis em “Testes de hardware avulsos”, e “Apagar testes salvos no telefone” remove
 os áudios guardados.
@@ -176,8 +183,8 @@ Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar Li
 
 | Campo | Valor |
 | --- | --- |
-| Arquivo | `TurboIO-CustomAI-0.3.0-diario-debug.apk` (versionCode 5; instala por cima da 0.2.x, mesma assinatura e dados) |
-| SHA-256 | ver `TurboIO-CustomAI-0.3.0-diario-debug.apk.sha256` publicado junto |
+| Arquivo | `TurboIO-CustomAI-0.3.1-diario-debug.apk` (versionCode 6; instala por cima da 0.2.x, mesma assinatura e dados) |
+| SHA-256 | ver `TurboIO-CustomAI-0.3.1-diario-debug.apk.sha256` publicado junto |
 | Assinatura | certificado *Android Debug* (APK de teste; não é build de loja) |
 | Pacote / alvo | `org.turboio.customai`, minSdk 26, targetSdk 35 |
 | Conteúdo proprietário | nenhum (sem `.so`, sem classes/recursos RayNeo) |

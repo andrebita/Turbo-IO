@@ -129,7 +129,7 @@ class HardwareProbe(
 
     // ------------------------------------------------------------------ LifeLog (G1–G5)
     /** [realtimePage] is sent in A8: false (default, as the iOS probe) yields cached batches every ~20 s on hardware. */
-    fun startLifeLog(seconds: Int, realtimePage: Boolean = false): String? {
+    fun startLifeLog(seconds: Int, realtimePage: Boolean = false, countFromAudio: Boolean = false): String? {
         begin("lifelog")?.let { return it }
         this.realtimePage = realtimePage
         taskId = Hex.encode(random.bytes(16))
@@ -139,6 +139,15 @@ class HardwareProbe(
             send(Business.LAUNCHER, 20, LifeLogWire.launcher("life_log_guide", true))
             switchSent = true
             send(Business.LAUNCHER, 20, LifeLogWire.launcher("life_log_switch", true))
+            // A1 takes 4–22 s on hardware; a scripted test must measure its time from the first audio.
+            if (countFromAudio) {
+                var waited = 0
+                while (audioAt < 0 && waited < 40 && active && !stopping) {
+                    _state.value = _state.value.copy(phase = "aguardando o áudio dos óculos", secondsLeft = 40 - waited); delay(1000); waited++
+                }
+                if (!active || stopping) return@launch
+                if (audioAt < 0) { stop("os óculos não iniciaram o LifeLog em 40 s"); return@launch }
+            }
             countdown(seconds)
             stop("tempo do teste concluído")
         }

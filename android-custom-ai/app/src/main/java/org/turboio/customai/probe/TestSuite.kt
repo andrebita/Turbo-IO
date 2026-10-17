@@ -40,25 +40,19 @@ class TestSuite(private val probe: HardwareProbe, private val store: SuiteStore,
     companion object {
         val STEPS = listOf(
             SuiteStep("G1-G3", "LifeLog 40 s com roteiro",
-                "Tenha outra pessoa por perto (ou um vídeo com voz). Siga as instruções que aparecem durante o teste.",
+                "Tenha outra pessoa por perto (ou um vídeo com voz). O roteiro começa quando o áudio dos óculos chegar.",
                 listOf(0 to "VOCÊ fala: conte devagar de 1 a 10", 10 to "SILÊNCIO total", 20 to "OUTRA PESSOA fala (você calado)",
-                    30 to "VOCÊ e a outra pessoa alternam frases")) { it.startLifeLog(40) },
-            SuiteStep("G4b", "LifeLog em tempo real 60 s",
-                "Fale o tempo todo, com pausas curtas. Observe se o contador de áudio sobe aos poucos ou de 20 em 20 s.",
-                listOf(0 to "Fale normalmente, com pausas curtas")) { it.startLifeLog(60, realtimePage = true) },
+                    30 to "VOCÊ e a outra pessoa alternam frases")) { it.startLifeLog(40, realtimePage = true, countFromAudio = true) },
             SuiteStep("G7", "Ligar o LifeLog pelos óculos",
                 "Toque em Iniciar e, em até 90 s, ligue o LifeLog pelo menu dos óculos. Anote o que aparecer nas lentes.",
                 listOf(0 to "Ligou! Fale algumas frases")) { it.startLifeLogFromGlasses(90, 30) },
-            SuiteStep("G14", "Gravação pelo menu dos óculos",
-                "Toque em Iniciar e, em até 60 s, comece uma gravação pelo menu dos óculos. Fale e pare a gravação pelos óculos.",
-                listOf(0 to "Gravando: fale e depois pare pelos óculos")) { it.startRecording14(120) },
-            SuiteStep("G4", "LifeLog 5 min",
-                "Óculos no rosto o tempo todo. Converse ou leia em voz alta, com pausas. Pode deixar o telefone de lado.",
-                listOf(0 to "Converse normalmente, óculos no rosto")) { it.startLifeLog(300) },
+            SuiteStep("G4", "LifeLog 5 min em tempo real",
+                "Óculos no rosto o tempo todo. Converse normalmente, com pausas. Pode deixar o telefone de lado.",
+                listOf(0 to "Converse normalmente, óculos no rosto")) { it.startLifeLog(300, realtimePage = true, countFromAudio = true) },
             SuiteStep("G5", "Desligamento após fechar o app à força",
                 "Toque em Iniciar. Quando aparecer “áudio: 10 s”, feche o app à força (Configurações → Apps → Turbo IO → Forçar parada). " +
                     "Reabra o app e conecte os óculos: o app deve desligar o LifeLog sozinho e concluir esta etapa.",
-                listOf(0 to "Aguarde…", 10 to "AGORA: force a parada do app e reabra")) { it.startLifeLog(600) },
+                listOf(0 to "Aguarde…", 10 to "AGORA: force a parada do app e reabra")) { it.startLifeLog(600, realtimePage = true) },
         )
     }
 
