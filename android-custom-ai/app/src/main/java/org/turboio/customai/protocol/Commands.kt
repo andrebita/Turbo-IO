@@ -96,6 +96,11 @@ object Business {
 
     /** Settings writes accepted only with the value ranges the official app is known to use (RayNeoCompanion evidence). */
     private fun settingAllowed(cmd: String?, json: String): Boolean {
+        if (cmd == "head_gestures") return runCatching {
+            val j = org.json.JSONObject(json); val p = j.getJSONObject("payload")
+            j.keys().asSequence().toSet() == setOf("cmd", "payload") && p.keys().asSequence().toSet() == setOf("value", "mode", "data") &&
+                p.getInt("value") in 0..1 && p.getInt("mode") in 0..1 && p.getString("data").isEmpty()
+        }.getOrDefault(false)
         val data = runCatching { org.json.JSONObject(org.json.JSONObject(json).getJSONObject("payload").getString("data")) }.getOrNull() ?: return false
         val keys = data.keys().asSequence().toSet()
         return when (cmd) {

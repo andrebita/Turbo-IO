@@ -25,6 +25,8 @@ object SettingsWire {
     const val READ = """{"cmd":"request_general_settings","payload":{"value":0,"mode":0,"data":""}}"""
     fun display(height: Int, distance: Int) = command("display_config", """{"distance":$distance,"height":$height}""")
     fun crown(double: Int, longPress: Int) = command("crown_config", """{"double":$double,"longPress":$longPress}""")
+    /** Head gestures on/off keeping the mode read from the glasses (iOS client form: value + mode, empty data). */
+    fun head(enabled: Boolean, mode: Int) = "{\"cmd\":\"head_gestures\",\"payload\":{\"value\":${if (enabled) 1 else 0},\"mode\":$mode,\"data\":\"\"}}"
     private fun command(cmd: String, data: String) = "{\"cmd\":\"$cmd\",\"payload\":{\"value\":0,\"mode\":0,\"data\":${Json.quote(data)}}}"
 
     /** Values seen in the official app by other clients. */
@@ -47,7 +49,9 @@ interface LearnedDisplay {
 
 data class GlassesConfig(val height: Int? = null, val distance: Int? = null, val crownDouble: Int? = null, val crownLongPress: Int? = null, val readAt: Long = 0,
                          /** Voice wake-up (“Hey RayNeo”) if the glasses report it; key name not documented, so several are tried. */
-                         val wakeup: Boolean? = null, val keys: String = "") {
+                         val wakeup: Boolean? = null, val keys: String = "",
+                         /** Head gestures (screen on when looking up): on/off and mode, as the glasses report them. */
+                         val headEnabled: Boolean? = null, val headMode: Int? = null) {
     val hasDisplay get() = height != null && distance != null
     val hasCrown get() = crownDouble != null && crownLongPress != null
 
@@ -62,8 +66,10 @@ data class GlassesConfig(val height: Int? = null, val distance: Int? = null, val
             val root = json.optJSONObject("generalSettings") ?: json
             val display = obj(root, "displayConfig", "display_config")
             val crown = obj(root, "crownConfig", "crown_config")
+            val head = obj(root, "headGestures", "head_gestures")
             return GlassesConfig(int(display, "height"), int(display, "distance"), int(crown, "double"), int(crown, "longPress"), at,
-                wakeup(root), root.keys().asSequence().toList().sorted().joinToString(","))
+                wakeup(root), root.keys().asSequence().toList().sorted().joinToString(","),
+                int(head, "enabled")?.let { it != 0 }, int(head, "mode"))
         }
 
         private val WAKE_KEYS = setOf("voiceWakeup", "voice_wakeup", "ai_voice_wakeup", "voiceWakeUp", "aiVoiceWakeup", "wakeup", "wakeUp", "enabled", "enable")
@@ -185,6 +191,17 @@ class GlassesSettings(
             if (!c.hasCrown || c.crownDouble !in setOf(0, 8)) return@write null
             SettingsWire.crown(if (on) 8 else 0, c.crownLongPress!!)
         })
+    }
+
+    /** Screen on when looking up (head gestures). The mode is sent back exactly as read; the result is read back. */
+    fun setHeadGestures(enabled: Boolean, done: (String?) -> Unit = {}) = scope.launch {
+        val error = write("head_gestures") { c ->
+            if (c.headEnabled == null) return@write null
+            SettingsWire.head(enabled, c.headMode ?: 0)
+        }
+        if (error != null) return@launch done(error)
+        val after = _state.value.config.headEnabled
+        done(if (after == enabled) null else "Os óculos não aplicaram (relido: ${when (after) { true -> "ligado"; false -> "desligado"; null -> "não informado" }})".also { note(it) })
     }
 
     /**

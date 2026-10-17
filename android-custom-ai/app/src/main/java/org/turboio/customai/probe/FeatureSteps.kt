@@ -200,6 +200,20 @@ object FeatureSteps {
                 "Altura ${c.height ?: "?"} · distância ${c.distance ?: "?"} · duplo toque ${c.crownDouble ?: "?"} · toque longo ${c.crownLongPress ?: "?"} · palavra de ativação ${c.wakeup ?: "?"}" +
                 "\nValores lidos: ${app.glassesSettings.state.value.details}"
         },
+        FeatureStep("F20", "Olhar para cima acende a tela",
+            "O app liga o gesto de cabeça (se estiver desligado). Deixe a tela dos óculos apagar, depois olhe para cima. " +
+                "Em 40 s o app volta o ajuste ao que estava.",
+            "A tela acendeu ao olhar para cima? Em que ângulo, mais ou menos? (escreva na observação)", timeoutSeconds = 120) { run ->
+            ready(app)?.let { return@FeatureStep it }
+            suspend fun set(on: Boolean) = suspendCancellableCoroutine<String?> { cont -> app.glassesSettings.setHeadGestures(on) { e -> if (cont.isActive) cont.resume(e) } }
+            val readError = suspendCancellableCoroutine<String?> { cont -> app.glassesSettings.read { e -> if (cont.isActive) cont.resume(e) } }
+            val before = app.glassesSettings.state.value.config.headEnabled
+                ?: return@FeatureStep "Os óculos não informaram o gesto de cabeça${readError?.let { " ($it)" } ?: ""}\nValores lidos: ${app.glassesSettings.state.value.details}"
+            val turnOn = if (before) "já estava ligado" else set(true) ?: "ligado pelo app"
+            run.countdown(40, "Deixe a tela apagar e olhe para cima")
+            val back = if (before) "mantido ligado" else set(false) ?: "desligado de novo (como estava)"
+            "Antes: ${if (before) "ligado" else "desligado"}\nLigar: $turnOn\nDepois: $back\nValores lidos: ${app.glassesSettings.state.value.details}"
+        },
         FeatureStep("F19", "Diário: gravar pelos óculos",
             "O app grava 40 s pelos microfones dos óculos para o diário. Converse ou leia algo em voz alta. A transcrição chega ao Diário em alguns minutos. " +
                 "Antes, aceite o aviso de consentimento em Diário → Gravação ambiente (uma vez só).",

@@ -30,6 +30,7 @@ grava firmware.
 | --- | --- | --- |
 | Ler | 15/4 `request_general_settings` | — |
 | Altura do texto e distância | 15/5 `display_config`, `data = {"distance":d,"height":h}` | altura 1, 3 ou 5; distância 1 ou 2 (vistos em outros clientes); mais os valores que os seus óculos informarem; distância 3 experimental |
+| Olhar para cima acende a tela | 15/5 `head_gestures`, `payload = {"value":1\|0,"mode":<lido>,"data":""}` (forma do cliente iOS) | liga/desliga; o modo vai como foi lido; o app relê para conferir. **Ângulo:** ainda não, falta ver o nome do campo em `headGestures` |
 | Duplo toque abre o To-do | 15/5 `crown_config`, `data = {"double":8\|0,"longPress":<lido>}` | duplo 0 ou 8 |
 
 * Cada gravação lê os valores atuais antes e manda os dois campos: o que não muda vai exatamente como foi lido. Depois

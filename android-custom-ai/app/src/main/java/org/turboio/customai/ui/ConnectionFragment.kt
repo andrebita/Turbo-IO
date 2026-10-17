@@ -93,6 +93,10 @@ class ConnectionFragment : Fragment() {
         c.button("Aplicar altura e distância") { app.glassesSettings.setDisplay(height, distance) { done(it) } }
         c.buttons("Duplo toque abre To-do" to { app.glassesSettings.setDoubleTapTodo(true) { done(it) } },
             "Desligar" to { app.glassesSettings.setDoubleTapTodo(false) { done(it) } })
+        c.text("Acender a tela ao olhar para cima (gestos de cabeça)", size = 13f)
+        c.buttons("Ligar" to { app.glassesSettings.setHeadGestures(true) { done(it ?: "Ligado — olhe para cima para acender a tela") } },
+            "Desligar" to { app.glassesSettings.setHeadGestures(false) { done(it ?: "Desligado") } })
+        c.hint("O ângulo de ativação ainda não aparece aqui: assim que os óculos informarem o campo (veja “Valores lidos” abaixo), ele entra nesta tela.")
         c.button("Restaurar ajustes originais", filled = false) {
             AlertDialog.Builder(requireContext()).setTitle("Restaurar?").setMessage("Volta altura, distância e duplo toque aos primeiros valores lidos dos óculos.")
                 .setPositiveButton("Restaurar") { _, _ -> app.glassesSettings.restore { done(it ?: "Restaurado") } }.setNegativeButton("Cancelar", null).show()
@@ -224,6 +228,8 @@ class ConnectionFragment : Fragment() {
             if (c.readAt > 0) append("Palavra de ativação: ${when (c.wakeup) { true -> "ligada"; false -> "desligada"; null -> "não informada" }}\n")
             append(if (c.readAt > 0) "Atual: altura ${c.height ?: "?"} · distância ${c.distance ?: "?"} · duplo toque ${when (c.crownDouble) { 8 -> "abre To-do"; 0 -> "sem ação"; null -> "?"; else -> "função ${c.crownDouble}" }}"
                 else "Ainda não lido")
+            if (c.headEnabled != null) append("\nOlhar para cima acende a tela: ${if (c.headEnabled == true) "ligado" else "desligado"} (modo ${c.headMode ?: "?"})")
+            if (s.details.isNotEmpty()) append("\nValores lidos: ${s.details}")
             s.original?.let { o -> append("\nOriginais: altura ${o.height ?: "?"} · distância ${o.distance ?: "?"} · duplo toque ${o.crownDouble ?: "?"}") }
             append("\n").append(s.note)
         }

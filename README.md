@@ -92,14 +92,14 @@ The app lives in [`android-custom-ai/`](android-custom-ai/README.md).
 | **Dashboard type** (simple/complete), with restore. Experimental: no other client has changed this setting yet | implemented · hardware pending |
 | **Nod / shake cards**: confirm (nod) or discard (shake) items found in conversations | implemented · hardware pending |
 | **Weather** on the home screen, from Open-Meteo (free, no key) | implemented · hardware pending |
-| Display height/distance and double-tap-opens-To-do settings: read first, restorable | implemented · hardware pending |
+| Display height/distance, double-tap-opens-To-do and screen-on-when-looking-up settings: read first, restorable (wake angle pending) | implemented · hardware pending |
 | Reacting to what you open on the glasses (opening To-do triggers a sync) | implemented · hardware pending |
 
 ### Diagnostics
 
 | Feature | Status |
 | --- | --- |
-| Guided **feature test suite** (19 steps, one per feature): the app performs each action, shows what it saw, records the glasses traffic (redacted) and asks whether it worked on the lenses; one-ZIP export | implemented · awaiting execution on the glasses |
+| Guided **feature test suite** (20 steps, one per feature): the app performs each action, shows what it saw, records the glasses traffic (redacted) and asks whether it worked on the lenses; one-ZIP export | implemented · awaiting execution on the glasses |
 | Guided **hardware test suite** (audio/LifeLog) with on-screen cues and one-ZIP export. Steps: LifeLog script, start from the glasses' menu, native-app observation, native Recorder, 5-minute run, forced-stop recovery | implemented · LifeLog steps executed on the glasses |
 | Diagnostics log (redacted), BLE communication test, "delete all app data" | implemented |
 
@@ -123,7 +123,7 @@ export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 147 unit tests with no lint errors.
+Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 148 unit tests with no lint errors.
 
 ## Documentation
 

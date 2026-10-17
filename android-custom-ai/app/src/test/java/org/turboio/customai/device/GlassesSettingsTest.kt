@@ -110,4 +110,22 @@ class GlassesSettingsTest {
         s.read { result = it }; glassesAnswer(4, 0, 0, 5)
         assertEquals(listOf(1, 3, 4, 5), s.heights()); assertEquals(listOf(0, 1, 2, 3), s.distances())
     }
+
+    @Test fun headGesturesReadToggleAndGate() = runTest {
+        val s = GlassesSettings(port, this, MemoryOriginals())
+        var result: String? = "?"
+        val reply = { on: Int -> """{"generalSettings":{"displayConfig":{"height":1,"distance":2},"headGestures":{"enabled":$on,"mode":1,"angle":20}}}""" }
+        s.setHeadGestures(false) { result = it }
+        runCurrent(); port.glasses(15, 4, reply(1)); runCurrent()
+        val sent = JSONObject(port.sent.last().second.jsonText())
+        assertEquals("head_gestures", sent.getString("cmd"))
+        assertEquals(0, sent.getJSONObject("payload").getInt("value")); assertEquals(1, sent.getJSONObject("payload").getInt("mode"))  // mode kept
+        port.glasses(15, 6, """{"cmd":"head_gestures","payload":{"value":0}}"""); runCurrent()
+        port.glasses(15, 4, reply(0)); runCurrent()
+        assertNull(result); assertEquals(false, s.state.value.config.headEnabled)
+        assertTrue(s.state.value.details.contains("headGestures="))
+        assertTrue(Business.contentAllowed(15, 5, SettingsWire.head(true, 0)))
+        assertFalse(Business.contentAllowed(15, 5, """{"cmd":"head_gestures","payload":{"value":2,"mode":0,"data":""}}"""))
+        assertFalse(Business.contentAllowed(15, 5, """{"cmd":"head_gestures","payload":{"value":1,"mode":0,"data":"{}"}}"""))
+    }
 }
