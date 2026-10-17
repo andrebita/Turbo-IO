@@ -1,0 +1,6 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval"><solid android:color="#0B6E99" /><size android:width="48dp" android:height="48dp" /></shape>
+    </item>
+    <item android:drawable="@drawable/ic_glasses" android:left="8dp" android:right="8dp" android:top="8dp" android:bottom="8dp" />
+</layer-list>
