@@ -49,6 +49,12 @@ data class ProbeState(
     val verdict: String = "",
     val savedAt: String = "",
     val events: List<String> = emptyList(),
+    /** Seconds since the glasses started delivering (A1 / recording start); -1 before. Drives the spoken-script cues. */
+    val audioSeconds: Int = -1,
+    /** How a glasses-initiated LifeLog was triggered (G7). */
+    val trigger: String = "",
+    /** Finished probes since the app started (monotonic). */
+    val runs: Int = 0,
 )
 
 /**
@@ -71,6 +77,10 @@ class HardwareProbe(
     private var stopping = false
     private var a2Sent = false
     private var realtimePage = false
+    private var switchSent = false
+    private var trigger = ""
+    private var audioAt = -1L
+    private val finishedListeners = ArrayList<(ProbeState) -> Unit>()
     private var taskId = ""
     private var recUuid = ""
     private var recCompleted = false
@@ -85,6 +95,10 @@ class HardwareProbe(
     private companion object { val CONTEXT_TYPES = setOf(3, 24) }
 
     val busy: Boolean get() = active
+    private val isLifeLog: Boolean get() = kind.startsWith("lifelog")
+
+    /** Called on the probe's scope after each probe (including a pending-OFF re-send) is saved. */
+    fun addFinishedListener(listener: (ProbeState) -> Unit) { finishedListeners.add(listener) }
 
     private fun event(text: String) {
         val t = (clock() - startedAt) / 100 / 10.0
@@ -103,9 +117,10 @@ class HardwareProbe(
         if (active) return "Já há um teste em andamento"
         if (!port.isReady) return "Conecte os óculos primeiro"
         kind = k; active = true; stopping = false; a2Sent = false; recUuid = ""; recCompleted = false
+        switchSent = false; trigger = ""; audioAt = -1L; realtimePage = false
         records.clear(); events.clear(); bytes = 0
         startedAt = clock()
-        _state.value = ProbeState(kind = k, phase = "iniciando", pendingOff = pending.get())
+        _state.value = ProbeState(kind = k, phase = "iniciando", pendingOff = pending.get(), runs = _state.value.runs)
         return null
     }
 
@@ -119,11 +134,47 @@ class HardwareProbe(
         job = scope.launch {
             _state.value = _state.value.copy(phase = "ligando LifeLog", pendingOff = true)
             send(Business.LAUNCHER, 20, LifeLogWire.launcher("life_log_guide", true))
+            switchSent = true
             send(Business.LAUNCHER, 20, LifeLogWire.launcher("life_log_switch", true))
             countdown(seconds)
             stop("tempo do teste concluído")
         }
         return null
+    }
+
+    /**
+     * G7: LifeLog started by the user on the glasses. The app only enables the guide flag and waits. When the
+     * glasses ask the phone for the LifeLog settings (`life_log_guide_launch`) the app answers by switching LifeLog
+     * on itself; if they start on their own (A1 or `life_log_switch` = 1), the app just accepts the task.
+     */
+    fun startLifeLogFromGlasses(waitSeconds: Int = 90, captureSeconds: Int = 30): String? {
+        begin("lifelog-glasses")?.let { return it }
+        taskId = Hex.encode(random.bytes(16))
+        pending.set(true)
+        job = scope.launch {
+            send(Business.LAUNCHER, 20, LifeLogWire.launcher("life_log_guide", true))
+            var waited = 0
+            while (audioAt < 0 && waited < waitSeconds && active && !stopping) {
+                _state.value = _state.value.copy(phase = "aguardando os óculos", secondsLeft = waitSeconds - waited,
+                    note = "Ligue o LifeLog pelo menu dos óculos agora", trigger = trigger)
+                delay(1000); waited++
+            }
+            if (!active || stopping) return@launch
+            if (audioAt < 0) { stop("nenhum acionamento nos óculos em $waitSeconds s"); return@launch }
+            countdown(captureSeconds)
+            stop("tempo do teste concluído")
+        }
+        return null
+    }
+
+    private suspend fun glassesTrigger(how: String, answerWithSwitch: Boolean) {
+        if (trigger.isEmpty()) trigger = how
+        event("acionado pelos óculos: $how")
+        _state.value = _state.value.copy(trigger = trigger)
+        if (answerWithSwitch && !switchSent) {
+            switchSent = true
+            send(Business.LAUNCHER, 20, LifeLogWire.launcher("life_log_switch", true))
+        }
     }
 
     // ------------------------------------------------------------------ glasses-menu recording (G14)
@@ -135,6 +186,7 @@ class HardwareProbe(
             var waited = 0
             while (recUuid.isEmpty() && waited < 60 && active) { delay(1000); waited++ }
             if (recUuid.isEmpty()) { finish("nenhuma gravação iniciada nos óculos em 60 s"); return@launch }
+            if (audioAt < 0) audioAt = clock()
             countdown(seconds)
             stop("tempo do teste concluído")
         }
@@ -144,7 +196,8 @@ class HardwareProbe(
     private suspend fun countdown(seconds: Int) {
         var left = seconds
         while (left > 0 && active && !stopping) {
-            _state.value = _state.value.copy(phase = "capturando", secondsLeft = left, records = records.size, audioBytes = bytes)
+            _state.value = _state.value.copy(phase = "capturando", secondsLeft = left, records = records.size, audioBytes = bytes,
+                audioSeconds = if (audioAt >= 0) ((clock() - audioAt) / 1000).toInt() else -1, trigger = trigger)
             delay(1000); left--
         }
     }
@@ -154,10 +207,10 @@ class HardwareProbe(
         stopping = true
         scope.launch {
             event("parando: $reason")
-            if (kind == "lifelog") sendLifeLogOff() else if (recUuid.isNotEmpty()) send(Business.RECORDING, 4, "{\"uuid\":${Json.quote(recUuid)},\"action\":1,\"code\":2}")
+            if (isLifeLog) sendLifeLogOff() else if (recUuid.isNotEmpty()) send(Business.RECORDING, 4, "{\"uuid\":${Json.quote(recUuid)},\"action\":1,\"code\":2}")
             _state.value = _state.value.copy(phase = "recebendo últimos pacotes")
             var waited = 0
-            val done = { if (kind == "lifelog") _state.value.offConfirmed else recCompleted || recUuid.isEmpty() }
+            val done = { if (isLifeLog) _state.value.offConfirmed else recCompleted || recUuid.isEmpty() }
             while (waited < 10 && !done()) { delay(1000); waited++ }
             finish(reason)
         }
@@ -176,12 +229,13 @@ class HardwareProbe(
         scope.launch {
             DiagnosticLog.w("SONDA", "desligamento do LifeLog pendente; reenviando OFF")
             kind = "lifelog-off"; active = true; stopping = true; startedAt = clock(); records.clear(); events.clear()
-            _state.value = _state.value.copy(phase = "desligando LifeLog pendente", pendingOff = true)
+            _state.value = _state.value.copy(phase = "desligando LifeLog pendente", pendingOff = true, offConfirmed = false, audioSeconds = -1, trigger = "")
             sendLifeLogOff()
             var waited = 0
             while (waited < 10 && !_state.value.offConfirmed) { delay(1000); waited++ }
-            active = false; stopping = false
-            _state.value = _state.value.copy(phase = "inativo", note = if (_state.value.offConfirmed) "LifeLog desligado (confirmado)" else
+            val ok = _state.value.offConfirmed
+            // Saved like any probe: G5 evidence survives the app being killed and reopened.
+            finish("desligamento pendente reenviado ao conectar", if (ok) "LifeLog desligado (confirmado) ao reconectar" else
                 "OFF reenviado sem confirmação; verifique os óculos e tente \"Desligar LifeLog\" de novo")
         }
     }
@@ -189,19 +243,24 @@ class HardwareProbe(
     /** Manual safety button. */
     fun forceLifeLogOff() { if (!active) { pending.set(true); connectionReady() } }
 
-    private fun finish(reason: String) {
+    private fun finish(reason: String, verdictOverride: String? = null) {
         if (!active) return
-        val audioTypes = if (kind == "lifelog") setOf(13 to 163, 13 to 164) else setOf(14 to 3)
+        val audioTypes = if (isLifeLog) setOf(13 to 163, 13 to 164) else setOf(14 to 3)
         val ordered = if (kind == "recording14") orderedRecording() else records.toList()
         val analysis = ProbeAnalysis.analyze(ordered, audioTypes)
         analysis.report.put("kind", kind).put("reason", reason).put("durationMs", clock() - startedAt)
             .put("offConfirmed", _state.value.offConfirmed).put("a2Sent", a2Sent)
+        if (kind == "lifelog-glasses") analysis.report.put("trigger", trigger.ifEmpty { "nenhum" }).put("appSwitchedOn", switchSent)
+        if (kind == "lifelog") analysis.report.put("inRealtimePage", realtimePage)
+        verdictOverride?.let { analysis.report.put("verdict", it) }
         if (kind == "recording14") analysis.report.put("coverage", coverage())
         val path = runCatching { sink.save(kind, ordered, analysis, events.toList()) }.getOrElse { "falha ao salvar: ${it.javaClass.simpleName}" }
         active = false; stopping = false; job?.cancel()
         _state.value = _state.value.copy(phase = "concluído", secondsLeft = 0, verdict = analysis.report.optString("verdict"),
-            savedAt = path, note = "Teste concluído: $reason", pendingOff = pending.get(), events = events.takeLast(60))
+            savedAt = path, note = "Teste concluído: $reason", pendingOff = pending.get(), events = events.takeLast(60), runs = _state.value.runs + 1)
         DiagnosticLog.i("SONDA", "concluído ($kind): ${analysis.report.optString("verdict")}")
+        val done = _state.value
+        finishedListeners.forEach { runCatching { it(done) } }
     }
 
     // ------------------------------------------------------------------ receive path
@@ -223,12 +282,14 @@ class HardwareProbe(
         if (context) return
         scope.launch {
             when {
-                business == Business.AI_ASSISTANT && envelope.type == 161 && kind == "lifelog" && !a2Sent && !stopping -> {
+                business == Business.AI_ASSISTANT && envelope.type == 161 && isLifeLog && !a2Sent && !stopping -> {
                     a2Sent = true
+                    if (audioAt < 0) audioAt = clock()
+                    if (kind == "lifelog-glasses") glassesTrigger(if (switchSent) "app ligou após pedido dos óculos" else "óculos ligaram sozinhos (A1)", false)
                     send(Business.AI_ASSISTANT, 162, LifeLogWire.a2(taskId))
                     send(Business.AI_ASSISTANT, 168, LifeLogWire.a8(realtimePage))
                 }
-                business == Business.AI_ASSISTANT && envelope.type == 165 && kind == "lifelog" -> stop("óculos encerraram (A5)")
+                business == Business.AI_ASSISTANT && envelope.type == 165 && isLifeLog -> stop("óculos encerraram (A5)")
                 business == Business.RECORDING && kind == "recording14" -> handleRecording(envelope.type, body)
             }
         }
@@ -242,7 +303,11 @@ class HardwareProbe(
             _state.value = _state.value.copy(offConfirmed = true, pendingOff = false)
             DiagnosticLog.i("SONDA", "LifeLog OFF confirmado pelos óculos ($cmd)")
         }
-        if (active && !stopping && kind == "lifelog" && cmd == "life_log_switch_result" && value != null && value != 0) {
+        if (active && !stopping && kind == "lifelog-glasses") {
+            if (cmd == "life_log_guide_launch") scope.launch { glassesTrigger("óculos pediram a configuração (guide_launch)", true) }
+            if (cmd == "life_log_switch" && value == 1) scope.launch { glassesTrigger("óculos ligaram o LifeLog (switch = 1)", false) }
+        }
+        if (active && !stopping && isLifeLog && switchSent && cmd == "life_log_switch_result" && value != null && value != 0) {
             event("óculos recusaram: ${LifeLogWire.SWITCH_ERRORS[value] ?: "código $value"}")
             stop("óculos recusaram o LifeLog")
         }

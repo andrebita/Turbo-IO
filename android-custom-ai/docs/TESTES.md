@@ -94,7 +94,8 @@ geral não traz chaves de versão, por isso “Óculos (status)” mostra “—
 | **G2** Formato do áudio | ✅ **aprovado** | 433 quadros de 240 B, TOC config 11 = **SILK banda larga, 60 ms, mono** (não 20 ms como se supunha); 433/433 decodificam a 16 kHz; 433 × 60 ms = 26,0 s = todo o intervalo A2→OFF, sem perdas; a transcrição local do `decoded.wav` (Whisper *small*, no contêiner de análise, sem envio a terceiros) devolve a narração do usuário em português com sentido |
 | **G3** Máscaras | ❌ **não servem como sinal de fala nem de “você”** (provisório) | `vadMask` ligado em 82 % dos quadros com fala e em 86 % dos silenciosos; `vpuMask` em 54 % × 44 %; nenhuma defasagem de −25 a +25 quadros melhora a concordância. Só o usuário falava, então falta o trecho com outra pessoa |
 | **G4** Continuidade | 🟡 entrega **em lotes a cada 20 s** (`mode:1`, `inRealtimePage:false`): ~11 envelopes de 31 quadros (≈ 20 s de áudio) em ~2 s, e o resto é enviado após o OFF. Latência de ~20 s, sem lacunas. Execução de 5 min **encerrada pelos próprios óculos** em ~2 min (`life_log_switch value 0` + A5 `rc:0`), logo após três mensagens 15/24 cujo conteúdo não era registrado | log 22:47:20–22:49:23 |
-| **G4b** `inRealtimePage:true` | ⏳ novo botão (0.2.1): verifica se os óculos passam a enviar em tempo real | — |
+| **G4b** `inRealtimePage:true` | ⏳ etapa 2 da bateria (0.2.2) | — |
+| **G7** Ligar pelos óculos | ⏳ etapa 3 da bateria (0.2.2) | — |
 | **G5** Desligamento após matar o app | ⏳ | — |
 | **G14** Gravação pelo menu (canal 14) | ❌ nenhum áudio em 3 min; os óculos responderam `life_log_guide_launch` | log 22:50:14–22:51:02 |
 
@@ -131,18 +132,25 @@ Ative “Copiar log” na aba Diagnóstico após cada etapa e guarde o texto (n�
 Em caso de falha em C2, o campo “motivo” do Diagnóstico identifica a etapa (`account-bound-peer`, `version-timeout`,
 `proof-mismatch`, `service-missing`, `system-pair-failed`, `status-timeout`…).
 
-### Fase 3 — sondas nos óculos (aba Diagnóstico → “Testes de hardware”)
+### Fase 3 — bateria de testes nos óculos (aba Diagnóstico → “Bateria de testes nos óculos”)
 
-Execute nesta ordem, com os óculos conectados e o app aberto. Depois de cada teste, toque **Exportar último teste
-(com áudio)** e me envie o ZIP. Ele contém o relatório, os eventos, o áudio bruto e um WAV decodificado para você ouvir.
+Toque **Começar bateria** e depois **Iniciar esta etapa** em cada passo; as instruções aparecem na tela e, durante a
+captura, um texto grande diz o que fazer (ex.: “SILÊNCIO total”). Cada etapa é uma sonda limitada no tempo que desliga
+o LifeLog ao final. Ao terminar, toque **Exportar todos os testes (1 arquivo)**: o ZIP traz uma pasta por etapa
+(relatório, eventos, áudio bruto, WAV e o log técnico daquele momento), `resumo.txt` e o log atual. Etapas podem ser
+puladas. Duração total: cerca de 15 min.
 
-| Portão | Botão | O que fazer durante o teste | O que o relatório responde |
+| # | Etapa | O que fazer | O que responde |
 | --- | --- | --- | --- |
-| G4b | **LifeLog em tempo real 60 s** | fale durante todo o teste | o áudio chega a cada ~2 s (tempo real) ou de 20 em 20 s (cache)? |
-| G1–G3 | **LifeLog 30 s** | 10 s falando “teste um, dois, três…”, 10 s em silêncio, 10 s com outra pessoa falando | os óculos aceitam o LifeLog sem conta? O áudio é Opus decodificável? O `vadMask` acompanha a fala? O `vpuMask` marca só a sua voz? |
-| G5 | — | durante um teste, feche o app à força; reabra e reconecte | o app reenvia o desligamento sozinho e mostra “LifeLog desligado (confirmado)” |
-| G4 | **LifeLog 5 min** | converse normalmente, com pausas; mantenha os óculos no rosto | cadência (~16,7 quadros/s de 60 ms), lacunas, motivo de os óculos encerrarem (15/3, 15/24) |
-| G14 | **Gravação pelo menu** | inicie uma gravação pelo menu dos óculos, fale 1 min e pare | gravação completa, cobertura contínua, decodificação |
+| 1 | **G1–G3 · LifeLog 40 s com roteiro** | seguir o texto na tela: você fala, silêncio, outra pessoa fala, alternância | aceitação, formato e se `vadMask`/`vpuMask` distinguem fala e “você” |
+| 2 | **G4b · tempo real 60 s** | falar o tempo todo | `inRealtimePage:true` faz o áudio chegar a cada ~2 s em vez de 20 s? |
+| 3 | **G7 · ligar pelos óculos** | em até 90 s, ligar o LifeLog pelo menu dos óculos; anotar o que aparece nas lentes | o app só liga a marca `life_log_guide` e espera. Se os óculos pedirem a configuração (`life_log_guide_launch`), o app liga o LifeLog; se ligarem sozinhos (A1 ou `life_log_switch` = 1), o app aceita. O relatório traz `trigger` |
+| 4 | **G14 · gravação pelo menu** | começar e parar uma gravação pelo menu dos óculos | o canal 14 entrega áudio? |
+| 5 | **G4 · LifeLog 5 min** | óculos no rosto, conversar com pausas | cadência, lacunas e por que os óculos encerram (15/3, 15/24 agora gravados) |
+| 6 | **G5 · fechar à força** | quando aparecer “áudio: 10 s”, forçar a parada do app; reabrir e conectar | o app reenvia o desligamento sozinho; a etapa conclui após a reconexão (o progresso da bateria fica salvo) |
+
+Os botões avulsos continuam disponíveis em “Testes de hardware avulsos”, e “Apagar testes salvos no telefone” remove
+os áudios guardados.
 
 Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar LifeLog nos óculos**.
 
@@ -150,8 +158,8 @@ Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar Li
 
 | Campo | Valor |
 | --- | --- |
-| Arquivo | `TurboIO-CustomAI-0.2.1-diario-debug.apk` (versionCode 3; instala por cima da 0.2.0, mesma assinatura e dados) |
-| SHA-256 | ver `TurboIO-CustomAI-0.2.1-diario-debug.apk.sha256` publicado junto |
+| Arquivo | `TurboIO-CustomAI-0.2.2-diario-debug.apk` (versionCode 4; instala por cima da 0.2.x, mesma assinatura e dados) |
+| SHA-256 | ver `TurboIO-CustomAI-0.2.2-diario-debug.apk.sha256` publicado junto |
 | Assinatura | certificado *Android Debug* (APK de teste; não é build de loja) |
 | Pacote / alvo | `org.turboio.customai`, minSdk 26, targetSdk 35 |
 | Conteúdo proprietário | nenhum (sem `.so`, sem classes/recursos RayNeo) |

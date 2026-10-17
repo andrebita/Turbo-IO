@@ -29,6 +29,14 @@ class DiagnosticsFragment : Fragment() {
     private lateinit var test: TextView
     private lateinit var log: TextView
     private lateinit var probeStatus: TextView
+    private lateinit var suiteText: TextView
+    private lateinit var cueText: TextView
+    private lateinit var btnBegin: View
+    private lateinit var btnStep: View
+    private lateinit var btnStopStep: View
+    private lateinit var btnSkip: View
+    private lateinit var btnExportAll: View
+    private lateinit var btnEnd: View
     private val refresh: () -> Unit = { view?.post { renderLog() } }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
@@ -41,7 +49,20 @@ class DiagnosticsFragment : Fragment() {
         ui.button("Teste do provedor de IA (pergunta curta)", filled = false) { aiTest() }
         test = ui.text(size = 13f)
 
-        ui.title("Testes de hardware (fase 3)")
+        ui.title("Bateria de testes nos óculos (recomendado)")
+        ui.hint("Todos os testes de hardware em sequência (cerca de 15 min), com instruções entre eles, e um único arquivo " +
+            "para enviar no final. Nada é gravado no firmware; o LifeLog é desligado ao fim de cada etapa.")
+        val suiteCard = ui.card()
+        suiteText = suiteCard.text(size = 14f)
+        cueText = suiteCard.text(size = 20f).apply { setTypeface(typeface, android.graphics.Typeface.BOLD) }
+        btnBegin = suiteCard.button("Começar bateria") { confirmProbe("bateria completa (≈ 15 min)") { app.suite.begin(); null } }
+        btnStep = suiteCard.button("Iniciar esta etapa") { app.suite.startStep()?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show() } }
+        btnStopStep = suiteCard.button("Parar esta etapa", filled = false) { app.probe.stop() }
+        btnSkip = suiteCard.button("Pular etapa", filled = false) { app.suite.skip() }
+        btnExportAll = suiteCard.button("Exportar todos os testes (1 arquivo)") { exportAll() }
+        btnEnd = suiteCard.button("Encerrar bateria", filled = false) { app.suite.end() }
+
+        ui.title("Testes de hardware avulsos (fase 3)")
         ui.hint("Testes curtos e limitados nos canais de áudio do firmware original. Nada é gravado no firmware. " +
             "Fale frases de teste e avise quem estiver perto. Ao final, exporte o pacote e envie para análise.")
         ui.button("G1–G3 · LifeLog 30 s") { confirmProbe("LifeLog por 30 s") { app.probe.startLifeLog(30) } }
@@ -53,6 +74,14 @@ class DiagnosticsFragment : Fragment() {
         probeStatus = ui.text(size = 12.5f, mono = true)
         ui.button("Exportar último teste (com áudio)", filled = false) { exportProbe(true) }
         ui.button("Exportar último teste (sem áudio)", filled = false) { exportProbe(false) }
+        ui.button("Apagar testes salvos no telefone", filled = false) {
+            AlertDialog.Builder(requireContext()).setTitle("Apagar testes salvos?")
+                .setMessage("Remove os áudios e relatórios dos testes de hardware guardados neste app.")
+                .setPositiveButton("Apagar") { _, _ ->
+                    viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { app.probeFiles.deleteAll() }
+                    Toast.makeText(requireContext(), "Testes apagados", Toast.LENGTH_SHORT).show()
+                }.setNegativeButton("Cancelar", null).show()
+        }
 
         ui.title("Log técnico (sem chaves, endereços ou conteúdo)")
         val row = ui.row()
@@ -87,6 +116,7 @@ class DiagnosticsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { app.status.collect { info.text = header() } }
+                launch { kotlinx.coroutines.flow.combine(app.suite.state, app.probe.state) { a, b -> a to b }.collect { (s, p) -> renderSuite(s, p) } }
                 launch {
                     app.probe.state.collect { p ->
                         probeStatus.text = buildString {
@@ -140,6 +170,50 @@ class DiagnosticsFragment : Fragment() {
         val dir = app.probeFiles.latest() ?: run { Toast.makeText(requireContext(), "Nenhum teste salvo ainda", Toast.LENGTH_SHORT).show(); return }
         viewLifecycleOwner.lifecycleScope.launch {
             val intent = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.probeFiles.share(dir, audio, header() + "\n\n" + DiagnosticLog.export()) }
+            startActivity(intent)
+        }
+    }
+
+    private fun renderSuite(s: org.turboio.customai.probe.SuiteState, p: org.turboio.customai.probe.ProbeState) {
+        val steps = org.turboio.customai.probe.TestSuite.STEPS
+        val step = s.current
+        suiteText.text = buildString {
+            if (!s.active && s.results.isEmpty()) { append("Toque em “Começar bateria”. Deixe os óculos conectados e carregados."); return@buildString }
+            if (s.active && step != null) {
+                append("Etapa ${s.index + 1}/${steps.size} · ${step.id} · ${step.title}\n${step.instructions}")
+                if (s.running) {
+                    append("\n\n${p.phase}")
+                    if (p.secondsLeft > 0) append(" · ${p.secondsLeft} s")
+                    if (p.audioSeconds >= 0) append(" · áudio: ${p.audioSeconds} s")
+                    if (p.trigger.isNotEmpty()) append("\n${p.trigger}")
+                    if (p.pendingOff && p.phase == "inativo") append("\n⚠ LifeLog pode estar ligado")
+                }
+            } else if (s.active) append("✓ Bateria concluída. Toque em “Exportar todos os testes” e me envie o arquivo.")
+            else append("Bateria encerrada.")
+            if (s.results.isNotEmpty()) {
+                append("\n\nResultados:")
+                s.results.forEach { append("\n${if (it.done) "✓" else "↷"} ${it.id}: ${it.verdict.take(90)}") }
+            }
+        }
+        cueText.text = if (s.running) step?.cue(p.audioSeconds) ?: "" else ""
+        cueText.visibility = if (cueText.text.isNullOrEmpty()) View.GONE else View.VISIBLE
+        fun show(v: View, on: Boolean) { v.visibility = if (on) View.VISIBLE else View.GONE }
+        show(btnBegin, !s.active)
+        show(btnStep, s.active && !s.running && step != null)
+        show(btnSkip, s.active && !s.running && step != null)
+        show(btnStopStep, s.active && s.running && p.phase != "inativo")
+        show(btnExportAll, s.results.any { it.done })
+        show(btnEnd, s.active)
+    }
+
+    private fun exportAll() {
+        val s = app.suite.state.value
+        val dirs = app.probeFiles.all(since = s.startedAt)
+        if (dirs.isEmpty()) { Toast.makeText(requireContext(), "Nenhum teste salvo desde o início da bateria", Toast.LENGTH_SHORT).show(); return }
+        val summary = header() + "\n\nBateria iniciada em ${java.util.Date(s.startedAt)}\n" +
+            s.results.joinToString("\n") { "${if (it.done) "✓" else "↷"} ${it.id}: ${it.verdict} ${it.savedAt}" }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val intent = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { app.probeFiles.shareAll(dirs, summary, DiagnosticLog.export()) }
             startActivity(intent)
         }
     }

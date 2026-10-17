@@ -41,6 +41,7 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 | **Insights do dia** (resumo, destaques, tarefas, decisões, compromissos, pessoas, citações), automático às 21h, nas lentes por voz (“resumo do meu dia”, “o que falei sobre X”) | implementado · testado com modelo simulado |
 | **Gravação ambiente** pelo microfone do telefone → Deepgram (separa falantes) ou OpenAI → diário, só a fala é cobrada, áudio apagado após transcrever | implementado · testado ponta a ponta com transcritor simulado e endpoint real · uso real pendente |
 | **Sondas de hardware** do LifeLog e da gravação pelo menu (fase 3), com desligamento garantido e pacote de diagnóstico | implementado · **executadas nos óculos**: LifeLog liga sem conta e o áudio (Opus 60 ms, mono) é inteligível; entrega em lotes de 20 s; canal 14 sem áudio — ver [TESTES.md](docs/TESTES.md) |
+| **Bateria de testes guiada** (6 etapas em sequência, instruções na tela, exportação única em ZIP) e teste de **ligar o LifeLog pelos óculos** (G7) | implementado · testado contra óculos emulados · aguardando execução nos óculos |
 | Atualização de firmware / OTA / transferência de arquivos | **excluído por design** (allow-list testada) |
 
 ### Pendente / próximas fases

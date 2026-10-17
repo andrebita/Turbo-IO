@@ -146,8 +146,73 @@ class HardwareProbeTest {
         assertEquals(listOf("13/166", "15/20", "15/20"), port.trace())
         port.glasses(15, 21, """{"cmd":"life_log_switch_result","payload":{"value":0}}"""); runCurrent()
         advanceTimeBy(2000); runCurrent()
-        assertFalse(flag.value); assertTrue(probe.state.value.note.contains("confirmado"))
+        assertFalse(flag.value); assertTrue(probe.state.value.verdict.contains("confirmado"))
         assertFalse(probe.busy)
+    }
+
+    @Test fun pendingOffResendIsSavedAsEvidenceAndNotConfusedByAnOldConfirmation() = runTest {
+        val flag = MemoryFlag(false); val sink = MemorySink()
+        val probe = HardwareProbe(port, this, flag, fixedRandom, sink, clock = { testScheduler.currentTime })
+        probe.startLifeLog(1); runCurrent(); advanceTimeBy(1500); runCurrent()
+        port.glasses(15, 21, """{"cmd":"life_log_switch_result","payload":{"value":0}}"""); runCurrent()
+        advanceTimeBy(2000); runCurrent()
+        assertTrue(probe.state.value.offConfirmed)
+        // A later unconfirmed OFF must wait for its own confirmation, then be saved (G5 evidence).
+        flag.value = true; port.sent.clear()
+        probe.connectionReady(); runCurrent()
+        assertTrue(probe.busy)
+        advanceTimeBy(11_000); runCurrent()
+        assertFalse(probe.busy); assertTrue(flag.value)
+        assertEquals("probe-test-lifelog-off", probe.state.value.savedAt)
+        assertTrue(probe.state.value.verdict.contains("sem confirmação"))
+        assertEquals(2, probe.state.value.runs)
+    }
+
+    @Test fun glassesInitiatedLifeLogAnswersGuideLaunchWithSwitchOn() = runTest {
+        val flag = MemoryFlag(); val sink = MemorySink()
+        val probe = HardwareProbe(port, this, flag, fixedRandom, sink, clock = { testScheduler.currentTime })
+        assertEquals(null, probe.startLifeLogFromGlasses(90, 5)); runCurrent()
+        assertEquals(listOf("15/20"), port.trace())                       // only the guide flag: the user starts it
+        assertEquals("life_log_guide", cmd(0).getString("cmd")); assertTrue(flag.value)
+        advanceTimeBy(10_000); runCurrent()
+        assertEquals("aguardando os óculos", probe.state.value.phase)
+        // The glasses ask the phone for the LifeLog settings → the app switches LifeLog on itself.
+        port.glasses(15, 21, """{"cmd":"life_log_guide_launch","payload":{"value":0,"mode":0,"data":""}}"""); runCurrent()
+        assertEquals("life_log_switch", cmd(1).getString("cmd")); assertEquals(1, cmd(1).getJSONObject("payload").getInt("value"))
+        port.glasses(15, 21, """{"cmd":"life_log_switch_result","payload":{"value":0}}"""); runCurrent()
+        port.glasses(13, 161); runCurrent()
+        assertEquals(listOf("13/162", "13/168"), port.trace().drop(2))
+        lifeLogFrames(31).let { f -> port.glasses(13, 163, """{"taskId":"t","mode":1,"frameCount":31}""", f.fold(ByteArray(0)) { a, b -> a + b }) }
+        advanceTimeBy(3000); runCurrent()
+        assertEquals(3, probe.state.value.audioSeconds)
+        advanceTimeBy(3000); runCurrent()
+        assertEquals(listOf("13/166", "15/20", "15/20"), port.trace().drop(4).take(3))
+        port.glasses(15, 21, """{"cmd":"life_log_switch_result","payload":{"value":0}}"""); runCurrent()
+        advanceTimeBy(2000); runCurrent()
+        val report = sink.analysis!!.report
+        assertTrue(report.getString("trigger").contains("guide_launch")); assertTrue(report.getBoolean("appSwitchedOn"))
+        assertEquals(31, report.getInt("audioFrames")); assertFalse(flag.value)
+    }
+
+    @Test fun glassesInitiatedLifeLogTimesOutAndStillSwitchesOff() = runTest {
+        val sink = MemorySink()
+        val probe = HardwareProbe(port, this, MemoryFlag(), fixedRandom, sink, clock = { testScheduler.currentTime })
+        probe.startLifeLogFromGlasses(5, 5); runCurrent()
+        advanceTimeBy(6000); runCurrent()
+        assertEquals(listOf("15/20", "13/166", "15/20", "15/20"), port.trace())
+        advanceTimeBy(11_000); runCurrent()
+        assertEquals("nenhum", sink.analysis!!.report.getString("trigger"))
+        assertFalse(sink.analysis!!.report.getBoolean("appSwitchedOn"))
+    }
+
+    @Test fun glassesStartingOnTheirOwnAreAcceptedWithoutSwitch() = runTest {
+        val sink = MemorySink()
+        val probe = HardwareProbe(port, this, MemoryFlag(), fixedRandom, sink, clock = { testScheduler.currentTime })
+        probe.startLifeLogFromGlasses(30, 2); runCurrent()
+        port.glasses(15, 21, """{"cmd":"life_log_switch","payload":{"value":1}}"""); runCurrent()
+        port.glasses(13, 161); runCurrent()
+        assertEquals(listOf("15/20", "13/162", "13/168"), port.trace())
+        assertTrue(probe.state.value.trigger.contains("switch = 1"))
     }
 
     @Test fun recordingProbeAcksAndRebuildsOutOfOrderAudio() = runTest {

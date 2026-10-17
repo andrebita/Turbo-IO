@@ -55,6 +55,7 @@ class TurboApp : Application() {
     lateinit var display: LensDisplay; private set
     lateinit var voice: VoiceAssistant; private set
     lateinit var probe: org.turboio.customai.probe.HardwareProbe; private set
+    lateinit var suite: org.turboio.customai.probe.TestSuite; private set
     val probeFiles by lazy { org.turboio.customai.probe.ProbeFiles(this) }
     lateinit var scope: CoroutineScope; private set
     val ai = AiClient()
@@ -88,6 +89,7 @@ class TurboApp : Application() {
         )
         display = LensDisplay(session, scope, random)
         probe = org.turboio.customai.probe.HardwareProbe(session, scope, org.turboio.customai.probe.PrefsPendingFlag(this), random, probeFiles)
+        suite = org.turboio.customai.probe.TestSuite(probe, org.turboio.customai.probe.PrefsSuiteStore(this))
         voice = VoiceAssistant(session, scope, random, ::speechInput, { q -> voiceAnswer(q) }, settings::voiceSettings, { !display.active && !probe.busy })
         var wasReady = false
         session.onStatus = { s ->

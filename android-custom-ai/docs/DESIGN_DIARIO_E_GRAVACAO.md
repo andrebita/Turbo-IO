@@ -275,6 +275,7 @@ desliga sozinha. Você roda no seu aparelho e me envia o pacote de diagnóstico 
 | **G4b** Tempo real | 60 s com `inRealtimePage:true` | entrega a cada ~2 s em vez de 20 s |
 | **G5** Desligamento | parar, matar o app e reconectar | OFF confirmado nos três casos |
 | **G6** Resistência | 30 min, depois 2 h, depois 8 h | queda de bateria dos óculos e do telefone por hora; estabilidade BLE |
+| **G7** Ligar pelos óculos | usuário liga o LifeLog no menu dos óculos com o app conectado | o app recebe o pedido (`life_log_guide_launch`) ou A1 e a captura começa sem tocar no telefone |
 | **G14** Canal 14 (alternativa) | gravação de 2 min pelo menu dos óculos | arquivo completo, cobertura contínua, transcrição ok |
 
 Resultados em hardware (2026-10-16, detalhes em [TESTES.md](TESTES.md#sondas-da-fase-3-em-hardware)):
@@ -282,6 +283,11 @@ Resultados em hardware (2026-10-16, detalhes em [TESTES.md](TESTES.md#sondas-da-
 inteligível), **G3 ❌ provisório** (`vadMask`/`vpuMask` não acompanham a fala: não usar para corte nem para “você”),
 **G4 🟡** (lotes a cada 20 s com `inRealtimePage:false`; os óculos encerraram a execução de 5 min em ~2 min),
 **G14 ❌** (sem áudio). Pendentes: G4b (`inRealtimePage:true`), G4 com os óculos no rosto, G5, G6.
+
+Ligar pelos óculos (pedido do usuário): ligado manualmente, o LifeLog dos óculos exibe “Please complete LifeLog
+settings on your phone” e envia `life_log_guide_launch` ao telefone. Se o G7 confirmar, a fonte LifeLog da F4 trata
+esse pedido como “começar a gravar” (com o consentimento já dado no app) e desliga quando os óculos mandarem
+`life_log_switch` = 0 ou A5, sem precisar do telefone na mão.
 
 Ajustes de projeto decorrentes: a fonte LifeLog lê a duração de cada quadro no TOC (não presume 20 ms), aceita
 entregas em rajada (o relógio do segmento vem da contagem de quadros, não da hora de chegada) e não grava as
