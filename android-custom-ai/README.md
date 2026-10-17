@@ -27,8 +27,8 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 
 | Funcionalidade | Estado |
 | --- | --- |
-| Descoberta BLE, autenticação *guest*, bond do sistema, leitura de bateria/estado | implementado · testado contra óculos emulados · **hardware pendente** |
-| Reconexão automática com backoff, serviço em primeiro plano | implementado · hardware pendente |
+| Descoberta BLE, autenticação *guest*, bond do sistema, leitura de bateria/estado | implementado · **✅ comprovado em hardware real** (Galaxy S25 Ultra, Android 16, firmware original) |
+| Reconexão automática com backoff, serviço em primeiro plano | implementado · 🟡 em hardware: uma reconexão logo após conectar, depois estável por 30 min |
 | Provedores: OpenAI, Gemini, Anthropic, compatível com OpenAI | implementado · formatos testados + endpoints reais testados (chave inválida) |
 | Configuração: provedor, modelo, endpoint, chave, instruções, tokens, timeout, contexto | implementado |
 | Chaves no Android Keystore (AES-256-GCM), logs redigidos, HTTPS obrigatório | implementado |
@@ -40,12 +40,13 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 | **Diário**: todas as perguntas/respostas, busca sem acentos, exportação Markdown, retenção | implementado · testado (SQLite real) |
 | **Insights do dia** (resumo, destaques, tarefas, decisões, compromissos, pessoas, citações), automático às 21h, nas lentes por voz (“resumo do meu dia”, “o que falei sobre X”) | implementado · testado com modelo simulado |
 | **Gravação ambiente** pelo microfone do telefone → Deepgram (separa falantes) ou OpenAI → diário, só a fala é cobrada, áudio apagado após transcrever | implementado · testado ponta a ponta com transcritor simulado e endpoint real · uso real pendente |
-| **Sondas de hardware** do LifeLog e da gravação pelo menu (fase 3), com desligamento garantido e pacote de diagnóstico | implementado · testado contra óculos emulados · **aguardando execução nos óculos** |
+| **Sondas de hardware** do LifeLog e da gravação pelo menu (fase 3), com desligamento garantido e pacote de diagnóstico | implementado · **executadas nos óculos**: LifeLog liga sem conta e o áudio (Opus 60 ms, mono) é inteligível; entrega em lotes de 20 s; canal 14 sem áudio — ver [TESTES.md](docs/TESTES.md) |
 | Atualização de firmware / OTA / transferência de arquivos | **excluído por design** (allow-list testada) |
 
 ### Pendente / próximas fases
 
-* **Teste C em hardware real** (pareamento, display, voz, estabilidade) com Strix OS 1.0.5.5 — roteiro em [docs/TESTES.md](docs/TESTES.md).
+* **Teste C em hardware real**: conexão e LifeLog comprovados; faltam display nas lentes, voz, estabilidade longa e reversão — roteiro em [docs/TESTES.md](docs/TESTES.md).
+* **F4**: fonte “óculos (LifeLog)” para a gravação ambiente, usando o formato medido em hardware.
 * Calibrar o *end-pointer* (limiar de energia) do microfone dos óculos com áudio real.
 * Respostas em streaming (SSE) para reduzir a latência percebida.
 * Reconhecimento contínuo no dispositivo (ex.: Whisper local) e TTS opcional.

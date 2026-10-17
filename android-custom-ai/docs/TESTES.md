@@ -66,11 +66,45 @@ Os emuladores deste ambiente não têm Bluetooth nem aceleração de hardware; s
 
 ## Teste C — RayNeo iO (hardware real)
 
-**Status: ⏳ NÃO executado — não aprovado.** Não há óculos neste ambiente. Nenhuma afirmação de funcionamento nas lentes é
-feita sem evidência em hardware.
+**Status: 🟡 PARCIAL — primeira evidência em hardware real (2026-10-16, 22:19–22:53).** Itens sem evidência
+continuam não aprovados.
 
-Relato do usuário em 2026-10-17: “O app funciona.” Ainda não há log nem detalhamento por item. O Teste C continua
-sem aprovação formal até chegar o pacote de diagnóstico, ou o log da aba Diagnóstico, cobrindo os itens C1–C9 abaixo.
+Ambiente: Samsung Galaxy **SM-S938B, Android 16 (API 36)**, app 0.2.0-diario, RayNeo iO com **firmware original**
+(nada foi gravado nos óculos), app oficial não instalado no telefone durante o teste. Evidência: log técnico da aba
+Diagnóstico e o pacote `probe-20261016-225342-lifelog.zip` enviados pelo usuário.
+
+| # | Resultado | Evidência |
+| --- | --- | --- |
+| C1–C2 | ✅ descoberta, autenticação *guest*, bond do sistema e **Conectado** em ~2,3 s | `GATT pronto, MTU=517` → `versão recebida: protocolo=2` → `prova do par verificada` → `INITIALIZING -> READY` |
+| C3 | ✅ os óculos responderam ao pedido de estado (6 respostas, bateria 99 %) | `Respostas de status: 6 · bateria 99%`; chaves `battery, hallStatus, micStatus, screenStatus…` |
+| C4–C5 | ⏳ sem relato do texto nas lentes | — (o log mostra duas perguntas ao Gemini pela aba Testes, sem envio às lentes) |
+| IA | ✅ Gemini respondendo pelo telefone (HTTP 200 em 3,3–3,9 s) | `[AI] HTTP 200 em 3868 ms` |
+| C6–C7 | ⏳ voz pelo assistente dos óculos não exercitada | — |
+| C8 | 🟡 uma reconexão 3 s após o primeiro READY, depois 30 min estável | `READY -> CONNECTING` às 22:19:52, READY às 22:19:54 |
+| C9 | ⏳ | — |
+
+Os campos de versão vieram no *handshake* (`0x10:1,0x11:6,0x12:14,0x13:1,0x14:15,0x15:1,0x18:15`), mas o estado
+geral não traz chaves de versão, por isso “Óculos (status)” mostra “—”. Não é falha.
+
+#### Sondas da fase 3 em hardware
+
+| Portão | Resultado | Evidência |
+| --- | --- | --- |
+| **G1** LifeLog sem conta oficial | ✅ **aprovado** (3 execuções) | `life_log_switch_result value 0` → A1 (13/161) → A2/A8 enviados; OFF confirmado pelos óculos ao final de todas |
+| **G2** Formato do áudio | ✅ **aprovado** | 433 quadros de 240 B, TOC config 11 = **SILK banda larga, 60 ms, mono** (não 20 ms como se supunha); 433/433 decodificam a 16 kHz; 433 × 60 ms = 26,0 s = todo o intervalo A2→OFF, sem perdas; a transcrição local do `decoded.wav` (Whisper *small*, no contêiner de análise, sem envio a terceiros) devolve a narração do usuário em português com sentido |
+| **G3** Máscaras | ❌ **não servem como sinal de fala nem de “você”** (provisório) | `vadMask` ligado em 82 % dos quadros com fala e em 86 % dos silenciosos; `vpuMask` em 54 % × 44 %; nenhuma defasagem de −25 a +25 quadros melhora a concordância. Só o usuário falava, então falta o trecho com outra pessoa |
+| **G4** Continuidade | 🟡 entrega **em lotes a cada 20 s** (`mode:1`, `inRealtimePage:false`): ~11 envelopes de 31 quadros (≈ 20 s de áudio) em ~2 s, e o resto é enviado após o OFF. Latência de ~20 s, sem lacunas. Execução de 5 min **encerrada pelos próprios óculos** em ~2 min (`life_log_switch value 0` + A5 `rc:0`), logo após três mensagens 15/24 cujo conteúdo não era registrado | log 22:47:20–22:49:23 |
+| **G4b** `inRealtimePage:true` | ⏳ novo botão (0.2.1): verifica se os óculos passam a enviar em tempo real | — |
+| **G5** Desligamento após matar o app | ⏳ | — |
+| **G14** Gravação pelo menu (canal 14) | ❌ nenhum áudio em 3 min; os óculos responderam `life_log_guide_launch` | log 22:50:14–22:51:02 |
+
+Consequências aplicadas na 0.2.1:
+* A análise usa a duração real de cada quadro (TOC) para o VAD, a taxa esperada e a duração do áudio, e informa o
+  padrão de entrega (lotes × contínua).
+* Durante uma sonda, as mensagens de estado do *launcher* (15/3 e 15/24) passam a ser gravadas, com endereços
+  Bluetooth mascarados, para explicar por que os óculos encerram o LifeLog.
+* As máscaras dos óculos **não** serão usadas para cortar fala nem para identificar “você” até um G3 com outra
+  pessoa falando dizer o contrário. Vale o VAD do próprio app e a separação de falantes da Deepgram.
 
 ### Roteiro para executar no seu aparelho
 
@@ -98,9 +132,10 @@ Execute nesta ordem, com os óculos conectados e o app aberto. Depois de cada te
 
 | Portão | Botão | O que fazer durante o teste | O que o relatório responde |
 | --- | --- | --- | --- |
+| G4b | **LifeLog em tempo real 60 s** | fale durante todo o teste | o áudio chega a cada ~2 s (tempo real) ou de 20 em 20 s (cache)? |
 | G1–G3 | **LifeLog 30 s** | 10 s falando “teste um, dois, três…”, 10 s em silêncio, 10 s com outra pessoa falando | os óculos aceitam o LifeLog sem conta? O áudio é Opus decodificável? O `vadMask` acompanha a fala? O `vpuMask` marca só a sua voz? |
 | G5 | — | durante um teste, feche o app à força; reabra e reconecte | o app reenvia o desligamento sozinho e mostra “LifeLog desligado (confirmado)” |
-| G4 | **LifeLog 5 min** | converse normalmente, com pausas | cadência de quadros (~50/s?), lacunas, lotes em tempo real × cache |
+| G4 | **LifeLog 5 min** | converse normalmente, com pausas; mantenha os óculos no rosto | cadência (~16,7 quadros/s de 60 ms), lacunas, motivo de os óculos encerrarem (15/3, 15/24) |
 | G14 | **Gravação pelo menu** | inicie uma gravação pelo menu dos óculos, fale 1 min e pare | gravação completa, cobertura contínua, decodificação |
 
 Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar LifeLog nos óculos**.
@@ -109,15 +144,16 @@ Se aparecer “⚠ LifeLog pode estar LIGADO”, toque **Segurança: desligar Li
 
 | Campo | Valor |
 | --- | --- |
-| Arquivo | `TurboIO-CustomAI-0.2.0-diario-debug.apk` (versionCode 2; instala por cima da 0.1.0, mesma assinatura) |
-| SHA-256 | ver `TurboIO-CustomAI-0.2.0-diario-debug.apk.sha256` publicado junto |
+| Arquivo | `TurboIO-CustomAI-0.2.1-diario-debug.apk` (versionCode 3; instala por cima da 0.2.0, mesma assinatura e dados) |
+| SHA-256 | ver `TurboIO-CustomAI-0.2.1-diario-debug.apk.sha256` publicado junto |
 | Assinatura | certificado *Android Debug* (APK de teste; não é build de loja) |
 | Pacote / alvo | `org.turboio.customai`, minSdk 26, targetSdk 35 |
 | Conteúdo proprietário | nenhum (sem `.so`, sem classes/recursos RayNeo) |
 
 ## Limitações conhecidas
 
-* Compatibilidade do handshake com **Strix OS 1.0.5.5** não comprovada (Teste C).
+* Conexão, autenticação *guest* e LifeLog comprovados em hardware real (Android 16); display nas lentes, voz e reversão ainda sem evidência (Teste C parcial).
+* Áudio do LifeLog chega em lotes a cada ~20 s: serve ao diário, não a conversa em tempo real.
 * Um cliente por vez: o app oficial precisa estar desvinculado enquanto este app é usado.
 * VAD por energia no microfone dos óculos (limiar 450 RMS) pode precisar de ajuste.
 * Reconhecimento pelo microfone do telefone com o app em segundo plano depende do serviço de voz do sistema.

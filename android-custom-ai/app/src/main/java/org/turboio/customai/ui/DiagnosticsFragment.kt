@@ -46,6 +46,7 @@ class DiagnosticsFragment : Fragment() {
             "Fale frases de teste e avise quem estiver perto. Ao final, exporte o pacote e envie para análise.")
         ui.button("G1–G3 · LifeLog 30 s") { confirmProbe("LifeLog por 30 s") { app.probe.startLifeLog(30) } }
         ui.button("G4 · LifeLog 5 min (fale com pausas)", filled = false) { confirmProbe("LifeLog por 5 min") { app.probe.startLifeLog(300) } }
+        ui.button("G4b · LifeLog em tempo real 60 s", filled = false) { confirmProbe("LifeLog em tempo real por 60 s") { app.probe.startLifeLog(60, realtimePage = true) } }
         ui.button("G14 · Gravação pelo menu dos óculos (até 3 min)", filled = false) { confirmProbe("gravação pelo menu") { app.probe.startRecording14(180) } }
         ui.button("Parar teste", filled = false) { app.probe.stop() }
         ui.button("Segurança: desligar LifeLog nos óculos", filled = false) { app.probe.forceLifeLogOff() }

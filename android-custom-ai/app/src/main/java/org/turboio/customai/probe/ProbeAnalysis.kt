@@ -63,7 +63,10 @@ object ProbeAnalysis {
         report.put("frameSizes", JSONObject(sizes.mapKeys { it.key.toString() }))
         val tocs = allFrames.map { toc(it.second[0]) }
         report.put("tocConfigs", JSONObject(tocs.groupingBy { "${it.config}/${it.mode}/${if (it.stereo) "estéreo" else "mono"}/c${it.code}" }.eachCount()))
-        val durations = allFrames.mapNotNull { runCatching { OpusPacketInfo.getNumSamples(it.second, 0, it.second.size, 48000) / 48 }.getOrNull() }
+        // Per-frame duration from the TOC (hardware LifeLog uses 60 ms frames; the VAD and timing must follow it).
+        val frameMs = allFrames.map { runCatching { OpusPacketInfo.getNumSamples(it.second, 0, it.second.size, 48000) / 48 }.getOrNull() }
+        val durations = frameMs.filterNotNull()
+        val typicalMs = durations.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: 20
         report.put("frameDurationsMs", JSONObject(durations.groupingBy { it.toString() }.eachCount()))
 
         // Decode at 16 kHz with the channel count announced by the TOC; per-channel energy; phone-side VAD.
@@ -76,7 +79,8 @@ object ProbeAnalysis {
         var left = 0.0; var right = 0.0
         val vad = OnlineVad()
         val phoneVad = ArrayList<Boolean>(); val frameEnergy = ArrayList<Double>()
-        for ((_, f) in allFrames) {
+        for ((k, pair) in allFrames.withIndex()) {
+            val f = pair.second
             try {
                 val n = decoder.decode(f, 0, f.size, pcm, 0, pcm.size / channels, false)
                 ok++
@@ -84,7 +88,7 @@ object ProbeAnalysis {
                 if (channels == 2) {
                     left += rms(ShortArray(n) { pcm[2 * it] }); right += rms(ShortArray(n) { pcm[2 * it + 1] })
                 }
-                val e = rms(mono); frameEnergy.add(e); phoneVad.add(vad.feed(e, 20))
+                val e = rms(mono); frameEnergy.add(e); phoneVad.add(vad.feed(e, frameMs[k] ?: typicalMs))
                 for (i in 0 until n * channels) { wav.write(pcm[i].toInt() and 0xff); wav.write((pcm[i].toInt() shr 8) and 0xff) }
             } catch (_: Exception) { failed++; phoneVad.add(false); frameEnergy.add(0.0) }
         }
@@ -115,16 +119,32 @@ object ProbeAnalysis {
             .put("vpuOnFrames", vpuOn).put("vpuMeanRms", if (vpuOn > 0) vpuEnergy / vpuOn else -1.0)
             .put("nonVpuMeanRms", if (otherN > 0) otherEnergy / otherN else -1.0))
 
-        // Continuity: frames per wall second while receiving, largest gap between audio envelopes.
+        // Continuity: frames per wall second while receiving, largest gap between audio envelopes, and delivery
+        // pattern — on hardware (mode 1) audio arrives in bursts of cached batches, not as a realtime stream.
         val first = audio.first().atMs; val last = audio.last().atMs
         val spanS = maxOf(1.0, (last - first) / 1000.0)
         val gaps = audio.zipWithNext { a, b -> b.atMs - a.atMs }
+        // A realtime stream spaces envelopes by about one batch of audio; a gap of several batches starts a new burst.
+        val batchMs = allFrames.size * typicalMs / audio.size
+        val burstGap = maxOf(1000L, 3L * batchMs)
+        val bursts = ArrayList<MutableList<ProbeRecord>>()
+        audio.forEachIndexed { i, r -> if (i == 0 || r.atMs - audio[i - 1].atMs > burstGap) bursts.add(ArrayList()); bursts.last().add(r) }
+        val starts = bursts.map { it.first().atMs }
+        val audioMs = frameMs.sumOf { it ?: typicalMs }
         report.put("continuity", JSONObject().put("seconds", spanS).put("framesPerSecond", allFrames.size / spanS)
-            .put("expectedFramesPerSecond", 50).put("maxGapMs", gaps.maxOrNull() ?: 0)
-            .put("audioDurationMs", allFrames.size * (durations.firstOrNull() ?: 20)))
+            .put("expectedFramesPerSecond", 1000.0 / typicalMs).put("maxGapMs", gaps.maxOrNull() ?: 0)
+            .put("audioDurationMs", audioMs).put("typicalFrameMs", typicalMs)
+            .put("firstAudioAtMs", first)
+            .put("modes", JSONObject(audio.mapNotNull { runCatching { JSONObject(it.json).opt("mode")?.toString() }.getOrNull() }.groupingBy { it }.eachCount()))
+            .put("bursts", bursts.size)
+            .put("meanBurstIntervalMs", if (starts.size > 1) (starts.last() - starts.first()) / (starts.size - 1) else 0)
+            .put("meanFramesPerBurst", allFrames.size / bursts.size)
+            .put("batchMs", batchMs)
+            .put("delivery", if (bursts.size > 1) "lotes a cada ~${(starts.last() - starts.first()) / (starts.size - 1) / 1000} s (cache)" else "contínua"))
+        val delivery = report.getJSONObject("continuity").getString("delivery")
         val verdict = when {
             failed > ok -> "áudio NÃO decodifica como Opus — formato diferente do esperado"
-            sizes.keys.all { it == FRAME } && ok > 0 -> "quadros Opus de 240 B decodificam (${if (stereo) "estéreo" else "mono"}); ouça o WAV para confirmar a fala"
+            sizes.keys.all { it == FRAME } && ok > 0 -> "quadros Opus de 240 B decodificam (${if (stereo) "estéreo" else "mono"}, $typicalMs ms, entrega $delivery); ouça o WAV para confirmar a fala"
             ok > 0 -> "Opus decodifica, mas os quadros não têm 240 B fixos"
             else -> "indeterminado"
         }

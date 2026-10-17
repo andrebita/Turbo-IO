@@ -220,7 +220,8 @@ A Deepgram devolve rótulos **anônimos** (`speaker` 0, 1, …) por palavra, vá
    em vez de 30–60 s, que eram pensados para a janela de 30 s do Whisper. Menos cortes dão rótulos
    consistentes por mais tempo e melhor separação de falantes.
 2. **Quem é “Você”**, em ordem de confiança:
-   a. `vpuMask` dos óculos (hipótese: sensor da voz de quem usa; validar no G3). Sobrepor o horário das
+   a. `vpuMask` dos óculos (hipótese: sensor da voz de quem usa). **G3 em hardware: não acompanha a voz de quem usa
+      (ligado em ~50 % dos quadros, com ou sem fala); desativado até novo teste.** Sobrepor o horário das
       palavras aos quadros de 20 ms; o falante com maior fração de palavras sobre VPU ativo é “Você”, se ≥ 60%.
    b. Proximidade: RMS médio por falante, calculado a partir do horário das palavras; o falante dominante e
       constante é “Você”. Serve de reserva e de conferência para o item (a).
@@ -268,12 +269,23 @@ desliga sozinha. Você roda no seu aparelho e me envia o pacote de diagnóstico 
 | Portão | Teste | Critério |
 | --- | --- | --- |
 | **G1** LifeLog liga em modo *guest* no 1.0.5.5 | sonda de 30 s | `life_log_switch_result` = 0 e chega A1 |
-| **G2** Formato do áudio | decodificar quadros A3/A4 a 16 e 48 kHz; ouvir; transcrever | Opus válido (TOC = 20 ms), fala inteligível, STT coerente |
+| **G2** Formato do áudio | decodificar quadros A3/A4 a 16 e 48 kHz; ouvir; transcrever | Opus válido (TOC lido; em hardware: 60 ms), fala inteligível, STT coerente |
 | **G3** Semântica das máscaras | falar / ficar em silêncio / outra pessoa falar, com roteiro | `vadMask` acompanha a fala; `vpuMask` marca só a sua voz |
-| **G4** Continuidade | 5 min falando com pausas | ~50 quadros/s na fala; lacunas medidas; A3 × A4 entendidos |
+| **G4** Continuidade | 5 min falando com pausas | taxa = 1000 / duração do quadro; lacunas medidas; A3 × A4 entendidos |
+| **G4b** Tempo real | 60 s com `inRealtimePage:true` | entrega a cada ~2 s em vez de 20 s |
 | **G5** Desligamento | parar, matar o app e reconectar | OFF confirmado nos três casos |
 | **G6** Resistência | 30 min, depois 2 h, depois 8 h | queda de bateria dos óculos e do telefone por hora; estabilidade BLE |
 | **G14** Canal 14 (alternativa) | gravação de 2 min pelo menu dos óculos | arquivo completo, cobertura contínua, transcrição ok |
+
+Resultados em hardware (2026-10-16, detalhes em [TESTES.md](TESTES.md#sondas-da-fase-3-em-hardware)):
+**G1 ✅** (LifeLog liga sem conta oficial), **G2 ✅** (Opus SILK banda larga **60 ms**, mono, 240 B, 16 kHz, fala
+inteligível), **G3 ❌ provisório** (`vadMask`/`vpuMask` não acompanham a fala: não usar para corte nem para “você”),
+**G4 🟡** (lotes a cada 20 s com `inRealtimePage:false`; os óculos encerraram a execução de 5 min em ~2 min),
+**G14 ❌** (sem áudio). Pendentes: G4b (`inRealtimePage:true`), G4 com os óculos no rosto, G5, G6.
+
+Ajustes de projeto decorrentes: a fonte LifeLog lê a duração de cada quadro no TOC (não presume 20 ms), aceita
+entregas em rajada (o relógio do segmento vem da contagem de quadros, não da hora de chegada) e não grava as
+máscaras como `DEVICE_VAD`/`WEARER`; a atribuição de “você” cai para proximidade/indeterminado.
 
 Decisão: se G1–G5 passarem, a fonte principal é o **LifeLog**. Se falharem, usa-se o **canal 14** (gravações
 iniciadas por você no menu dos óculos, ótimo para reuniões). O microfone do telefone fica sempre disponível

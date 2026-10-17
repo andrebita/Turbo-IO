@@ -37,6 +37,17 @@ fun glassesFrames(speechFrames: Int, silentFrames: Int): List<ByteArray> {
     }
 }
 
+/** Hardware LifeLog profile seen on a real RayNeo iO: mono 16 kHz, 60 ms CBR frames of 240 B (32 kbps). */
+fun lifeLogFrames(count: Int): List<ByteArray> {
+    val enc = OpusEncoder(16000, 1, OpusApplication.OPUS_APPLICATION_VOIP).apply { setBitrate(32000); setUseVBR(false) }
+    var t = 0
+    return (0 until count).map {
+        val pcm = ShortArray(960) { i -> (5000 * sin(2 * PI * 220 * (t + i) / 16000.0)).toInt().toShort() }
+        t += 960
+        val b = ByteArray(1275); b.copyOf(enc.encode(pcm, 0, 960, b, 0, b.size))
+    }
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class HardwareProbeTest {
     private val port = FakePort()
@@ -81,6 +92,39 @@ class HardwareProbeTest {
         assertTrue(report.getString("verdict").contains("240 B decodificam"))
         assertTrue(report.getJSONObject("jsonKeys").getJSONObject("13/163").has("vpuMask"))
         assertEquals(sink.analysis!!.pcm.size, 93 * 320 * 2 * 2)
+    }
+
+    @Test fun hardwareProfileSixtyMsFramesInCachedBursts() = runTest {
+        val sink = MemorySink()
+        val probe = HardwareProbe(port, this, MemoryFlag(), fixedRandom, sink, clock = { testScheduler.currentTime })
+        probe.startLifeLog(70, realtimePage = true); runCurrent()
+        port.glasses(15, 21, """{"cmd":"life_log_switch_result","payload":{"value":0}}"""); runCurrent()
+        port.glasses(13, 161); runCurrent()
+        assertTrue(cmd(3).getBoolean("inRealtimePage"))
+        val frames = lifeLogFrames(3 * 11 * 31)
+        assertTrue(frames.all { it.size == 240 })
+        // As logged on hardware: every 20 s, 11 envelopes of 31 frames ~200 ms apart; launcher state pushes in between.
+        frames.chunked(31).chunked(11).forEach { burst ->
+            advanceTimeBy(18_000); runCurrent()
+            port.glasses(15, 24, """{"cmd":"state","bluetoothAddress":"AA:BB:CC:DD:EE:FF"}"""); runCurrent()
+            burst.forEach { batch ->
+                port.glasses(13, 163, """{"taskId":"t","mode":1,"frameCount":31,"vpuMask":0,"vadMask":0}""", batch.fold(ByteArray(0)) { a, f -> a + f })
+                advanceTimeBy(200); runCurrent()
+            }
+        }
+        advanceTimeBy(20_000); runCurrent()
+        val report = sink.analysis!!.report
+        val c = report.getJSONObject("continuity")
+        assertEquals(60, report.getJSONObject("frameDurationsMs").keys().next().toInt())
+        assertEquals(1, report.getJSONObject("decode").getInt("channels"))
+        assertEquals(3, c.getInt("bursts")); assertEquals(60, c.getInt("typicalFrameMs"))
+        assertEquals(3 * 11 * 31 * 60L, c.getLong("audioDurationMs"))
+        assertTrue(c.getString("delivery").startsWith("lotes a cada ~20 s"))
+        assertTrue(report.getString("verdict").contains("60 ms"))
+        assertEquals(3 * 11 * 31 * 960 * 2, sink.analysis!!.pcm.size)
+        // Launcher context kept for diagnosis, with the Bluetooth address redacted.
+        assertTrue(report.getJSONObject("jsonKeys").has("15/24"))
+        assertFalse(report.getJSONObject("jsonKeys").getJSONObject("15/24").getString("bluetoothAddress").contains("AA:BB"))
     }
 
     @Test fun refusalStopsAndStillSendsOff() = runTest {

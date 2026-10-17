@@ -13,8 +13,8 @@ android {
         applicationId = "org.turboio.customai"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-diario"
+        versionCode = 3
+        versionName = "0.2.1-diario"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

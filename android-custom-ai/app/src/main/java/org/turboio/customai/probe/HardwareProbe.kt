@@ -11,6 +11,7 @@ import org.turboio.customai.ble.BusinessListener
 import org.turboio.customai.ble.GlassesPort
 import org.turboio.customai.ble.Randomness
 import org.turboio.customai.diag.DiagnosticLog
+import org.turboio.customai.diag.Redactor
 import org.turboio.customai.display.sendEnvelope
 import org.turboio.customai.protocol.Business
 import org.turboio.customai.protocol.Envelope
@@ -69,6 +70,7 @@ class HardwareProbe(
     private var active = false
     private var stopping = false
     private var a2Sent = false
+    private var realtimePage = false
     private var taskId = ""
     private var recUuid = ""
     private var recCompleted = false
@@ -79,6 +81,8 @@ class HardwareProbe(
     private var job: Job? = null
 
     init { port.addBusinessListener(this) }
+
+    private companion object { val CONTEXT_TYPES = setOf(3, 24) }
 
     val busy: Boolean get() = active
 
@@ -106,8 +110,10 @@ class HardwareProbe(
     }
 
     // ------------------------------------------------------------------ LifeLog (G1–G5)
-    fun startLifeLog(seconds: Int): String? {
+    /** [realtimePage] is sent in A8: false (default, as the iOS probe) yields cached batches every ~20 s on hardware. */
+    fun startLifeLog(seconds: Int, realtimePage: Boolean = false): String? {
         begin("lifelog")?.let { return it }
+        this.realtimePage = realtimePage
         taskId = Hex.encode(random.bytes(16))
         pending.set(true)                                   // before anything reaches the glasses
         job = scope.launch {
@@ -205,18 +211,22 @@ class HardwareProbe(
         val body = runCatching { JSONObject(json) }.getOrNull()
         val lifeLogLauncher = business == Business.LAUNCHER && body?.optString("cmd")?.startsWith("life_log_") == true
         if (lifeLogLauncher) handleSwitch(body!!)              // OFF confirmations also count outside a probe
-        val relevant = (business == Business.AI_ASSISTANT && envelope.type in 161..168) || lifeLogLauncher || business == Business.RECORDING
+        // Launcher state pushes (3, 24) are kept as context: on hardware they precede the glasses ending LifeLog.
+        val context = business == Business.LAUNCHER && envelope.type in CONTEXT_TYPES
+        val relevant = (business == Business.AI_ASSISTANT && envelope.type in 161..168) || lifeLogLauncher || business == Business.RECORDING || context
         if (!active || !relevant) return
         if (bytes + envelope.binary.size > 40L * 1024 * 1024) { stop("limite de 40 MB atingido"); return }
-        records.add(ProbeRecord(clock() - startedAt, business, envelope.type, json, envelope.binary.copyOf()))
+        val stored = if (context) Redactor.redact(json) else json
+        records.add(ProbeRecord(clock() - startedAt, business, envelope.type, stored, envelope.binary.copyOf()))
         bytes += envelope.binary.size
-        if (envelope.binary.isEmpty() || records.size % 50 == 1) event("← $business/${envelope.type} ${json.take(100)}${if (envelope.binary.isNotEmpty()) " +${envelope.binary.size}B" else ""}")
+        if (envelope.binary.isEmpty() || records.size % 50 == 1) event("← $business/${envelope.type} ${stored.take(140)}${if (envelope.binary.isNotEmpty()) " +${envelope.binary.size}B" else ""}")
+        if (context) return
         scope.launch {
             when {
                 business == Business.AI_ASSISTANT && envelope.type == 161 && kind == "lifelog" && !a2Sent && !stopping -> {
                     a2Sent = true
                     send(Business.AI_ASSISTANT, 162, LifeLogWire.a2(taskId))
-                    send(Business.AI_ASSISTANT, 168, LifeLogWire.a8(false))
+                    send(Business.AI_ASSISTANT, 168, LifeLogWire.a8(realtimePage))
                 }
                 business == Business.AI_ASSISTANT && envelope.type == 165 && kind == "lifelog" -> stop("óculos encerraram (A5)")
                 business == Business.RECORDING && kind == "recording14" -> handleRecording(envelope.type, body)
