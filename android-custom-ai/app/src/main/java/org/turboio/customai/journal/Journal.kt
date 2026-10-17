@@ -118,6 +118,33 @@ class JournalStore(private val db: SqlDb) {
         return db.query(sql, *args).map(::row)
     }
 
+    fun byIds(ids: Collection<Long>): List<Entry> = if (ids.isEmpty()) emptyList() else
+        db.query("SELECT * FROM entries WHERE id IN (${ids.joinToString(",") { "?" }}) ORDER BY ts_start, id", *ids.toTypedArray()).map(::row)
+
+    fun range(fromDay: String, toDay: String): List<Entry> =
+        db.query("SELECT * FROM entries WHERE day >= ? AND day <= ? ORDER BY ts_start, id", fromDay, toDay).map(::row)
+
+    /** Any of [terms] (each may be several words, all required), optionally within days [fromDay]..[toDay]. Newest first. */
+    fun searchAny(terms: List<String>, fromDay: String? = null, toDay: String? = null, limit: Int = 60): List<Entry> {
+        val clauses = terms.map { t -> searchNormalize(t).split(Regex("[^\\p{L}\\p{N}]+")).filter { it.length >= 2 }.take(4) }
+            .filter { it.isNotEmpty() }.take(12).map { words -> "(" + words.joinToString(" ") { "$it*" } + ")" }
+        if (clauses.isEmpty()) return emptyList()
+        val match = clauses.joinToString(" OR ")
+        val where = StringBuilder("f.body MATCH ?"); val args = arrayListOf<Any?>(match)
+        if (fromDay != null) { where.append(" AND e.day >= ?"); args.add(fromDay) }
+        if (toDay != null) { where.append(" AND e.day <= ?"); args.add(toDay) }
+        args.add(limit)
+        return db.query("SELECT e.* FROM entries e JOIN entries_fts f ON f.docid = e.id WHERE $where ORDER BY e.ts_start DESC LIMIT ?", *args.toTypedArray()).map(::row)
+    }
+
+    /** Replaces an entry's text (e.g. "Pessoa A: …" → "Marina: …") and metadata, keeping the search index in sync. */
+    fun relabel(id: Long, text: String, metaJson: String) = db.transaction {
+        db.exec("UPDATE entries SET text = ?, meta_json = ? WHERE id = ?", text, metaJson, id)
+        val answer = db.query("SELECT answer FROM entries WHERE id = ?", id).firstOrNull()?.get("answer") as String? ?: ""
+        db.exec("DELETE FROM entries_fts WHERE docid = ?", id)
+        db.exec("INSERT INTO entries_fts(docid, body) VALUES(?, ?)", id, searchNormalize(text + "\n" + answer))
+    }
+
     fun delete(id: Long) = db.transaction {
         db.exec("DELETE FROM entries WHERE id = ?", id); db.exec("DELETE FROM entries_fts WHERE docid = ?", id)
     }
