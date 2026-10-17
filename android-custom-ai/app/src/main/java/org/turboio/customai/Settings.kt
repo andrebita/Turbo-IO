@@ -109,6 +109,25 @@ class SettingsRepository(context: Context) {
             .putInt("journal.retention", s.retentionDays).putString("journal.model", s.insightsModel.trim()).apply()
     }
 
+    fun ambientSettings(): AmbientSettings = AmbientSettings(
+        provider = org.turboio.customai.ambient.AmbientProvider.of(prefs.getString("ambient.provider", "deepgram")),
+        openAiModel = prefs.getString("ambient.openai.model", "gpt-4o-mini-transcribe") ?: "gpt-4o-mini-transcribe",
+        deleteRaw = prefs.getBoolean("ambient.deleteRaw", true),
+        wifiOnly = prefs.getBoolean("ambient.wifiOnly", false),
+        consent = prefs.getBoolean("ambient.consent", false),
+    )
+
+    fun saveAmbient(s: AmbientSettings) {
+        prefs.edit().putString("ambient.provider", s.provider.id).putString("ambient.openai.model", s.openAiModel.trim())
+            .putBoolean("ambient.deleteRaw", s.deleteRaw).putBoolean("ambient.wifiOnly", s.wifiOnly).putBoolean("ambient.consent", s.consent).apply()
+    }
+
+    fun deepgramKey(): String = secrets.get("key.ambient.deepgram")
+    fun hasDeepgramKey(): Boolean = secrets.has("key.ambient.deepgram")
+    fun setDeepgramKey(key: String) = secrets.put("key.ambient.deepgram", key.trim())
+    /** OpenAI ambient transcription reuses the OpenAI STT key, then the OpenAI chat key. */
+    fun ambientOpenAiKey(): String = sttKey(SttEngine.GLASSES_OPENAI)
+
     /** Removes every stored key and preference (used by "Apagar dados" in diagnostics). */
     fun wipe() { secrets.clearAll(); prefs.edit().clear().apply() }
 }
@@ -121,4 +140,12 @@ data class JournalSettings(
     val lensDaily: Boolean = false,
     val retentionDays: Int = 0,      // 0 = keep everything
     val insightsModel: String = "",  // empty = same model as the AI tab
+)
+
+data class AmbientSettings(
+    val provider: org.turboio.customai.ambient.AmbientProvider = org.turboio.customai.ambient.AmbientProvider.DEEPGRAM,
+    val openAiModel: String = "gpt-4o-mini-transcribe",
+    val deleteRaw: Boolean = true,      // approved: delete raw audio after transcription
+    val wifiOnly: Boolean = false,      // approved: mobile data allowed
+    val consent: Boolean = false,
 )

@@ -1,0 +1,10 @@
+{"metadata":{"request_id":"00000000-0000-0000-0000-000000000000","duration":3.2,"channels":1,"models":["nova-3"]},
+ "results":{"channels":[{"alternatives":[{"transcript":"Bom dia, tudo bem? Tudo ótimo.","confidence":0.98,
+  "words":[
+   {"word":"bom","start":0.08,"end":0.32,"confidence":0.99,"speaker":0,"speaker_confidence":0.9,"punctuated_word":"Bom"},
+   {"word":"dia","start":0.32,"end":0.64,"confidence":0.99,"speaker":0,"speaker_confidence":0.9,"punctuated_word":"dia,"},
+   {"word":"tudo","start":0.72,"end":0.96,"confidence":0.99,"speaker":0,"speaker_confidence":0.9,"punctuated_word":"tudo"},
+   {"word":"bem","start":0.96,"end":1.28,"confidence":0.99,"speaker":0,"speaker_confidence":0.9,"punctuated_word":"bem?"},
+   {"word":"tudo","start":1.84,"end":2.08,"confidence":0.99,"speaker":1,"speaker_confidence":0.8,"punctuated_word":"Tudo"},
+   {"word":"ótimo","start":2.08,"end":2.56,"confidence":0.99,"speaker":1,"speaker_confidence":0.8,"punctuated_word":"ótimo."}]}]}],
+  "utterances":[]}}

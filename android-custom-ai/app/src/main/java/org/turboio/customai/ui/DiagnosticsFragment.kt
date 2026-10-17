@@ -59,6 +59,7 @@ class DiagnosticsFragment : Fragment() {
                 .setPositiveButton("Apagar") { _, _ ->
                     app.session.forget(); app.settings.wipe(); app.clearHistory()
                     viewLifecycleOwner.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { app.journal.wipe() } }
+                    app.ambient.stop(); app.ambient.wipe()
                     ConnectionService.stop(requireContext())
                     DiagnosticLog.i("APP", "dados locais apagados pelo usuário")
                 }.setNegativeButton("Cancelar", null).show()

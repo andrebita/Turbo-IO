@@ -110,7 +110,10 @@ class TurboApp : Application() {
     fun disconnect() { session.disconnect(); ConnectionService.stop(this) }
 
     /** Journal (SQLite, opened lazily off the main thread) and the insight engine on top of it. */
-    val journal: JournalStore by lazy { JournalStore(AndroidSqlDb(this)) }
+    val sqlDb: AndroidSqlDb by lazy { AndroidSqlDb(this) }
+    val journal: JournalStore by lazy { JournalStore(sqlDb) }
+    /** Ambient recording pipeline (option 3). */
+    val ambient: org.turboio.customai.ambient.AmbientRecorder by lazy { org.turboio.customai.ambient.AmbientRecorder(this) }
     val insights: InsightEngine by lazy {
         InsightEngine(journal, { system, user, maxTokens -> completeForInsights(system, user, maxTokens) }, {
             val c = settings.aiConfig(); c.provider.id to settings.journalSettings().insightsModel.ifBlank { c.model }

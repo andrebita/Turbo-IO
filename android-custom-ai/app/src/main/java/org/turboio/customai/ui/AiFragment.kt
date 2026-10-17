@@ -33,6 +33,9 @@ class AiFragment : Fragment() {
     private lateinit var sttKey: TextInputEditText
     private lateinit var sttKeyState: TextView
     private lateinit var sttModel: TextInputEditText
+    private lateinit var deepgramKey: TextInputEditText
+    private lateinit var ambientModel: TextInputEditText
+    private var ambientProvider = org.turboio.customai.ambient.AmbientProvider.DEEPGRAM
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
         val config = settings.aiConfig()
@@ -68,6 +71,14 @@ class AiFragment : Fragment() {
         val voice = settings.voiceSettings()
         ui.switch("Assistente de voz ativo (ao acionar nos óculos)", voice.enabled) { settings.setVoiceEnabled(it) }
         ui.switch("Remover acentos no display (use se aparecerem quadrados)", voice.stripAccents) { settings.setStripAccents(it) }
+
+        ui.title("Transcrição do ambiente (gravação contínua)")
+        val amb = settings.ambientSettings(); ambientProvider = amb.provider
+        ui.spinner(org.turboio.customai.ambient.AmbientProvider.entries.toList(), org.turboio.customai.ambient.AmbientProvider.entries.indexOf(ambientProvider), { it.label }) { ambientProvider = it }
+        deepgramKey = ui.field("Chave da Deepgram (vazio = manter)", password = true)
+        ui.hint(if (settings.hasDeepgramKey()) "Chave Deepgram salva: ${Redactor.mask(settings.deepgramKey())}" else "Nenhuma chave Deepgram salva (console.deepgram.com → API Keys)")
+        ambientModel = ui.field("Modelo OpenAI para o ambiente", amb.openAiModel)
+        ui.hint("Deepgram Nova-3 pt-BR separa os falantes (até ~5 min de fala por envio). OpenAI usa a chave de transcrição/IA da OpenAI e não separa falantes.")
 
         ui.button("Salvar configuração") { save() }
         loadProvider(); loadStt()
@@ -112,6 +123,9 @@ class AiFragment : Fragment() {
         settings.saveAi(config)
         if (newKey.isNotEmpty()) settings.setApiKey(provider, newKey)
         settings.saveStt(settings.sttConfig().copy(engine = engine, openAiModel = sttModel.text.toString().trim().ifEmpty { "whisper-1" }))
+        settings.saveAmbient(settings.ambientSettings().copy(provider = ambientProvider,
+            openAiModel = ambientModel.text.toString().trim().ifEmpty { "gpt-4o-mini-transcribe" }))
+        deepgramKey.text.toString().trim().takeIf { it.isNotEmpty() }?.let { settings.setDeepgramKey(it); deepgramKey.setText("") }
         val newStt = sttKey.text.toString().trim()
         if (newStt.isNotEmpty() && engine != SttEngine.PHONE_ANDROID) settings.setSttKey(engine, newStt)
         DiagnosticLog.i("CFG", "configuração salva: provedor=${provider.id} modelo=${config.model} stt=${engine.id} chave=${if (effectiveKey.isEmpty()) "ausente" else "presente"}")

@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,7 @@ class JournalFragment : Fragment() {
     private lateinit var search: TextInputEditText
     private lateinit var generate: MaterialButton
     private var lastLens = ""
+    private lateinit var ambientStatus: TextView
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
         val ui = Column(requireContext())
@@ -43,6 +45,21 @@ class JournalFragment : Fragment() {
         c.button("Próximo dia ▶", filled = false) { day = Days.shift(day, 1); load() }
         nav.addView(c.root)
         dayLabel = ui.title("")
+
+        val amb = ui.card()
+        amb.title("Gravação ambiente (experimental)")
+        ambientStatus = amb.text("", size = 13f)
+        amb.hint("Fonte atual: microfone do telefone. A fonte dos óculos (LifeLog/gravação) será liberada após os testes de validação (fase 3).")
+        amb.button("Iniciar gravação ambiente") { startAmbient() }
+        amb.button("Parar gravação", filled = false) { app.ambient.stop() }
+        amb.button("Transcrever pendentes agora", filled = false) { org.turboio.customai.ambient.AmbientRecorder.enqueue(app); app.ambient.refresh() }
+        amb.button("Tentar novamente as que falharam", filled = false) { app.ambient.retryFailed() }
+        amb.button("Bateria: permitir em segundo plano (Samsung: \"Sem restrições\")", filled = false) {
+            runCatching { startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+        }
+        val a = app.settings.ambientSettings()
+        amb.switch("Apagar o áudio após transcrever", a.deleteRaw) { app.settings.saveAmbient(app.settings.ambientSettings().copy(deleteRaw = it)) }
+        amb.switch("Transcrever só no Wi-Fi", a.wifiOnly) { app.settings.saveAmbient(app.settings.ambientSettings().copy(wifiOnly = it)) }
 
         val card = ui.card()
         card.title("Insights do dia")
@@ -82,8 +99,43 @@ class JournalFragment : Fragment() {
             DailyInsightWorker.schedule(requireContext()); toast("Configurações salvas")
         }
         ui.hint("Tudo fica no telefone. Para gerar insights, o texto do dia é enviado ao provedor de IA configurado.")
-        load()
         return ui.scroll()
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        load()
+        app.ambient.refresh()
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                app.ambient.status.collect { s ->
+                    val c = s.counts
+                    ambientStatus.text = buildString {
+                        append(if (s.recording) "● GRAVANDO · " else "Parado · ").append(s.note)
+                        if (s.recording) append("\nCapturado: ${s.capturedMs / 60000} min ${(s.capturedMs / 1000) % 60} s")
+                        append("\nFila: ${c.pending} fatia(s) (${c.pendingMs / 1000} s de fala) · transcritas ${c.done} (${c.transcribedMs / 60000} min) · falhas ${c.failed}")
+                        if (s.error.isNotEmpty()) append("\nÚltimo erro: ${s.error}")
+                    }
+                    ambientStatus.setTextColor(statusColor(if (s.error.isNotEmpty() && c.failed > 0) false else if (s.recording) true else null))
+                }
+            }
+        }
+    }
+
+    private fun startAmbient() {
+        if (!app.settings.ambientSettings().consent) {
+            AlertDialog.Builder(requireContext()).setTitle("Antes de gravar o ambiente")
+                .setMessage("A gravação capta a sua voz e a de outras pessoas por perto. Avise quem estiver com você e respeite a LGPD e as regras do local. " +
+                    "O áudio fica no telefone e só os trechos com fala são enviados ao serviço de transcrição configurado (Deepgram/OpenAI). " +
+                    "O áudio é apagado após a transcrição (configurável). Você pode pausar a qualquer momento.")
+                .setPositiveButton("Entendi e aceito") { _, _ ->
+                    app.settings.saveAmbient(app.settings.ambientSettings().copy(consent = true)); startAmbient()
+                }.setNegativeButton("Cancelar", null).show()
+            return
+        }
+        (activity as? MainActivity)?.requestPermissionsIfNeeded()
+        val provider = app.settings.ambientSettings().provider
+        if (provider == org.turboio.customai.ambient.AmbientProvider.DEEPGRAM && !app.settings.hasDeepgramKey()) toast("Aviso: informe a chave da Deepgram na aba IA; o áudio ficará na fila até lá")
+        app.ambient.startPhoneMic()?.let { toast(it) }
     }
 
     private fun load() {

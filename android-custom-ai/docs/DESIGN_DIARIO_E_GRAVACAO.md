@@ -205,6 +205,31 @@ Ogg/Opus e o Google também (`OGG_OPUS`). Isso viabiliza dados móveis.
 
 Os insights do dia custam centavos com um modelo “mini”.
 
+### 3.6.1 Decisões aprovadas (2026-10-17)
+
+* Transcrição padrão do áudio ambiente: **Deepgram Nova-3** (`language=pt-BR`, `diarize=true`, `utterances=true`,
+  `smart_format=true`, `punctuate=true`). Alternativa: OpenAI. Motivos: separação de falantes inclusa,
+  horário por palavra e crédito inicial. Por minuto, a OpenAI mini é um pouco mais barata.
+* Áudio cru apagado após a transcrição; dados móveis permitidos; todas as seções de insights; resumo diário às 21:00.
+
+### 3.6.2 Separação de falantes (Deepgram)
+
+A Deepgram devolve rótulos **anônimos** (`speaker` 0, 1, …) por palavra, válidos **só dentro de um envio**.
+
+1. **Fatias maiores para a Deepgram:** até ~5 min por envio (cortadas no maior silêncio; mínimo de 0,8 s de fala),
+   em vez de 30–60 s, que eram pensados para a janela de 30 s do Whisper. Menos cortes dão rótulos
+   consistentes por mais tempo e melhor separação de falantes.
+2. **Quem é “Você”**, em ordem de confiança:
+   a. `vpuMask` dos óculos (hipótese: sensor da voz de quem usa; validar no G3). Sobrepor o horário das
+      palavras aos quadros de 20 ms; o falante com maior fração de palavras sobre VPU ativo é “Você”, se ≥ 60%.
+   b. Proximidade: RMS médio por falante, calculado a partir do horário das palavras; o falante dominante e
+      constante é “Você”. Serve de reserva e de conferência para o item (a).
+   c. Microfone do telefone: sem atribuição (“Pessoa 1/2”).
+   d. Caso ambíguo: `speaker = unknown`. Nunca chutar.
+3. Demais falantes: “Pessoa A/B” **por trecho**. A ligação entre trechos (assinaturas de voz no aparelho) fica para depois.
+4. Diário: uma entrada por fala (palavras seguidas do mesmo falante), `meta.speaker ∈ {wearer, other, unknown}`,
+   `meta.label`, `meta.confidence`. Os insights já interpretam `wearer` como “Você”.
+
 ### 3.7 Operação no Android 16 / Samsung
 
 * A captura dos óculos roda no serviço `connectedDevice` que já existe. Não precisa de permissão de microfone
