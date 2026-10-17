@@ -114,7 +114,7 @@ geral não traz chaves de versão, por isso “Óculos (status)” mostra “—
 | **G4b** `inRealtimePage:true` | ✅ **tempo real**: um quadro de 60 ms por envelope (`mode:0`), 16,8 quadros/s, maior intervalo 301 ms, nada perdido | bateria 17/10, etapa 2 |
 | **G7** Ligar pelos óculos | ✅ com a marca `life_log_guide` = 1 enviada pelo app, abrir o LifeLog no menu (app `com.rayneo.liteos.ai_memory`) faz os óculos ligarem sozinhos (`life_log_switch` = 1 → A1) e o áudio chega, **sem o aviso** | bateria 17/10, etapa 3 |
 | **G5** Desligamento após matar o app | ✅ ao reabrir e conectar, o OFF pendente foi reenviado e confirmado pelos óculos em 0,3 s | bateria 17/10, etapa 6 |
-| **G14** Gravação pelo menu (canal 14) | ❌ / não se aplica: o item do menu é o próprio LifeLog; sem a marca `life_log_guide` os óculos mostram “Please complete LifeLog settings on your phone” e enviam `life_log_guide_launch` (duas vezes) | log 22:50:14–22:51:02; bateria 17/10, etapa 4 |
+| **G14** Gravação pelo menu (canal 14) | ⏳ refazer: nas duas baterias foi aberto o LifeLog (`com.rayneo.liteos.ai_memory`), não o Gravador (`com.rayneo.liteos.recorder`); sem a marca `life_log_guide` os óculos mostram “Please complete LifeLog settings on your phone” e enviam `life_log_guide_launch` (duas vezes) | log 22:50:14–22:51:02; bateria 17/10, etapa 4 |
 
 Observação do usuário: ao iniciar o LifeLog **manualmente nos óculos**, as lentes mostram “Please complete LifeLog
 settings on your phone”. Iniciado por este app (`life_log_switch`), o LifeLog funciona mesmo assim (G1/G2). No teste

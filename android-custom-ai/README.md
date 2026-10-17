@@ -23,6 +23,7 @@ Por que um app independente em vez de alterar o app oficial 1.0.6: ver [docs/AUD
 | [docs/REVERSAO.md](docs/REVERSAO.md) | Voltar ao app oficial / desinstalar com segurança |
 | [docs/DESIGN_DIARIO_E_GRAVACAO.md](docs/DESIGN_DIARIO_E_GRAVACAO.md) | Arquitetura do diário, insights, gravação ambiente e sondas |
 | [docs/MEMORIA_E_ASSISTENTE.md](docs/MEMORIA_E_ASSISTENTE.md) | Memória: pessoas, pendências, proatividade, busca por sentido, revisão semanal |
+| [docs/FEATURES_POSSIVEIS.md](docs/FEATURES_POSSIVEIS.md) | O que mais é possível com o firmware original (revisado após a autorização do usuário) |
 | [docs/AJUSTES_DOS_OCULOS.md](docs/AJUSTES_DOS_OCULOS.md) | Pendências no To-do nativo dos óculos; altura do texto, distância e duplo toque |
 
 ## Funcionalidades
