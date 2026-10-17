@@ -50,4 +50,6 @@ interface GlassesPort {
     fun addBusinessListener(listener: BusinessListener)
     /** Every packet received after READY, before envelope decoding (observation probes, file messages). */
     fun addRawListener(listener: (business: Int, payload: ByteArray) -> Unit) {}
+    /** One file-transfer message (business 18, not an envelope); only while a teleprompter session holds the lease. */
+    fun sendFile(payload: ByteArray, done: (String?) -> Unit) { done("Transferência de arquivo indisponível") }
 }

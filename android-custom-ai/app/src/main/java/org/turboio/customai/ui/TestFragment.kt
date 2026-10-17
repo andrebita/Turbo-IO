@@ -11,7 +11,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.turboio.customai.TurboApp
 import org.turboio.customai.display.DisplayState
 import org.turboio.customai.display.DisplayText
@@ -25,6 +28,10 @@ class TestFragment : Fragment() {
     private lateinit var voiceStatus: TextView
     private lateinit var ask: MaterialButton
     private var lastAnswer = ""
+    private lateinit var script: TextInputEditText
+    private lateinit var prompterStatus: TextView
+    private var prompterSpeed = 120
+    private val openScript = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { loadScript(it) } }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
         val ui = Column(requireContext())
@@ -50,6 +57,22 @@ class TestFragment : Fragment() {
         ui.title("Assistente de voz")
         ui.hint("Acione o assistente nos óculos (gesto/botão de IA do firmware original) e fale. O app usa o motor escolhido na aba IA.")
         voiceStatus = ui.text(size = 13f)
+
+        ui.title("Teleprompter dos óculos")
+        ui.hint("Usa o teleprompter que já vem nos óculos. O roteiro vai como arquivo temporário (até 12 000 caracteres) e " +
+            "fica só no celular depois que você sai. Nada é instalado nos óculos. Ainda não foi testado nos seus óculos.")
+        script = ui.field("Roteiro (cole o texto)", multiline = true)
+        ui.button("Abrir arquivo .txt", filled = false) { openScript.launch(arrayOf("text/plain")) }
+        val speeds = (60..240 step 20).toList()
+        ui.text("Velocidade (caracteres por minuto)", size = 13f)
+        ui.spinner(speeds, speeds.indexOf(prompterSpeed), { "$it" }) { prompterSpeed = it }
+        ui.button("Enviar roteiro aos óculos") { prompter { app.teleprompter.prepare(script.text.toString(), prompterSpeed) } }
+        ui.buttons("Iniciar" to { prompter { app.teleprompter.control(3) } },
+            "Pausar" to { prompter { app.teleprompter.control(4) } },
+            "Continuar" to { prompter { app.teleprompter.control(5) } })
+        ui.buttons("Aplicar velocidade" to { prompter { app.teleprompter.control(7, prompterSpeed) } },
+            "Sair" to { prompter { app.teleprompter.stop(); null } })
+        prompterStatus = ui.text(size = 13f)
         return ui.scroll()
     }
 
@@ -57,6 +80,17 @@ class TestFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { app.display.state.collect { renderLens(it) } }
+                launch {
+                    app.teleprompter.state.collect { t ->
+                        prompterStatus.text = "Estado: ${t.phase.label} · ${t.note}" +
+                            (if (t.progress in 1..99) "\nEnvio: ${t.progress}%" else "") + "\nVelocidade: ${t.speed}"
+                        prompterStatus.setTextColor(statusColor(when (t.phase) {
+                            org.turboio.customai.device.Teleprompter.Phase.ERROR -> false
+                            org.turboio.customai.device.Teleprompter.Phase.READY, org.turboio.customai.device.Teleprompter.Phase.RUNNING -> true
+                            else -> null
+                        }))
+                    }
+                }
                 launch {
                     app.voice.state.collect { v ->
                         voiceStatus.text = "Estado: ${v.phase} · ${v.note}" +
@@ -80,6 +114,29 @@ class TestFragment : Fragment() {
             is DisplayState.Failed -> "✗ ${s.reason}" to false
         }
         lensStatus.text = text; lensStatus.setTextColor(statusColor(ok))
+    }
+
+    private fun prompter(action: suspend () -> String?) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            action()?.let { prompterStatus.text = "✗ $it"; prompterStatus.setTextColor(statusColor(false)) }
+        }
+    }
+
+    private fun loadScript(uri: android.net.Uri) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching {
+                    requireContext().contentResolver.openInputStream(uri)?.use { input ->
+                        val limit = org.turboio.customai.protocol.FileTransfer.MAX_FILE
+                        val out = java.io.ByteArrayOutputStream(); val buf = ByteArray(8192)
+                        while (out.size() <= limit) { val n = input.read(buf); if (n < 0) break; out.write(buf, 0, n) }
+                        if (out.size() > limit) null else out.toString("UTF-8")
+                    }
+                }.getOrNull()
+            }
+            if (text == null) { prompterStatus.text = "✗ Arquivo não lido ou maior que 48 KB"; prompterStatus.setTextColor(statusColor(false)) }
+            else script.setText(text)
+        }
     }
 
     private fun runQuery() {

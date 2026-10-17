@@ -54,6 +54,8 @@ class EmulatedGlasses(private val scheduler: VirtualScheduler) {
     var battery = 87
     var opens = 0
     val received = ArrayList<FramePacket>()
+    /** Raw ATT writes (a large file frame arrives split across several). */
+    val writes = ArrayList<ByteArray>()
     var current: Link? = null
     private val peerRandom = Hex.decode("0a0b0c0d")
 
@@ -61,6 +63,7 @@ class EmulatedGlasses(private val scheduler: VirtualScheduler) {
         private var listener: LinkListener? = null
         private var closed = false
         private var phone: ByteArray? = null
+        private var partial = ByteArray(0)
         override fun open(address: String, listener: LinkListener) {
             opens++; this.listener = listener; current = this
             scheduler.postDelayed(50) { if (!closed) listener.onLinkReady(512) }
@@ -69,7 +72,10 @@ class EmulatedGlasses(private val scheduler: VirtualScheduler) {
             scheduler.postDelayed(5) {
                 if (closed) { done("transport-closed"); return@postDelayed }
                 done(null)
-                val packet = FrameCodec.decode(frame)
+                writes.add(frame)
+                partial += frame
+                val packet = runCatching { FrameCodec.decode(partial) }.getOrNull() ?: return@postDelayed
+                partial = ByteArray(0)
                 received.add(packet)
                 if (!silent) respond(packet)
             }
@@ -211,6 +217,32 @@ class GlassesSessionTest {
         assertTrue(results[3]!!.contains("MTU"))
         assertEquals(1, glasses.received.count { it.businessId == 13 })
         assertTrue(glasses.received.none { it.businessId == 9 || it.businessId == 18 })
+    }
+
+    @Test fun fileChannelOnlyUnderLeaseAndSplitAcrossWrites() {
+        connected()
+        val uuid = "0a0b0c0d-0e0f-4011-8213-141516171819"
+        val data = ByteArray(1500) { (it % 251).toByte() }
+        val chunk = org.turboio.customai.protocol.FileTransfer.encode(org.turboio.customai.protocol.FileMessage(4, uuid, chunkId = 0, start = 0, size = 1500, data = data))
+        val results = ArrayList<String?>()
+        session.sendFile(chunk) { results.add(it) }                                          // no lease: refused
+        scheduler.advance(100)
+        assertTrue(results[0]!!.contains("fechado"))
+        session.fileLease = { true }
+        val request = org.turboio.customai.protocol.FileTransfer.encode(org.turboio.customai.protocol.FileMessage(3, uuid, chunkId = 0, start = 0, size = 10))
+        session.sendFile(request) { results.add(it) }                                        // glasses-only type: refused
+        scheduler.advance(100)
+        assertTrue(results[1] != null)
+        val before = glasses.writes.size
+        session.sendFile(chunk) { results.add(it) }
+        scheduler.advance(1000)
+        assertNull(results[2])
+        assertTrue(glasses.writes.size - before >= 3)                                          // MTU 512 → 509-byte parts
+        assertTrue(glasses.writes.drop(before).all { it.size <= 509 })
+        val file = glasses.received.last()
+        assertEquals(18, file.businessId)
+        assertEquals(1500, org.turboio.customai.protocol.FileTransfer.decode(file.payload).data.size)
+        session.fileLease = { false }
     }
 
     @Test fun communicationTestReadsStatusAgain() {

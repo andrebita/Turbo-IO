@@ -61,6 +61,7 @@ class TurboApp : Application() {
     lateinit var glassesTodo: org.turboio.customai.memory.GlassesTodoSync; private set
     lateinit var nativeNotifier: org.turboio.customai.device.NativeNotifier; private set
     lateinit var weather: org.turboio.customai.device.GlassesWeather; private set
+    lateinit var teleprompter: org.turboio.customai.device.Teleprompter; private set
     val mirrorPolicy by lazy { org.turboio.customai.device.MirrorPolicy(packageName, { settings.mirrorApps }, { settings.navOn }) }
     val probeFiles by lazy { org.turboio.customai.probe.ProbeFiles(this) }
     lateinit var scope: CoroutineScope; private set
@@ -100,6 +101,16 @@ class TurboApp : Application() {
         glassesSettings = org.turboio.customai.device.GlassesSettings(session, scope, settings.originalGlassesSettings)
         nativeNotifier = org.turboio.customai.device.NativeNotifier(session, scope, random)
         weather = org.turboio.customai.device.GlassesWeather(session)
+        teleprompter = org.turboio.customai.device.Teleprompter(session, scope, random, busy = {
+            when {
+                voice.busy -> "O assistente de voz está em uso"
+                display.active -> "Há texto do app nas lentes; aguarde terminar"
+                probe.busy -> "Um teste de hardware está em andamento"
+                else -> null
+            }
+        })
+        // Business 18 (file transfer) is open only while a teleprompter session is active.
+        session.fileLease = { teleprompter.active }
         // What the user opens on the glasses (15/24 glass_preview): opening the native To-do refreshes it right away.
         session.addBusinessListener { business, envelope ->
             if (business != org.turboio.customai.protocol.Business.LAUNCHER || envelope.type != 24) return@addBusinessListener
@@ -118,7 +129,7 @@ class TurboApp : Application() {
         session.addBusinessListener { business, envelope ->
             if (business == org.turboio.customai.protocol.Business.LAUNCHER || business == org.turboio.customai.protocol.Business.AI_ASSISTANT) ambient.onGlasses(business, envelope)
         }
-        voice = VoiceAssistant(session, scope, random, ::speechInput, { q -> voiceAnswer(q) }, settings::voiceSettings, { !display.active && !probe.busy })
+        voice = VoiceAssistant(session, scope, random, ::speechInput, { q -> voiceAnswer(q) }, settings::voiceSettings, { !display.active && !probe.busy && !teleprompter.active })
         var wasReady = false
         session.onStatus = { s ->
             _status.value = s
@@ -131,7 +142,7 @@ class TurboApp : Application() {
                     probe.connectionReady()   // re-sends LifeLog OFF if a previous one was not confirmed
                     if (settings.ambientSettings().glassesMenu) ambient.armGlassesMenu()
                     memoryChanged()
-                } else ambient.connectionLost()
+                } else { ambient.connectionLost(); teleprompter.disconnected() }
             }
         }
         runCatching { org.turboio.customai.insights.DailyInsightWorker.schedule(this) }

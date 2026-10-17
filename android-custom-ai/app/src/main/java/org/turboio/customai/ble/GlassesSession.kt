@@ -95,7 +95,39 @@ class GlassesSession(
     private var unauthenticatedRx = 0
     private var stageDeadline: Cancellable? = null
 
-    private class Pending(val frame: ByteArray, val done: (String?) -> Unit)
+    private class Pending(val frame: ByteArray, val done: (String?) -> Unit, val group: Any? = null)
+
+    /** Business 18 is accepted only while this returns true (an active teleprompter session). */
+    @Volatile var fileLease: () -> Boolean = { false }
+
+    /**
+     * A file-transfer message larger than one ATT write is sent as ONE frame split across consecutive writes (the
+     * producer behaviour of the official Android app, also used by the HarmonyOS client). The parts are queued together
+     * so nothing interleaves; a failed part drops the rest of that frame.
+     */
+    override fun sendFile(payload: ByteArray, done: (String?) -> Unit) = scheduler.post {
+        val reason = when {
+            status.phase != Phase.READY || link == null -> "Óculos não conectado"
+            !fileLease() -> "Canal de arquivo fechado (só durante o teleprompter)"
+            else -> org.turboio.customai.protocol.FileTransfer.outboundProblem(payload)
+        }
+        if (reason != null) { DiagnosticLog.w(tag, "arquivo recusado: $reason"); done(reason); return@post }
+        val frame = FrameCodec.encode(FramePacket(messageNumber, 0, null, ByteArray(0), Business.FILE, payload))
+        messageNumber = (messageNumber + 1) and 0xffff
+        val size = status.mtu - 3
+        val parts = (0 until frame.size step size).map { frame.copyOfRange(it, minOf(frame.size, it + size)) }
+        if (parts.size > 128 || txQueue.size + parts.size > 200) { done("Arquivo grande demais para o MTU atual (${status.mtu})"); return@post }
+        val group = Any(); var failed = false
+        parts.forEachIndexed { i, part ->
+            val partDone: (String?) -> Unit = partDone@{ error ->
+                if (failed) return@partDone
+                if (error != null) { failed = true; txQueue.removeAll { it.group === group }; done(error) }
+                else if (i == parts.lastIndex) done(null)
+            }
+            txQueue.addLast(Pending(part, partDone, group))
+        }
+        pump()
+    }
 
     override fun addBusinessListener(listener: BusinessListener) = scheduler.post { businessListeners.add(listener) }
     private val rawListeners = ArrayList<(Int, ByteArray) -> Unit>()

@@ -38,6 +38,14 @@ class FakePort : GlassesPort {
         listeners.forEach { it.onBusiness(business, Envelope(type, 0, json.toByteArray(), binary)) }
     }
     fun trace(): List<String> = sent.map { (b, e) -> "$b/${e.type}" }
+    /** File-transfer messages (business 18), checked by the same gate as the real session. */
+    val files = ArrayList<ByteArray>()
+    var fileError: String? = null
+    override fun sendFile(payload: ByteArray, done: (String?) -> Unit) {
+        require(org.turboio.customai.protocol.FileTransfer.outboundProblem(payload) == null) { "arquivo recusado" }
+        fileError?.let { done(it); return }
+        files.add(payload.copyOf()); done(null)
+    }
     private val raws = ArrayList<(Int, ByteArray) -> Unit>()
     override fun addRawListener(listener: (business: Int, payload: ByteArray) -> Unit) { raws.add(listener) }
     /** A packet as it arrives from the glasses (envelope or not); envelopes also reach the business listeners. */
