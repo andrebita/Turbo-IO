@@ -74,7 +74,7 @@ class SettingsRepository(context: Context) {
         return when (engine) {
             SttEngine.GLASSES_OPENAI -> apiKey(ProviderKind.OPENAI)
             SttEngine.GLASSES_DEEPGRAM -> deepgramKey()
-            SttEngine.GLASSES_GEMINI -> apiKey(ProviderKind.GEMINI)
+            SttEngine.GLASSES_GEMINI, SttEngine.GLASSES_GEMINI_DIRECT -> apiKey(ProviderKind.GEMINI)
             else -> ""
         }
     }

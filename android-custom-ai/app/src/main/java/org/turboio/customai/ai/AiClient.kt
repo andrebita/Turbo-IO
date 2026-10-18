@@ -51,12 +51,13 @@ internal fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
 
 /** Provider-agnostic chat client with an absolute deadline ([AiConfig.timeoutSeconds]). */
 class AiClient(private val transport: HttpTransport = UrlConnectionTransport()) {
-    suspend fun ask(config: AiConfig, apiKey: String, history: List<ChatMessage>, question: String): AiAnswer {
+    suspend fun ask(config: AiConfig, apiKey: String, history: List<ChatMessage>, question: String, audioWav: ByteArray? = null): AiAnswer {
         val trimmed = question.trim()
         if (trimmed.isEmpty()) throw AiException("Digite ou fale uma pergunta")
         if (trimmed.length > 4000) throw AiException("Pergunta muito longa (máx. 4000 caracteres)")
         ProviderCodec.validate(config, apiKey)?.let { throw AiException(it) }
-        val request = ProviderCodec.build(config, apiKey, history, trimmed)
+        if (audioWav != null && config.provider != ProviderKind.GEMINI) throw AiException("Pergunta por áudio só com o Google Gemini")
+        val request = ProviderCodec.build(config, apiKey, history, trimmed, audioWav)
         val timeoutMs = config.timeoutSeconds * 1000
         val started = System.nanoTime()
         DiagnosticLog.i("AI", "requisição ${config.provider.id} modelo=${config.model} → ${request.describe()}")

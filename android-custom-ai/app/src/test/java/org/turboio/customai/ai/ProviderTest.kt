@@ -150,4 +150,14 @@ class ProviderTest {
         assertEquals("web_search", claude.getJSONArray("tools").getJSONObject(0).getString("name"))
         assertFalse(JSONObject(ProviderCodec.build(AiConfig(ProviderKind.OPENAI, webSearch = true), "k", emptyList(), "x").body).has("tools"))
     }
+
+    @Test fun geminiAudioQuestionCarriesInlineWav() {
+        val body = JSONObject(ProviderCodec.build(AiConfig(ProviderKind.GEMINI), "k", listOf(ChatMessage("user", "oi"), ChatMessage("assistant", "olá")),
+            "Transcreva e responda", byteArrayOf(1, 2, 3)).body)
+        val contents = body.getJSONArray("contents")
+        val last = contents.getJSONObject(contents.length() - 1).getJSONArray("parts")
+        assertEquals("audio/wav", last.getJSONObject(1).getJSONObject("inline_data").getString("mime_type"))
+        assertEquals(1, contents.getJSONObject(0).getJSONArray("parts").length())          // history stays text only
+        assertThrows(AiException::class.java) { runBlocking { AiClient().ask(AiConfig(ProviderKind.OPENAI), "k", emptyList(), "x", byteArrayOf(1)) } }
+    }
 }

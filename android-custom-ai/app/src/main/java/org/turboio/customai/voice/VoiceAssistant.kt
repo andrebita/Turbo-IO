@@ -27,6 +27,9 @@ interface SpeechInput {
     val usesGlassesMic: Boolean
     /** Glasses mode: transcribe captured PCM. */
     suspend fun transcribe(pcm: ByteArray): String = throw UnsupportedOperationException()
+    /** Glasses mode, direct: the model hears the audio and answers in one request → (question heard, answer); null = not available. */
+    suspend fun answerAudio(pcm: ByteArray): Pair<String, String>? = null
+    val direct: Boolean get() = false
     /** Phone mode: listen on the phone microphone; returns transcript or throws with a pt-BR message. */
     suspend fun listenOnPhone(onPartial: (String) -> Unit): String = throw UnsupportedOperationException()
     fun cancel() {}
@@ -78,6 +81,8 @@ class VoiceAssistant(
     private var sid = ""
     private var capturing = false
     private var followupEligible = false
+    /** Answer already produced together with the transcript (direct Gemini mode). */
+    private var directReply: String? = null
     private var speech: SpeechInput? = null
     private val decoder = GlassesOpusDecoder()
     private val pcm = PcmBuffer(40)
@@ -172,6 +177,13 @@ class VoiceAssistant(
             throw IllegalStateException("Não ouvi nenhuma fala")
         }
         update { it.copy(phase = "transcrevendo", note = "Transcrevendo ${pcm.durationMs / 1000.0} s de áudio…") }
+        if (source.direct) send(9, Commands.SPEECH_THINKING)
+        source.answerAudio(pcm.bytes())?.let { (heard, reply) ->
+            pcm.clear()
+            if (heard.isBlank()) throw IllegalStateException("Não entendi. Tente novamente.")
+            directReply = reply
+            return heard.trim()
+        }
         val text = source.transcribe(pcm.bytes()).trim()
         pcm.clear()
         if (text.isEmpty()) throw IllegalStateException("Não entendi. Tente novamente.")
@@ -201,8 +213,9 @@ class VoiceAssistant(
         send(2, Commands.recorder(false))
         if (CLOSE.matches(question.trim().lowercase())) { endRound("Comando de encerramento reconhecido", sendExit = true); return }
         followupEligible = true
-        send(9, Commands.SPEECH_THINKING)   // "thinking" on the glasses while the model answers
-        val reply = try { answer(question) } catch (e: Exception) {
+        val preset = directReply.also { directReply = null }
+        if (preset == null) send(9, Commands.SPEECH_THINKING)   // "thinking" on the glasses while the model answers
+        val reply = preset ?: try { answer(question) } catch (e: Exception) {
             if (token == epoch) {
                 val reason = e.message ?: "Falha na IA"
                 sendAnswer(token, "Erro: ${reason.take(80)}", question)

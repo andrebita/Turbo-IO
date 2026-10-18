@@ -41,7 +41,8 @@ object ProviderCodec {
     private fun messagesFor(config: AiConfig, history: List<ChatMessage>, question: String): List<ChatMessage> =
         history.takeLast(config.historyTurns.coerceIn(0, 10) * 2) + ChatMessage("user", question)
 
-    fun build(config: AiConfig, apiKey: String, history: List<ChatMessage>, question: String): HttpRequestSpec {
+    /** [audioWav] (Gemini only): the question as audio; [question] is then the instruction sent with it. */
+    fun build(config: AiConfig, apiKey: String, history: List<ChatMessage>, question: String, audioWav: ByteArray? = null): HttpRequestSpec {
         val model = config.model.trim()
         val turns = messagesFor(config, history, question)
         return when (config.provider) {
@@ -60,9 +61,11 @@ object ProviderCodec {
             ProviderKind.GEMINI -> {
                 val id = model.removePrefix("models/")
                 val contents = JSONArray()
-                turns.forEach {
-                    contents.put(JSONObject().put("role", if (it.role == "assistant") "model" else "user")
-                        .put("parts", JSONArray().put(JSONObject().put("text", it.content))))
+                turns.forEachIndexed { i, it ->
+                    val parts = JSONArray().put(JSONObject().put("text", it.content))
+                    if (audioWav != null && i == turns.lastIndex) parts.put(JSONObject().put("inline_data",
+                        JSONObject().put("mime_type", "audio/wav").put("data", java.util.Base64.getEncoder().encodeToString(audioWav))))
+                    contents.put(JSONObject().put("role", if (it.role == "assistant") "model" else "user").put("parts", parts))
                 }
                 val body = JSONObject().put("contents", contents)
                     .put("generationConfig", JSONObject().put("maxOutputTokens", config.maxTokens))

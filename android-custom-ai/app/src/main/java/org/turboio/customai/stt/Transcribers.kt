@@ -20,7 +20,9 @@ enum class SttEngine(val id: String, val label: String) {
     GLASSES_OPENAI("openai", "Microfone dos óculos → OpenAI (Whisper / gpt-4o-transcribe)"),
     GLASSES_GOOGLE("google", "Microfone dos óculos → Google Cloud Speech-to-Text"),
     GLASSES_DEEPGRAM("deepgram", "Microfone dos óculos → Deepgram (usa a chave do ambiente)"),
-    GLASSES_GEMINI("gemini", "Microfone dos óculos → Gemini (usa a chave do Gemini da IA)");
+    GLASSES_GEMINI("gemini", "Microfone dos óculos → Gemini (usa a chave do Gemini da IA)"),
+    /** The audio goes to the Gemini chat model, which transcribes and answers in one request. */
+    GLASSES_GEMINI_DIRECT("gemini_direct", "Microfone dos óculos → Gemini direto (ouve e responde numa chamada; mais rápido)");
 
     val usesGlassesMic: Boolean get() = this != PHONE_ANDROID
     companion object { fun fromId(id: String?) = entries.firstOrNull { it.id == id } ?: PHONE_ANDROID }

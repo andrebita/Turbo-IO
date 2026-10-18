@@ -66,6 +66,8 @@ prompt permite resposta mais longa; o display pagina o texto.
 | OpenAI (Whisper / `gpt-4o-mini-transcribe`) | **óculos** | OpenAI (vazio = usa a chave OpenAI da IA) | áudio Opus dos óculos → WAV 16 kHz → `/v1/audio/transcriptions`, `language=pt` |
 | Google Cloud Speech-to-Text | **óculos** | chave de API do **Google Cloud** com a API Speech-to-Text ativada (a chave do Gemini/AI Studio **não** serve: dá “API keys are not supported”) | `speech:recognize`, `pt-BR`, até ~60 s |
 | Deepgram (recomendado se você já usa a Deepgram no ambiente) | **óculos** | a mesma chave Deepgram da transcrição do ambiente | Nova-3 `pt-BR`, áudio enviado como WAV |
+| Gemini | **óculos** | a chave do Gemini da IA | transcrição pelo modelo do Gemini; depois a pergunta vai à IA escolhida (duas chamadas) |
+| **Gemini direto (recomendado com o Gemini como IA)** | **óculos** | a chave do Gemini da IA | o áudio vai ao modelo de IA do Gemini, que escreve o que ouviu e responde **numa chamada só** (3–5 s mais rápido); perguntas sobre o diário/memória continuam respondidas pelo app |
 
 Uso: com os óculos conectados, acione o assistente nos óculos (gesto/botão de IA do firmware original), fale, aguarde a
 resposta nas lentes. Diga “encerrar” / “pode fechar” para fechar. A aba **Testes** mostra o estado da rodada.

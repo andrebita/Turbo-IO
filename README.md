@@ -69,7 +69,7 @@ Dark interface with an emerald accent: a home screen with the glasses' status, s
 | Current information: date, time and city with every question; weather forecast (Open-Meteo) for weather questions; optional web search (Gemini Google Search, Claude web search) | implemented · hardware pending |
 | Short pt-BR answers: Markdown/emoji cleanup, paging, optional accent stripping | implemented · tested |
 | Answers on the lenses through the official caption session (19/1 → 19/2 → text), with text size, position and line count | ✅ text shown and kept on the lenses (third test round); intro screen removed in rev. 15, pending check |
-| Voice assistant triggered on the glasses. **Glasses mic:** Gemini (same key as the AI), Deepgram Nova-3 (same key as ambient recording), OpenAI (Whisper / gpt-4o-transcribe) or Google Cloud Speech-to-Text. **Phone mic:** Android's built-in recognizer, no key needed | implemented · flow tested with synthetic Opus audio · hardware pending |
+| Voice assistant triggered on the glasses. **Glasses mic:** Gemini direct (the audio goes to the Gemini chat model, which hears and answers in one request), Gemini transcription (same key as the AI), Deepgram Nova-3 (same key as ambient recording), OpenAI (Whisper / gpt-4o-transcribe) or Google Cloud Speech-to-Text. **Phone mic:** Android's built-in recognizer, no key needed | implemented · flow tested with synthetic Opus audio · hardware pending |
 | "Hey RayNeo" wake word, turned on and off with the official app's command | implemented · hardware pending |
 | Free-phrase tasks: "I need to buy bread tomorrow" becomes a dated pending item | implemented · tested |
 
@@ -135,7 +135,7 @@ export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 168 unit tests with no lint errors.
+Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 170 unit tests with no lint errors.
 
 ## Documentation
 

@@ -112,6 +112,26 @@ class VoiceAndLensTest {
         assertEquals(1, voice.state.value.rounds)
     }
 
+    /** Direct Gemini: one request hears and answers; the answer callback (second request) is never used. */
+    @Test fun directModeAnswersFromTheAudioRequest() = runTest {
+        val port = FakePort()
+        var calls = 0
+        val input = object : SpeechInput {
+            override val usesGlassesMic = true
+            override val direct = true
+            override suspend fun answerAudio(pcm: ByteArray): Pair<String, String> { assertTrue(pcm.size > 16000); calls++; return "Quanto é dois mais dois?" to "Quatro." }
+        }
+        VoiceAssistant(port, this, fixedRandom, { input }, { throw AssertionError("segunda chamada à IA") }, { VoiceSettings(displaySeconds = 10) })
+        port.glasses(13, 1); runCurrent()
+        for (packet in opusPackets(speechMs = 1500, silenceMs = 1600)) { port.glasses(13, 3, binary = packet); runCurrent() }
+        advanceTimeBy(100); runCurrent()
+        assertEquals(1, calls)
+        assertEquals("Quanto é dois mais dois?", JSONObject(port.sent.first { it.second.type == 5 }.second.jsonText()).getString("text"))
+        val answer = port.sent.filter { it.second.type == 32 }.joinToString("") { JSONObject(it.second.jsonText()).getJSONObject("answer").getString("text") }
+        assertEquals("Quatro.", answer)
+        assertEquals("{\"rc\":3}", port.sent.first { it.second.type == 9 }.second.jsonText())
+    }
+
     @Test fun phoneMicTurnMirrorsPartialTranscript() = runTest {
         val port = FakePort()
         assistant(port, glassesMic = false)

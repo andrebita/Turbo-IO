@@ -268,7 +268,21 @@ class TurboApp : Application() {
      * Shared by the test screen and voice turns. Keeps a short history for follow-up questions and records
      * the exchange in the journal (option 2).
      */
-    suspend fun askAi(question: String, source: EntrySource = EntrySource.TEXT, record: Boolean = true): AiAnswer {
+    suspend fun askAi(question: String, source: EntrySource = EntrySource.TEXT, record: Boolean = true): AiAnswer =
+        askCore(question, source, record, null).second
+
+    /**
+     * Direct voice: the glasses' audio goes to the Gemini chat model, which writes what it heard between <pergunta>
+     * tags and then answers, in one request. Returns (question heard, answer); journal/memory questions are answered
+     * locally from the heard text, like typed or transcribed ones.
+     */
+    suspend fun askAiAudio(pcm: ByteArray): Pair<String, String> {
+        val wav = org.turboio.customai.stt.DeepgramSpeechTranscriber.wav(pcm)
+        val (heard, result) = askCore(DIRECT_PROMPT, EntrySource.VOICE_GLASSES, true, wav)
+        return heard to result.text
+    }
+
+    private suspend fun askCore(question: String, source: EntrySource, record: Boolean, audio: ByteArray?): Pair<String, AiAnswer> {
         val config = settings.aiConfig()
         val key = settings.apiKey(config.provider)
         val snapshot = synchronized(history) { history.toList() }
@@ -277,7 +291,19 @@ class TurboApp : Application() {
         val withTasks = if (tasks) config.copy(systemPrompt = config.systemPrompt + TaskMarker.instruction(started)) else config
         val base = withTasks.copy(systemPrompt = withTasks.systemPrompt + context(question, started))
         val effective = if (DisplayText.wantsDetail(question)) base.copy(maxTokens = maxOf(base.maxTokens, 1500)) else base
-        val raw = ai.ask(effective, key, snapshot, question)
+        val asked = ai.ask(effective, key, snapshot, question, audio)
+        var heardText = question
+        var raw = asked
+        if (audio != null) {
+            val m = HEARD.find(asked.text)
+            heardText = m?.groupValues?.get(1)?.trim().orEmpty()
+            raw = asked.copy(text = (if (m != null) asked.text.removeRange(m.range) else asked.text).trim())
+            DiagnosticLog.i("VOZ", "Gemini direto: pergunta ${heardText.length} caracteres, resposta ${raw.text.length} em ${asked.latencyMs} ms")
+            if (heardText.isEmpty()) throw AiException("Não entendi. Tente novamente.")
+            // Journal and memory questions keep their local answers.
+            journalAnswer(heardText, source)?.let { return heardText to asked.copy(text = it) }
+        }
+        val question = heardText
         // The assistant itself flags requests to remember something; the marker becomes an item and is never shown.
         val marker = if (tasks) TaskMarker.find(raw.text) else null
         val result = if (marker == null) raw else raw.copy(text = marker.rest.ifBlank { "Anotado." })
@@ -293,7 +319,7 @@ class TurboApp : Application() {
             while (history.size > 20) history.removeAt(0)
         }
         if (record) recordInteraction(question, result.text, source, started, result.provider.id, result.model, result.latencyMs)
-        return result
+        return question to result
     }
 
     private suspend fun recordInteraction(question: String, answer: String, source: EntrySource, started: Long,
@@ -456,8 +482,10 @@ class TurboApp : Application() {
                 }
                 override fun cancel() = recognizer.cancel()
             }
-            SttEngine.GLASSES_OPENAI, SttEngine.GLASSES_GOOGLE, SttEngine.GLASSES_DEEPGRAM, SttEngine.GLASSES_GEMINI -> object : SpeechInput {
+            SttEngine.GLASSES_OPENAI, SttEngine.GLASSES_GOOGLE, SttEngine.GLASSES_DEEPGRAM, SttEngine.GLASSES_GEMINI, SttEngine.GLASSES_GEMINI_DIRECT -> object : SpeechInput {
                 override val usesGlassesMic = true
+                override val direct get() = config.engine == SttEngine.GLASSES_GEMINI_DIRECT && settings.aiConfig().provider == ProviderKind.GEMINI
+                override suspend fun answerAudio(pcm: ByteArray): Pair<String, String>? = if (direct) askAiAudio(pcm) else null
                 override suspend fun transcribe(pcm: ByteArray): String {
                     val key = settings.sttKey(config.engine)
                     val gemini = { org.turboio.customai.stt.GeminiSpeechTranscriber(config, settings.apiKey(ProviderKind.GEMINI),
@@ -465,7 +493,7 @@ class TurboApp : Application() {
                     val transcriber = when (config.engine) {
                         SttEngine.GLASSES_OPENAI -> OpenAiTranscriber(config, key)
                         SttEngine.GLASSES_DEEPGRAM -> org.turboio.customai.stt.DeepgramSpeechTranscriber(config, key)
-                        SttEngine.GLASSES_GEMINI -> gemini()
+                        SttEngine.GLASSES_GEMINI, SttEngine.GLASSES_GEMINI_DIRECT -> gemini()
                         else -> GoogleSpeechTranscriber(config, key)
                     }
                     return try { transcriber.transcribe(pcm) } catch (e: SttException) {
@@ -484,6 +512,10 @@ class TurboApp : Application() {
     }
 
     companion object {
+        private val HEARD = Regex("<pergunta>(.*?)</pergunta>", RegexOption.DOT_MATCHES_ALL)
+        private const val DIRECT_PROMPT = "A pergunta do usuário está no áudio anexo (português do Brasil). Primeiro escreva exatamente o que " +
+            "ele disse entre <pergunta> e </pergunta>; em seguida, responda à pergunta seguindo as instruções. Se não houver fala, " +
+            "escreva apenas <pergunta></pergunta>."
         private val WEATHER_QUESTION = Regex("chuv|chover|temperatura|clima|previs|frio|calor|nublad|guarda-chuva|\\btempo (hoje|amanh|agora|para|em|no|na)")
         lateinit var instance: TurboApp; private set
         fun friendly(e: Throwable): String = when (e) {

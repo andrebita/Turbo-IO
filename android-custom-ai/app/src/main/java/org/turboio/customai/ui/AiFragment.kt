@@ -137,6 +137,8 @@ class AiFragment : Fragment() {
         loadAmbient()
         sttKeyState.text = when {
             engine == SttEngine.PHONE_ANDROID -> "Sem chave necessária"
+            engine == SttEngine.GLASSES_GEMINI_DIRECT -> if (settings.aiConfig().provider != ProviderKind.GEMINI) "Escolha o Google Gemini como provedor de IA (acima); sem isso o app só transcreve com o Gemini e pergunta à IA escolhida"
+                else if (settings.hasApiKey(ProviderKind.GEMINI)) "O áudio vai direto ao modelo de IA do Gemini (${settings.modelFor(ProviderKind.GEMINI)}), que transcreve e responde numa chamada" else "Salve a chave do Gemini no provedor de IA (acima)"
             engine == SttEngine.GLASSES_GEMINI -> if (settings.hasApiKey(ProviderKind.GEMINI)) "Usa a chave do Gemini salva no provedor de IA (modelo ${settings.modelFor(ProviderKind.GEMINI)})" else "Salve a chave do Gemini no provedor de IA (acima)"
             engine == SttEngine.GLASSES_DEEPGRAM -> if (settings.hasDeepgramKey()) "Usa a chave Deepgram da transcrição do ambiente (abaixo)" else "Informe a chave Deepgram abaixo, em “Transcrição do ambiente”"
             settings.hasSttKey(engine) -> "Chave salva: ${Redactor.mask(settings.sttKey(engine))}"
