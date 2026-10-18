@@ -98,7 +98,7 @@ class TeleprompterTest {
         val info = FileTransfer.decode(r.port.files[0])
         // First form: as the official app uploads (business 17, busId 17, "task_" id, plain .txt name).
         assertEquals(1, info.type); assertEquals(17, r.port.fileBusinesses[0]); assertEquals(17L, info.busId)
-        assertTrue(info.uuid.startsWith("task_")); assertEquals("${r.did}.txt", info.fileName); assertEquals(Teleprompter.md5(text.toByteArray()), info.md5)
+        assertTrue(info.uuid.startsWith("task_")); assertEquals(r.did, info.fileName); assertEquals(Teleprompter.md5(text.toByteArray()), info.md5)
         r.file(FileMessage(2, info.uuid)); r.file(FileMessage(3, info.uuid, chunkId = 0, start = 0, size = 51_200)); runCurrent()
         val chunk = FileTransfer.decode(r.port.files[1]); assertEquals(17, r.port.fileBusinesses[1])
         assertEquals(text, String(chunk.data, Charsets.UTF_8)); assertEquals(100, r.t.state.value.progress)
@@ -142,7 +142,7 @@ class TeleprompterTest {
         assertEquals(listOf(17), r.port.fileBusinesses)
         advanceTimeBy(6_100); runCurrent()
         val second = FileTransfer.decode(r.port.files[1])
-        assertEquals(17, r.port.fileBusinesses[1]); assertEquals(r.did, second.uuid); assertEquals("${r.did}.txt", second.fileName)
+        assertEquals(17, r.port.fileBusinesses[1]); assertEquals(r.did, second.uuid); assertEquals(r.did, second.fileName)
         advanceTimeBy(6_100); runCurrent()
         val third = FileTransfer.decode(r.port.files[2])
         assertEquals(18, r.port.fileBusinesses[2]); assertEquals(18L, third.busId); assertTrue(third.uuid.startsWith("task_"))
@@ -209,7 +209,7 @@ class TeleprompterTest {
         val id = r.id()
         r.file(FileMessage(2, id)); r.file(FileMessage(3, id, chunkId = 1, start = 0, size = 163)); r.file(FileMessage(5, id)); runCurrent()
         assertEquals(Phase.TRANSFERRING, r.t.state.value.phase)
-        advanceTimeBy(1_600); runCurrent()
+        advanceTimeBy(5_100); runCurrent()
         assertEquals(Phase.READY, r.t.state.value.phase)
     }
 
@@ -232,9 +232,9 @@ class TeleprompterTest {
         assertTrue(t.active); assertEquals(Phase.TRANSFERRING, t.state.value.phase)
         val answer = JSONObject(port.sent[1].second.jsonText())
         assertEquals(2, answer.getInt("action")); assertEquals(1, answer.getInt("code")); assertEquals(0, answer.getInt("highLightOffset"))
-        val info = FileTransfer.decode(port.files[0]); assertEquals("$did.txt", info.fileName); assertEquals(17, port.fileBusinesses[0])
+        val info = FileTransfer.decode(port.files[0]); assertEquals(did, info.fileName); assertEquals(17, port.fileBusinesses[0])
         port.raw(17, FileTransfer.encode(FileMessage(2, info.uuid))); port.raw(17, FileTransfer.encode(FileMessage(3, info.uuid, chunkId = 1, start = 0, size = 100)))
-        port.raw(17, FileTransfer.encode(FileMessage(5, info.uuid))); runCurrent(); advanceTimeBy(1_600); runCurrent()
+        port.raw(17, FileTransfer.encode(FileMessage(5, info.uuid))); runCurrent(); advanceTimeBy(5_100); runCurrent()
         assertEquals(Phase.READY, t.state.value.phase)
         port.glasses(20, 3, """{"action":1,"did":"$did","total":31}"""); runCurrent()
         assertEquals(Phase.RUNNING, t.state.value.phase)

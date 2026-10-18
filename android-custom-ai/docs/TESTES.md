@@ -306,6 +306,14 @@ que ele explica e o que mudou:
 Ainda em aberto: o fluxo das Legendas (19/1 → 19/2 antes do texto?), a falta de 21/34 no aceno (lado dos óculos),
 `width`/`leading` do teleprompter e o “canal rápido” que o app oficial prepara antes de enviar o arquivo.
 
+#### Rev. 16: encerramento da sessão e nome do arquivo (análise do app oficial)
+
+| Item | Confirmado no app oficial | Mudança |
+| --- | --- | --- |
+| Fim da sessão de legendas | 19/3 `reason_code 2` (fechado pelo usuário no app) com o mesmo `sid`; o 10 é “finalizar prévia” | sessão fechada com 2; se o 19/1 seguinte ainda receber `code 4`, nova tentativa após 1 s |
+| Tamanho/posição sem prévia | 19/7 com `scope "global"` e `is_display false` (é assim que o app oficial salva as preferências) | layout diferente do padrão é salvo assim antes da sessão |
+| Nome do arquivo do roteiro | o documento fica em `<base>/teleprompter/<did>`; `fileName` = o `did`, sem extensão | `fileName` = `did`; espera de 5 s pelo 20/2 código 7 antes de seguir |
+
 #### Terceira rodada (2026-10-18, 08:45–09:03, rev. 14)
 
 | Etapa | Resultado | Evidência | Ação na rev. 15 |

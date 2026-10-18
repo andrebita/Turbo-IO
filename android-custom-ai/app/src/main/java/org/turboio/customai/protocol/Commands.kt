@@ -204,9 +204,13 @@ object Commands {
 
     // --- SUBTITLE(19): temporary display without microphone ---
     /** Text session config. Defaults are the values seen working on stock firmware; others are experimental. */
-    fun displayStart(sid: String, fontSize: Int = 2, position: String = "center", maxLines: Int = 5): String {
+    /**
+     * 19/7 display configuration. Default: the temporary preview (opens the Subtitles app with its intro screen). With
+     * [persist]: the official app's way to save size/position without a preview (scope "global", is_display false).
+     */
+    fun displayStart(sid: String, fontSize: Int = 2, position: String = "center", maxLines: Int = 5, persist: Boolean = false): String {
         if (fontSize !in 1..3 || position !in setOf("center", "top", "bottom") || maxLines !in 1..5) throw ProtocolException("invalid-value")
-        return "{\"sid\":${sid(sid)},\"force\":false,\"scope\":\"temporary\",\"config\":{\"font_size\":$fontSize,\"content_width\":100,\"max_lines\":$maxLines,\"position\":\"$position\",\"is_display\":true,\"straight_view\":\"original\"}}"
+        return "{\"sid\":${sid(sid)},\"force\":false,\"scope\":\"${if (persist) "global" else "temporary"}\",\"config\":{\"font_size\":$fontSize,\"content_width\":100,\"max_lines\":$maxLines,\"position\":\"$position\",\"is_display\":${!persist},\"straight_view\":\"original\"}}"
     }
 
     /** Text formats for 19/5: "legacy" (HarmonyOS client, older firmware), "official" (template of the official app's
@@ -236,7 +240,8 @@ object Commands {
         }
     }
 
-    fun displayStop(sid: String): String = "{\"sid\":${sid(sid)},\"reason_code\":10,\"text\":\"\"}"
+    /** 19/3: reason 2 = closed by the user in the app (ends a caption session), 10 = finish the preview. */
+    fun displayStop(sid: String, session: Boolean = false): String = "{\"sid\":${sid(sid)},\"reason_code\":${if (session) 2 else 10},\"text\":\"\"}"
 
     // --- AI_ASSISTANT(13): voice turn ---
     fun recorder(start: Boolean): String = if (start) "{\"rc\":1}" else "{\"rc\":2}"

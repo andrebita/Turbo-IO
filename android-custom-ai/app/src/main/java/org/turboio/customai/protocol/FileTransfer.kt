@@ -33,7 +33,8 @@ object FileTransfer {
     /** File businesses: 17 = SmallCore, 18 = LargeCore. */
     val BUSINESSES = setOf(Business.SMALL_FILE, Business.FILE)
     private val UUID = Regex("^[A-Za-z0-9_-]{1,64}$")
-    private val NAME = Regex("^[A-Za-z0-9_-]{1,40}\\.txt$")
+    /** A plain ".txt" name, or a teleprompter document id (lowercase UUID, no extension, as the official app names them). */
+    private val NAME = Regex("^([A-Za-z0-9_-]{1,40}\\.txt|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$")
 
     private fun ascii(s: String, max: Int): ByteArray {
         if (s.length > max || s.any { it.code !in 0x20..0x7e }) throw ProtocolException("file-ascii")

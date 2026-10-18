@@ -65,6 +65,10 @@ class LensDisplay(
     private var closedByGlasses = false
     /** Caption session the glasses accepted (19/2 code 1). On 1.0.5.5 it stays open after 19/3, so later texts reuse it. */
     private var lastSession = ""
+    /** The current [sid] is a caption session (closed with reason 2) rather than a preview (reason 10). */
+    private var inSession = false
+    /** Layout last saved on the glasses with the persistent 19/7; null = never changed by this app. */
+    private var savedLayout: Triple<Int, String, Int>? = null
     private var job: Job? = null
     val active: Boolean get() = sid.isNotEmpty()
 
@@ -107,17 +111,10 @@ class LensDisplay(
         var format = settings.textFormat
         // Official phone-started caption session (19/1 → glasses 19/2 → text), without 19/7: that one is the display
         // preview, which shows the Subtitles intro screen ("During conversations, live captions…").
+        if (Commands.isSession(format)) saveLayout(settings)
         val session = Commands.isSession(format) && startSession()
-        if (session) {
-            format = Commands.sessionTextFormat(format)
-            // Size/position other than the standard: apply them to the open session (19/7 with the same sid).
-            if (!settings.standardLayout) {
-                val waiter = CompletableDeferred<Int>().also { ack = it }
-                port.sendEnvelope(Business.SUBTITLE, 7, Commands.displayStart(sid, settings.fontSize, settings.position, settings.maxLines))
-                val code = withTimeoutOrNull(5_000) { waiter.await() }
-                DiagnosticLog.i("LENS", "layout na sessão: ${code?.let { "código $it" } ?: "sem resposta"}")
-            }
-        } else {
+        if (session) format = Commands.sessionTextFormat(format)
+        else {
             if (Commands.isSession(format)) { DiagnosticLog.w("LENS", "sessão de legendas não iniciada; usando o formato antigo"); format = "legacy" }
             openPreview(settings)?.let { return it }
         }
@@ -141,20 +138,41 @@ class LensDisplay(
         return null
     }
 
+    /**
+     * Size/position for caption sessions: saved on the glasses with the official persistent 19/7 (scope global,
+     * is_display false: no preview), only when it differs from the standard or from what this app saved before.
+     */
+    private suspend fun saveLayout(settings: DisplaySettings) {
+        val layout = Triple(settings.fontSize, settings.position, settings.maxLines)
+        if (layout == savedLayout || (savedLayout == null && settings.standardLayout)) return
+        sid = newSid(random); closedByGlasses = false
+        val waiter = CompletableDeferred<Int>().also { ack = it }
+        val error = port.sendEnvelope(Business.SUBTITLE, 7, Commands.displayStart(sid, settings.fontSize, settings.position, settings.maxLines, persist = true))
+        val code = if (error == null) withTimeoutOrNull(5_000) { waiter.await() } else null
+        DiagnosticLog.i("LENS", "layout salvo nos óculos: ${code?.let { "código $it" } ?: error ?: "sem resposta"}")
+        if (code == 1 || code == 2) savedLayout = layout
+        sid = ""; ack = null
+    }
+
     /** 19/1 → 19/2. True when the glasses accepted (their sid adopted) or an earlier accepted session is still open. */
     private suspend fun startSession(): Boolean {
-        sid = newSid(random); closedByGlasses = false
-        val waiter = CompletableDeferred<Pair<Int, String>>().also { started = it }
-        port.sendEnvelope(Business.SUBTITLE, 1, Commands.captionStart(sid))?.let { started = null; sid = ""; DiagnosticLog.w("LENS", "início não enviado: $it"); return false }
-        val result = withTimeoutOrNull(10_000) { waiter.await() }
-        started = null
-        DiagnosticLog.i("LENS", "início da sessão de legendas: ${result?.let { "código ${it.first}" } ?: "sem resposta (10 s)"}")
-        return when {
-            result?.first == 1 -> { if (Regex("^[0-9a-f]{32}$").matches(result.second)) sid = result.second; lastSession = sid; true }
-            // "not_idle_state": our previous session is still open on the glasses; keep using it.
-            result?.first == 4 && lastSession.isNotEmpty() -> { sid = lastSession; DiagnosticLog.i("LENS", "sessão anterior ainda aberta; reaproveitada"); true }
-            else -> { sid = ""; false }
+        repeat(2) { attempt ->
+            sid = newSid(random); closedByGlasses = false
+            val waiter = CompletableDeferred<Pair<Int, String>>().also { started = it }
+            port.sendEnvelope(Business.SUBTITLE, 1, Commands.captionStart(sid))?.let { started = null; sid = ""; DiagnosticLog.w("LENS", "início não enviado: $it"); return false }
+            val result = withTimeoutOrNull(10_000) { waiter.await() }
+            started = null
+            DiagnosticLog.i("LENS", "início da sessão de legendas: ${result?.let { "código ${it.first}" } ?: "sem resposta (10 s)"}")
+            when {
+                result?.first == 1 -> { if (Regex("^[0-9a-f]{32}$").matches(result.second)) sid = result.second; lastSession = sid; inSession = true; return true }
+                // "not_idle_state": our previous session is still open on the glasses; keep using it.
+                result?.first == 4 && lastSession.isNotEmpty() -> { sid = lastSession; inSession = true; DiagnosticLog.i("LENS", "sessão anterior ainda aberta; reaproveitada"); return true }
+                // Just closed (19/3 reason 2) and not idle yet: one more try a moment later.
+                result?.first == 4 && attempt == 0 -> delay(1_000)
+                else -> { sid = ""; return false }
+            }
         }
+        sid = ""; return false
     }
 
     /** 19/7 display preview with the chosen layout (the older path); null when open, else the failure reason. */
@@ -173,7 +191,7 @@ class LensDisplay(
 
     /** Opens a session; the glasses' ack code, -1 on timeout, null when the request could not be sent. */
     private suspend fun open(fontSize: Int, position: String, maxLines: Int): Int? {
-        sid = newSid(random); closedByGlasses = false
+        sid = newSid(random); closedByGlasses = false; inSession = false
         val waiter = CompletableDeferred<Int>().also { ack = it }
         port.sendEnvelope(Business.SUBTITLE, 7, Commands.displayStart(sid, fontSize, position, maxLines))?.let { DiagnosticLog.w("LENS", "abertura: $it"); sid = ""; return null }
         return withTimeoutOrNull(10_000) { waiter.await() } ?: -1
@@ -182,9 +200,12 @@ class LensDisplay(
     private suspend fun closeSession() {
         val current = sid
         if (current.isEmpty()) return
-        sid = ""; ack = null
+        val session = inSession
+        sid = ""; ack = null; inSession = false
+        if (session) lastSession = ""
         if (!closedByGlasses && port.isReady) {
-            port.sendEnvelope(Business.SUBTITLE, 3, Commands.displayStop(current))?.let { DiagnosticLog.w("LENS", "encerramento não enviado: $it") }
+            // Session: reason 2 (closed by the user in the app), the official normal end. Preview: reason 10.
+            port.sendEnvelope(Business.SUBTITLE, 3, Commands.displayStop(current, session))?.let { DiagnosticLog.w("LENS", "encerramento não enviado: $it") }
         }
     }
 

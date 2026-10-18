@@ -51,7 +51,7 @@ class Teleprompter(
     /** Scripts listed in the glasses' Teleprompter menu; null = none kept (empty list). */
     private val library: ScriptLibrary? = null,
     /** After the glasses confirm the file (5 success), how long to wait for 20/2 code 7 before treating the script as ready. */
-    private val readyGraceMs: Long = 1_500,
+    private val readyGraceMs: Long = 5_000,
 ) : BusinessListener {
     enum class Phase(val label: String) {
         IDLE("parado"), PREPARING("preparando"), TRANSFERRING("enviando roteiro"), READY("pronto"), CONTROLLING("aguardando óculos"),
@@ -300,8 +300,8 @@ class Teleprompter(
     private suspend fun announce(index: Int, e: Int) {
         val base = file ?: return
         val route = ROUTES[index]
-        // The glasses' Teleprompter keeps documents by id: the file is named after the session id ("<did>.txt").
-        val f = base.copy(if (route.taskId) taskId() else did, "$did.txt", route.business)
+        // Official app: the document file is <base>/teleprompter/<did>, so the transfer's fileName is exactly the did.
+        val f = base.copy(if (route.taskId) taskId() else did, did, route.business)
         attempts.add(route to f)
         val info = f.info()
         val error = sendFile(info, route.business); info.fill(0)

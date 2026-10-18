@@ -76,7 +76,8 @@ app:    após 12–45 s: type2 {"rc":2}, type7 {"rc":1} (saída)
 ## Exibição de texto (negócio 19, sem microfone)
 
 Nos formatos “sessão de legendas” (rev. 14), depois do `type8` o app envia `type1` (início pelo celular, áudio do celular),
-espera o `type2` dos óculos (código 1, 10 s) e passa a usar o `sid` que os óculos devolverem. `type7` abrir sessão temporária (`sid` aleatório) → aguarda `type8` com `code` 1/2 (10 s) → páginas `type5` (≤ 90 caracteres,
+espera o `type2` dos óculos (código 1, 10 s) e passa a usar o `sid` que os óculos devolverem; a sessão termina com `type3` `reason_code 2`
+(a prévia, com 10). Tamanho/posição fora do padrão vão antes num `type7` persistente (`scope global`, `is_display false`), que não abre a prévia. `type7` abrir sessão temporária (`sid` aleatório) → aguarda `type8` com `code` 1/2 (10 s) → páginas `type5` (≤ 90 caracteres,
 intervalo configurável) → `type3` encerrar. `type3`/`type4` vindos dos óculos interrompem.
 
 ## Teleprompter (negócios 20 e 17/18)

@@ -221,29 +221,42 @@ class VoiceAndLensTest {
         advanceTimeBy(5_000); runCurrent()
         val text = port.sent.filter { it.second.type == 5 }.map { JSONObject(it.second.jsonText()) }
         assertTrue(text.isNotEmpty()); assertTrue(text.all { it.getString("sid") == theirs && it.getInt("mode") == 1 })
-        assertEquals(theirs, JSONObject(port.sent.last().second.jsonText()).getString("sid"))     // 19/3 closes their session
+        val stop = JSONObject(port.sent.last().second.jsonText())
+        assertEquals(theirs, stop.getString("sid")); assertEquals(2, stop.getInt("reason_code"))   // official normal end of a session
         assertFalse(org.turboio.customai.protocol.Business.contentAllowed(19, 1, "{\"sid\":\"$sid\",\"trigger\":1}"))
     }
 
-    /** 1.0.5.5 keeps the session open after 19/3: the next 19/1 gets code 4 "not_idle_state" and the open session is reused. */
-    @Test fun lensDisplayReusesOpenSessionAndFallsBack() = runTest {
+    /** Just after the reason-2 close the glasses may still be busy (code 4): one retry, then the preview path (19/7, reason 10). */
+    @Test fun lensDisplayRetriesBusyStartThenFallsBack() = runTest {
         val port = FakePort()
         val display = LensDisplay(port, this, fixedRandom)
         val sid = "5a".repeat(16)
         display.show("Um", DisplaySettings(lingerSeconds = 2, textFormat = "session_classic")); runCurrent()
+        port.glasses(19, 2, "{\"sid\":\"$sid\",\"code\":4,\"text\":\"not_idle_state\"}"); runCurrent()
+        advanceTimeBy(1_100); runCurrent()
+        assertEquals(listOf("19/1", "19/1"), port.trace())
         port.glasses(19, 2, "{\"sid\":\"$sid\",\"code\":1}"); advanceTimeBy(5_000); runCurrent()
+        assertEquals(1, JSONObject(port.sent.first { it.second.type == 5 }.second.jsonText()).getInt("mode"))
         port.sent.clear()
         display.show("Dois", DisplaySettings(lingerSeconds = 2, textFormat = "session_classic")); runCurrent()
-        port.glasses(19, 2, "{\"sid\":\"$sid\",\"code\":4,\"text\":\"not_idle_state\"}"); advanceTimeBy(5_000); runCurrent()
-        val text = port.sent.filter { it.second.type == 5 }.map { JSONObject(it.second.jsonText()) }
-        assertTrue(text.isNotEmpty()); assertTrue(text.all { it.getString("sid") == sid && it.getInt("mode") == 1 })
-        // Glasses close it; a refused start then falls back to the preview path (19/7) with the old text format.
-        port.glasses(19, 3, "{\"sid\":\"$sid\"}"); runCurrent(); port.sent.clear()
-        display.show("Três", DisplaySettings(lingerSeconds = 2, textFormat = "session_classic")); runCurrent()
+        port.glasses(19, 2, "{\"sid\":\"$sid\",\"code\":4}"); advanceTimeBy(1_100); runCurrent()
         port.glasses(19, 2, "{\"sid\":\"$sid\",\"code\":4}"); runCurrent()
         assertEquals("19/7", port.trace().last())
         port.glasses(19, 8, "{\"sid\":\"$sid\",\"code\":1}"); advanceTimeBy(5_000); runCurrent()
         assertEquals(3, JSONObject(port.sent.first { it.second.type == 5 }.second.jsonText()).getInt("mode"))
+        assertEquals(10, JSONObject(port.sent.last().second.jsonText()).getInt("reason_code"))
+    }
+
+    /** A non-standard size/position is saved with the persistent 19/7 (global, no preview) before the session. */
+    @Test fun lensDisplaySavesLayoutWithoutPreview() = runTest {
+        val port = FakePort()
+        val display = LensDisplay(port, this, fixedRandom)
+        val sid = "5a".repeat(16)
+        display.show("Grande", DisplaySettings(lingerSeconds = 2, fontSize = 3, position = "top", maxLines = 3, textFormat = "session_classic")); runCurrent()
+        val cfg = JSONObject(port.sent[0].second.jsonText())
+        assertEquals("global", cfg.getString("scope")); assertFalse(cfg.getJSONObject("config").getBoolean("is_display")); assertEquals(3, cfg.getJSONObject("config").getInt("font_size"))
+        port.glasses(19, 8, "{\"sid\":\"$sid\",\"code\":1}"); runCurrent()
+        assertEquals(listOf("19/7", "19/1"), port.trace())
     }
 
     @Test fun voiceSpeechStatusGate() {
