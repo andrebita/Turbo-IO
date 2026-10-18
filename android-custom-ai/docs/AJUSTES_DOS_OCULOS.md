@@ -26,26 +26,25 @@ grava firmware.
 
 ## 2. Ajustes da tela (negócio 15)
 
+Formato e faixas conferidos no código do app oficial 1.0.7 (`glasses_commands.dart`, rev. 13). Todos usam
+`{"cmd":…,"payload":{"value":…,"mode":…,"data":"<JSON em texto>"}}`.
+
 | Ação | Comando | Valores aceitos |
 | --- | --- | --- |
 | Ler | 15/4 `request_general_settings` | — |
-| Altura do texto e distância | 15/5 `display_config`, `data = {"distance":d,"height":h}` | altura 1, 3 ou 5; distância 1 ou 2 (vistos em outros clientes); mais os valores que os seus óculos informarem; distância 3 experimental |
-| Olhar para cima acende a tela, ângulo e botão acende | 15/5 `wakeup_config`, `data = {"headupSwitch":0\|1,"headupDegree":g,"crownSwitch":0\|1}` (grupo `wakeupConfig` informado pelo Strix OS 1.0.5.5) | ângulo de 10° a 40° (e o valor lido), máximo aceito 60°; os outros dois campos vão como foram lidos; relê para conferir; entra no “Restaurar” |
-| Gestos de cabeça | 15/5 `head_gestures`, `payload = {"value":1\|0,"mode":<lido>,"data":""}` (forma do cliente iOS) | liga/desliga; grupo `headGestures` (não é o “olhar para cima”) |
-| Duplo toque abre o To-do | 15/5 `crown_config`, `data = {"double":8\|0,"longPress":<lido>}` | duplo 0 ou 8 |
+| Altura do texto e profundidade | 15/5 `display_config`, `data = {"height":h,"distance":d}` | altura 1–6, profundidade 1–3 (faixas do app oficial) |
+| Olhar para cima acende a tela, ângulo, botão | 15/5 `wakeup_config`, `data = {"headup_switch":0\|1,"headup_degree":g,"crown_switch":c}` | ângulo 0–90°; `crown_switch` 0 desligado, 1 giroscópio, 2 toque, 3 “marble”. A leitura vem em camelCase (`wakeupConfig.headupSwitch`), a escrita em snake_case: até a rev. 12 o app escrevia em camelCase, o que provavelmente não funcionava |
+| Gestos de cabeça | 15/5 `head_gestures`, `payload = {"value":1\|0,"mode":<lido>,"data":""}` | liga/desliga |
+| Botão (coroa) | 15/5 `crown_config`, `payload.value = sentido` (como foi lido), `data = {"double":a,"longPress":b}` | ações: 0 perguntar à IA, 1 painel, 2 foco, 3 gravador, 4 legendas, 5 teleprompter, 6 diário (só duplo toque), 7 nenhuma, 8 To-do, 9 dicas ao vivo. Até a rev. 12 o sentido ia dentro de `data` |
+| “Hey RayNeo” | 15/16 `set_ai_voice_wakeup`, `mode` 1 liga, 0 desliga | — |
+| Hora dos óculos | 15/5 `sync_time`, `data = {"utc":segundos,"offset":segundos,"timezone":"America/Sao_Paulo"}` | enviado a cada conexão |
 
-* Cada gravação lê os valores atuais antes e manda os dois campos: o que não muda vai exatamente como foi lido. Depois
-  lê de novo para confirmar.
-* Os primeiros valores lidos ficam guardados. **Restaurar ajustes originais** volta a eles.
-* **Níveis a mais do app oficial** (ex.: a 3ª profundidade): escolha o nível no app oficial, conecte este app e toque
-  em **Ler ajustes dos óculos**. O valor que os óculos informarem passa a aparecer na lista (“lida dos óculos”).
-* **Distância 3 (experimental)**: o app envia, relê e, se os óculos não aplicarem o valor pedido, volta aos valores
-  anteriores. Se aplicarem, o valor passa a ser oferecido normalmente. O firmware tem uma validação própria desse
-  ajuste; qualquer valor enviado fica entre 0 e 5 (altura) e 0 e 3 (distância).
-* Duplo toque: só quando a ação atual é 0 (nenhuma) ou 8 (To-do). Se for outra função, o app recusa, porque não
-  conseguiria restaurá-la.
-* Efeito físico na lente **não confirmado** por nenhum cliente (o iOS marca “提交不等于眼镜物理效果已通过”). Confira
-  nas lentes.
+* Cada gravação lê os valores atuais antes e manda todos os campos do grupo: o que não muda vai exatamente como foi
+  lido. Depois lê de novo para confirmar; se os óculos não aplicarem a altura/profundidade, os valores anteriores voltam.
+* Os primeiros valores lidos ficam guardados. **Restaurar ajustes originais** volta a eles (tela, botão e “olhar para cima”).
+* Desligar “duplo toque abre o To-do” volta à ação lida originalmente (ou “nenhuma”).
+* Conhecidos no app oficial, mas ainda **não usados** aqui: `brightness_change` (15/2), `privacy_config`, `auto_lock_time`,
+  `language_change`, `system_unints_config` e os ajustes do assistente (`set_ai_*`).
 * Qualquer outro comando, valor ou campo é recusado pela regra de envio e coberto por testes.
 
 ## 3. Painel dos óculos (negócio 15/18) — experimental

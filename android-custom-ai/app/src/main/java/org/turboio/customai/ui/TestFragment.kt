@@ -66,13 +66,22 @@ class TestFragment : Fragment() {
         ui.section("Teleprompter dos óculos")
         val g5 = ui.card()
         g5.hint("Usa o teleprompter que já vem nos óculos. O roteiro vai como arquivo temporário (até 12 000 caracteres) e " +
-            "fica só no celular depois que você sai. Nada é instalado nos óculos. Ainda não foi testado nos seus óculos.")
+            "fica só no celular depois que você sai. Nada é instalado nos óculos. Ainda não funcionou nos seus óculos; a rev. 13 segue o app oficial 1.0.7.")
         script = g5.field("Roteiro (cole o texto)", multiline = true)
         g5.button("Abrir arquivo .txt", filled = false) { openScript.launch(arrayOf("text/plain")) }
         val speeds = (60..240 step 20).toList()
         g5.text("Velocidade (caracteres por minuto)", size = 13f)
         g5.spinner(speeds, speeds.indexOf(prompterSpeed), { "$it" }) { prompterSpeed = it }
-        g5.button("Enviar roteiro aos óculos") { prompter { app.teleprompter.prepare(script.text.toString(), prompterSpeed) } }
+        var look = org.turboio.customai.device.Teleprompter.Look()
+        val countdowns = listOf(0, 3, 5)
+        g5.spinner(countdowns, countdowns.indexOf(look.countdown), { if (it == 0) "Começar sem contagem" else "Contagem de $it s" }) { look = look.copy(countdown = it) }
+        val sizes = listOf(18 to "pequeno", 20 to "médio", 24 to "grande")
+        g5.spinner(sizes, 1, { "Texto ${it.second}" }) { look = look.copy(size = it.first) }
+        val levels = listOf(1 to "perto", 2 to "média", 3 to "longe")
+        g5.spinner(levels, 1, { "Profundidade ${it.second}" }) { look = look.copy(depth = it.first) }
+        val gears = listOf(1 to "baixo", 2 to "médio", 3 to "alto")
+        g5.spinner(gears, 1, { "Nível (gear) ${it.second}" }) { look = look.copy(gear = it.first) }
+        g5.button("Enviar roteiro aos óculos") { prompter { app.teleprompter.prepare(script.text.toString(), prompterSpeed, look) } }
         g5.buttons("Iniciar" to { prompter { app.teleprompter.control(3) } },
             "Pausar" to { prompter { app.teleprompter.control(4) } },
             "Continuar" to { prompter { app.teleprompter.control(5) } })

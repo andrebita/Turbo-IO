@@ -90,8 +90,12 @@ object DashboardWire {
         return out
     }
 
-    /** Numeric widget ids are not documented; names are added here once confirmed on the lens. */
-    private val NATIVE_NAMES = emptyMap<String, String>()
+    /** Numeric widget ids (official app 1.0.7 DashboardWidgetType). */
+    val NATIVE = linkedMapOf(1 to "Tempo", 2 to "To-do", 3 to "Agenda", 4 to "Ações", 5 to "E-mail", 6 to "Relógio mundial")
+    private val NATIVE_NAMES = NATIVE.mapKeys { it.key.toString() }
+
+    /** Same configuration with the numeric widget list replaced (Strix OS 1.0.5.5 format); everything else kept. */
+    fun withWidgets(c: JSONObject, ids: List<Int>): JSONObject = JSONObject(c.toString()).put("widgets", JSONArray(ids))
 
     /** simple_mode as stored by the glasses (boolean or 0/1); null when absent. */
     fun simpleMode(c: JSONObject): Boolean? = when (val v = c.opt("simple_mode")) {
@@ -243,6 +247,23 @@ class Dashboard(private val port: GlassesPort, private val random: Randomness, p
             !DashboardWire.preserves(before.config, after.config, ignoring = setOf("simple_mode")) -> "Tipo alterado, mas outros itens do painel mudaram; confira nos óculos"
             else -> "Painel agora no tipo ${if (on) "simples" else "completo"} (confira nas lentes)"
         }
+        DiagnosticLog.i("PAINEL", outcome); outcome
+    }
+
+    /** Native cards shown on the dashboard, in this order (ids of [DashboardWire.NATIVE]); read back to verify. */
+    suspend fun setWidgets(ids: List<Int>): String = lock.withLock {
+        if (ids.isEmpty() || ids.size > DashboardWire.NATIVE.size || ids.distinct() != ids || ids.any { it !in DashboardWire.NATIVE }) return@withLock "Escolha pelo menos um cartão"
+        val (before, why) = readLocked(); before ?: return@withLock why
+        if (before.config.has("widgets_v2") || before.config.optJSONArray("widgets") == null) return@withLock "Estes óculos não usam a lista numérica de cartões; nada foi alterado"
+        val (r, error) = request("dashboard_update", DashboardWire.update(DashboardWire.withWidgets(before.config, ids)))
+        if (error != null) return@withLock "Falha ao enviar: $error"
+        if (r == null) return@withLock "Sem resposta à mudança; confira o painel nos óculos"
+        val value = r.optJSONObject("payload")?.optInt("value", -1) ?: r.optInt("code", -1)
+        if (value != 0) return@withLock "Os óculos recusaram a mudança (valor $value)"
+        val (after, why2) = readLocked(); after ?: return@withLock "Mudança aceita, mas a releitura falhou: $why2"
+        val now = after.widgets.map { it.id }
+        val outcome = if (now == ids.map { it.toString() }) "Painel com: ${ids.joinToString(", ") { DashboardWire.NATIVE[it]!! }} (confira nas lentes)"
+            else "Os óculos aceitaram, mas a lista lida é ${now.joinToString(", ")}"
         DiagnosticLog.i("PAINEL", outcome); outcome
     }
 }

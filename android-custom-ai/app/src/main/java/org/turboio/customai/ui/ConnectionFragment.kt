@@ -75,6 +75,7 @@ class ConnectionFragment : Fragment() {
     private lateinit var distanceSpinner: android.widget.Spinner
     private var heightChoices: List<Int> = emptyList()
     private var distanceChoices: List<Int> = emptyList()
+    private var displayRead: Pair<Int?, Int?>? = null
     private lateinit var wakeSpinner: android.widget.Spinner
     private var wakeChoices: List<Int> = emptyList()
     private var wakeDegree = 20
@@ -82,35 +83,45 @@ class ConnectionFragment : Fragment() {
     /** Settings the official app changes, limited to evidence-backed values (docs/AJUSTES_DOS_OCULOS.md). */
     private fun glassesCard(ui: Column) {
         val c = ui.card()
-        c.title("Ajustes da tela dos óculos (experimental)")
-        c.hint("Os mesmos ajustes do app oficial. O app lê os valores atuais antes de mudar, confere depois e guarda os originais " +
-            "para restaurar. Valores que os óculos informarem (por exemplo, um nível escolhido no app oficial) passam a aparecer aqui. " +
-            "“Distância 3 (experimental)”: o app testa e, se os óculos não aplicarem, volta ao valor anterior.")
+        c.title("Ajustes da tela dos óculos")
+        c.hint("Os mesmos ajustes e faixas do app oficial (altura 1–6, profundidade 1–3). O app lê os valores atuais antes de mudar, " +
+            "confere depois e guarda os originais para restaurar.")
         settingsText = c.text("", size = 13f)
         fun done(msg: String?) = view?.post { android.widget.Toast.makeText(requireContext(), msg ?: "Feito — confira nas lentes", android.widget.Toast.LENGTH_SHORT).show() }
         c.button("Ler ajustes dos óculos", filled = false) { app.glassesSettings.read { done(it ?: "Ajustes lidos") } }
         c.text("Altura do texto", size = 13f)
         heightSpinner = c.spinner(listOf(0), 0, { "" }) {}
-        c.text("Distância", size = 13f)
+        c.text("Profundidade (distância)", size = 13f)
         distanceSpinner = c.spinner(listOf(0), 0, { "" }) {}
         refreshDisplayChoices()
         c.button("Aplicar altura e distância") { app.glassesSettings.setDisplay(height, distance) { done(it) } }
-        c.buttons("Duplo toque abre To-do" to { app.glassesSettings.setDoubleTapTodo(true) { done(it) } },
-            "Desligar" to { app.glassesSettings.setDoubleTapTodo(false) { done(it) } })
+        val actions = org.turboio.customai.device.SettingsWire.CROWN_ACTIONS.entries.toList()
+        val longActions = org.turboio.customai.device.SettingsWire.LONG_PRESS_ACTIONS.entries.toList()
+        var doubleAction = app.glassesSettings.state.value.config.crownDouble ?: 8
+        var longAction = app.glassesSettings.state.value.config.crownLongPress ?: 0
+        c.text("Botão (coroa): duplo toque", size = 13f)
+        c.spinner(actions, actions.indexOfFirst { it.key == doubleAction }.coerceAtLeast(0), { it.value }) { doubleAction = it.key }
+        c.button("Aplicar duplo toque", filled = false) { app.glassesSettings.setCrown(double = doubleAction) { done(it) } }
+        c.text("Botão (coroa): segurar", size = 13f)
+        c.spinner(longActions, longActions.indexOfFirst { it.key == longAction }.coerceAtLeast(0), { it.value }) { longAction = it.key }
+        c.button("Aplicar segurar", filled = false) { app.glassesSettings.setCrown(longPress = longAction) { done(it) } }
         c.text("Acender a tela ao olhar para cima", size = 13f)
         c.buttons("Ligar" to { app.glassesSettings.setWake(headup = true) { done(it ?: "Ligado — olhe para cima para acender a tela") } },
             "Desligar" to { app.glassesSettings.setWake(headup = false) { done(it ?: "Desligado") } })
         wakeSpinner = c.spinner(listOf(0), 0, { "" }) {}
         c.button("Aplicar ângulo", filled = false) { app.glassesSettings.setWake(degree = wakeDegree) { done(it ?: "Ângulo de $wakeDegree° aplicado — confira olhando para cima") } }
-        c.buttons("Botão acende a tela: ligar" to { app.glassesSettings.setWake(crown = true) { done(it) } },
-            "desligar" to { app.glassesSettings.setWake(crown = false) { done(it) } })
+        val crownWake = org.turboio.customai.device.SettingsWire.CROWN_WAKE.entries.toList()
+        var crownWakeValue = app.glassesSettings.state.value.config.wakeCrown ?: 0
+        c.text("Acender a tela pelo botão", size = 13f)
+        c.spinner(crownWake, crownWake.indexOfFirst { it.key == crownWakeValue }.coerceAtLeast(0), { it.value.replaceFirstChar { ch -> ch.uppercase() } }) { crownWakeValue = it.key }
+        c.button("Aplicar", filled = false) { app.glassesSettings.setWake(crown = crownWakeValue) { done(it) } }
         c.hint("Mesmo grupo de ajustes que os óculos informam (wakeupConfig). O app relê depois de mudar; se os óculos não aplicarem, avisa. " +
             "“Restaurar ajustes originais” volta também estes valores.")
         c.text("Gestos de cabeça (aceno/balanço)", size = 13f)
         c.buttons("Ligar" to { app.glassesSettings.setHeadGestures(true) { done(it) } },
             "Desligar" to { app.glassesSettings.setHeadGestures(false) { done(it) } })
         c.button("Restaurar ajustes originais", filled = false) {
-            AlertDialog.Builder(requireContext()).setTitle("Restaurar?").setMessage("Volta altura, distância e duplo toque aos primeiros valores lidos dos óculos.")
+            AlertDialog.Builder(requireContext()).setTitle("Restaurar?").setMessage("Volta altura, profundidade, botão e “olhar para cima” aos primeiros valores lidos dos óculos.")
                 .setPositiveButton("Restaurar") { _, _ -> app.glassesSettings.restore { done(it ?: "Restaurado") } }.setNegativeButton("Cancelar", null).show()
         }
         c.title("Notificações do celular nos óculos (experimental)")
@@ -162,17 +173,30 @@ class ConnectionFragment : Fragment() {
                 if (original == null) done("O app ainda não mudou o tipo do painel")
                 else board { app.dashboard.setSimpleMode(original).also { r -> if (r.startsWith("Painel agora") || r.startsWith("O painel já")) app.settings.dashboardSimpleOriginal = null } }
             })
+        c.button("Escolher cartões do painel", filled = false) {
+            val all = org.turboio.customai.device.DashboardWire.NATIVE.entries.toList()
+            viewLifecycleOwner.lifecycleScope.launch {
+                val (snap, why) = app.dashboard.read()
+                if (snap == null) { boardStatus.text = why; return@launch }
+                val current = snap.widgets.mapNotNull { it.id.toIntOrNull() }
+                val chosen = BooleanArray(all.size) { all[it].key in current }
+                AlertDialog.Builder(requireContext()).setTitle("Cartões do painel")
+                    .setMultiChoiceItems(all.map { it.value }.toTypedArray(), chosen) { _, i, on -> chosen[i] = on }
+                    .setPositiveButton("Aplicar") { _, _ ->
+                        // Keep the current order for cards already shown, new ones at the end.
+                        val picked = all.filterIndexed { i, _ -> chosen[i] }.map { it.key }
+                        val ids = current.filter { it in picked } + picked.filter { it !in current }
+                        board { app.dashboard.setWidgets(ids) }
+                    }.setNegativeButton("Cancelar", null).show()
+            }
+        }
+        c.hint("Ações, e-mail e relógio mundial dependem de dados que o app oficial envia; este app ainda envia só o tempo.")
         boardStatus = c.text(size = 13f)
         c.title("“Hey RayNeo”")
-        c.hint("Liga a palavra de ativação com o mesmo comando do app oficial. Ao dizer “Hey RayNeo”, o assistente dos óculos " +
-            "é atendido por este app (com a sua IA). Não há comando conhecido para desligar pelo app: use o menu dos óculos ou o app oficial.")
-        c.button("Ativar “Hey RayNeo”", filled = false) {
-            AlertDialog.Builder(requireContext()).setTitle("Ativar a palavra de ativação?")
-                .setMessage("Os óculos passam a ouvir “Hey RayNeo” (pode gastar mais bateria). Este app não consegue desligar depois; " +
-                    "só o menu dos óculos ou o app oficial.")
-                .setPositiveButton("Ativar") { _, _ -> app.glassesSettings.enableWakeWord { done(it ?: "Ativado — diga “Hey RayNeo”") } }
-                .setNegativeButton("Cancelar", null).show()
-        }
+        c.hint("Liga ou desliga a palavra de ativação com o mesmo comando do app oficial. Ao dizer “Hey RayNeo”, o assistente dos óculos " +
+            "é atendido por este app (com a sua IA). Ligada, pode gastar mais bateria.")
+        c.buttons("Ligar" to { app.glassesSettings.setWakeWord(true) { done(it ?: "Ligado — diga “Hey RayNeo”") } },
+            "Desligar" to { app.glassesSettings.setWakeWord(false) { done(it ?: "Desligado") } })
         c.title("Alertas nos óculos")
         c.switch("Lembretes e avisos como notificação nativa (experimental)", app.settings.nativeAlerts) { app.settings.nativeAlerts = it }
         c.hint("Usa o cartão de notificação dos próprios óculos (liga a chave de notificações deles). Se os óculos não responderem, " +
@@ -208,11 +232,11 @@ class ConnectionFragment : Fragment() {
             .setNegativeButton("Cancelar", null).show()
     }
 
-    /** Height/distance lists: known levels, levels these glasses reported, and the experimental third depth. */
+    /** Height/distance lists (official ranges) and look-up angles. */
     private fun refreshDisplayChoices() {
         val gs = app.glassesSettings; val c = gs.state.value.config
         val heights = gs.heights()
-        val distances = (gs.distances() + org.turboio.customai.device.SettingsWire.TRY_DISTANCE).distinct().sorted()
+        val distances = gs.distances()
         val degrees = (org.turboio.customai.device.SettingsWire.WAKE_DEGREES + listOfNotNull(c.wakeDegree)).distinct().sorted()
         if (::wakeSpinner.isInitialized && degrees != wakeChoices) {
             wakeChoices = degrees
@@ -223,9 +247,8 @@ class ConnectionFragment : Fragment() {
                 override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
             }
         }
-        if (heights == heightChoices && distances == distanceChoices) return
-        heightChoices = heights; distanceChoices = distances
-        val known = gs.distances()
+        if (heights == heightChoices && distances == distanceChoices && displayRead == (c.height to c.distance)) return
+        heightChoices = heights; distanceChoices = distances; displayRead = c.height to c.distance
         fun bind(spinner: android.widget.Spinner, items: List<Int>, label: (Int) -> String, current: Int?, set: (Int) -> Unit) {
             spinner.adapter = darkAdapter(requireContext(), items.map(label))
             spinner.setSelection(items.indexOf(current).coerceAtLeast(0))
@@ -234,12 +257,8 @@ class ConnectionFragment : Fragment() {
                 override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
             }
         }
-        bind(heightSpinner, heights, { "Altura $it" + if (it !in org.turboio.customai.device.SettingsWire.HEIGHTS) " (lida dos óculos)" else "" }, c.height) { height = it }
-        bind(distanceSpinner, distances, { d -> "Distância $d" + when {
-            d in org.turboio.customai.device.SettingsWire.DISTANCES -> ""
-            d in known -> " (lida dos óculos)"
-            else -> " (experimental)"
-        } }, c.distance) { distance = it }
+        bind(heightSpinner, heights, { "Altura $it" + if (it == c.height) " (atual)" else "" }, c.height) { height = it }
+        bind(distanceSpinner, distances, { d -> "Profundidade $d" + when (d) { 1 -> " (perto)"; 3 -> " (longe)"; else -> "" } + if (d == c.distance) " (atual)" else "" }, c.distance) { distance = it }
     }
 
     private fun renderSettings(s: org.turboio.customai.device.SettingsState) {
@@ -248,9 +267,12 @@ class ConnectionFragment : Fragment() {
         val c = s.config
         settingsText.text = buildString {
             if (c.readAt > 0) append("Palavra de ativação: ${when (c.wakeup) { true -> "ligada"; false -> "desligada"; null -> "não informada" }}\n")
-            append(if (c.readAt > 0) "Atual: altura ${c.height ?: "?"} · distância ${c.distance ?: "?"} · duplo toque ${when (c.crownDouble) { 8 -> "abre To-do"; 0 -> "sem ação"; null -> "?"; else -> "função ${c.crownDouble}" }}"
+            val actions = org.turboio.customai.device.SettingsWire.CROWN_ACTIONS
+            append(if (c.readAt > 0) "Atual: altura ${c.height ?: "?"} · profundidade ${c.distance ?: "?"} · duplo toque: ${c.crownDouble?.let { actions[it] ?: "ação $it" } ?: "?"}" +
+                " · segurar: ${c.crownLongPress?.let { actions[it] ?: "ação $it" } ?: "?"}"
                 else "Ainda não lido")
-            if (c.hasWake) append("\nOlhar para cima acende a tela: ${if (c.wakeHeadup == 1) "ligado" else "desligado"} · ângulo ${c.wakeDegree}° · botão acende: ${if (c.wakeCrown == 1) "sim" else "não"}")
+            if (c.hasWake) append("\nOlhar para cima acende a tela: ${if (c.wakeHeadup == 1) "ligado" else "desligado"} · ângulo ${c.wakeDegree}° · " +
+                "botão: ${org.turboio.customai.device.SettingsWire.CROWN_WAKE[c.wakeCrown] ?: "modo ${c.wakeCrown}"}")
             if (c.headEnabled != null) append("\nGestos de cabeça: ${if (c.headEnabled == true) "ligados" else "desligados"} (modo ${c.headMode ?: "?"})")
             if (s.details.isNotEmpty()) append("\nValores lidos: ${s.details}")
             s.original?.let { o -> append("\nOriginais: altura ${o.height ?: "?"} · distância ${o.distance ?: "?"} · duplo toque ${o.crownDouble ?: "?"}") }

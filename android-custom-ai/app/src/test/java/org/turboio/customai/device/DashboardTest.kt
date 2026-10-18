@@ -150,10 +150,16 @@ class DashboardTest {
         val read = async { d.read() }; drive()
         val snap = read.await().first!!
         assertEquals(listOf("2"), snap.widgets.map { it.id }); assertEquals(false, snap.simple)
-        assertTrue(snap.describe(), snap.describe().startsWith("1. cartão 2"))
+        assertTrue(snap.describe(), snap.describe().startsWith("1. To-do"))
         val on = async { d.setSimpleMode(true) }; drive()
         assertTrue(on.await(), on.await().startsWith("Painel agora no tipo simples"))
         assertEquals(1, config.get("simple_mode")); assertEquals(2, config.getJSONArray("widgets").getInt(0))
         assertTrue(Business.contentAllowed(15, 18, DashboardWire.update(config)))
+        // Native cards (official ids: 1 weather, 2 To-do, …): only the list changes.
+        val cards = async { d.setWidgets(listOf(2, 1)) }; drive()
+        assertTrue(cards.await(), cards.await().startsWith("Painel com: To-do, Tempo"))
+        assertEquals("[2,1]", config.getJSONArray("widgets").toString()); assertEquals(1, config.get("simple_mode"))
+        val bad = async { d.setWidgets(listOf(7)) }; drive()
+        assertEquals("Escolha pelo menos um cartão", bad.await())
     }
 }

@@ -163,6 +163,7 @@ class TurboApp : Application() {
                 wasReady = ready; voice.connectionChanged(ready)
                 if (ready) {
                     nativeNotifier.connectionChanged()
+                    glassesSettings.syncTime()   // glasses clock, like the official app (15/5 sync_time)
                     if (settings.weatherOn) runCatching { org.turboio.customai.device.WeatherWorker.now(this) }
                     probe.connectionReady()   // re-sends LifeLog OFF if a previous one was not confirmed
                     if (settings.ambientSettings().glassesMenu) ambient.armGlassesMenu()

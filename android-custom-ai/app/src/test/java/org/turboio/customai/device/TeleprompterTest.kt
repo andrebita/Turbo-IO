@@ -88,7 +88,9 @@ class TeleprompterTest {
         assertNull(r.t.prepare(text, 120)); runCurrent()
         val prep = JSONObject(r.port.sent[0].second.jsonText())
         assertEquals(1, prep.getInt("action")); assertEquals(text.toByteArray().size, prep.getInt("total"))
-        assertEquals(Teleprompter.checksum(text.toByteArray()), prep.getString("checksum")); assertEquals(2, prep.getInt("scroll"))
+        // Official AppStartRequest: presentation settings, no checksum (that goes with 20/3).
+        assertFalse(prep.has("checksum")); assertEquals(2, prep.getInt("scroll"))
+        assertEquals(3, prep.getInt("countdown")); assertEquals(2, prep.getInt("gear")); assertEquals(2, prep.getInt("depth")); assertEquals(20, prep.getInt("size"))
         assertTrue(r.port.files.isEmpty())                                      // no file before the glasses accept
         r.business(2); runCurrent()
         val info = FileTransfer.decode(r.port.files[0])
@@ -108,10 +110,14 @@ class TeleprompterTest {
         // Controls wait for the matching answer.
         assertNull(r.t.control(3)); runCurrent()
         val start = JSONObject(r.port.sent.last().second.jsonText())
-        assertEquals(prep.getString("checksum"), start.getString("checksum")); assertEquals(prep.getInt("total"), start.getInt("total"))
+        assertEquals(Teleprompter.checksum(text.toByteArray()), start.getString("checksum")); assertEquals(prep.getInt("total"), start.getInt("total"))
+        assertEquals(20, start.getInt("size"))
         r.business(4); runCurrent(); assertEquals(Phase.CONTROLLING, r.t.state.value.phase)
         r.business(3); runCurrent(); assertEquals(Phase.RUNNING, r.t.state.value.phase)
-        assertNull(r.t.control(7, 200)); r.business(7); runCurrent()
+        assertNull(r.t.control(7, 200))
+        val settings = JSONObject(r.port.sent.last().second.jsonText())
+        assertEquals(200, settings.getInt("speed")); assertEquals(2, settings.getInt("depth"))   // 20/7 carries every setting
+        r.business(7); runCurrent()
         assertEquals(Phase.RUNNING, r.t.state.value.phase); assertEquals(200, r.t.state.value.speed)
         assertNull(r.t.control(4)); r.business(4); runCurrent(); assertEquals(Phase.PAUSED, r.t.state.value.phase)
         assertNull(r.t.control(5)); r.business(5); runCurrent(); assertEquals(Phase.RUNNING, r.t.state.value.phase)
@@ -150,6 +156,24 @@ class TeleprompterTest {
         // Exit cancels only the form in use.
         r.t.stop(); runCurrent()
         assertEquals(5, r.port.files.size); assertEquals(third.uuid, FileTransfer.decode(r.port.files[4]).uuid)
+    }
+
+    /** Opened from the glasses' menu: they ask for the script list (20/1 FullSync); the answer is the official empty list. */
+    @Test fun menuListRequestIsAnsweredWithEmptyList() = runTest {
+        val r = rig()
+        r.port.glasses(20, 1, """{"action":1,"type":1,"code":1,"chunkid":0}"""); runCurrent()
+        assertEquals("20/1", r.port.trace().single())
+        val list = JSONObject(r.port.sent.single().second.jsonText())
+        assertEquals(2, list.getInt("action")); assertEquals(0, list.getInt("total")); assertEquals(0, list.getJSONArray("items").length())
+        assertTrue(list.getJSONObject("chunkinfo").getBoolean("islast")); assertEquals(1, list.getJSONObject("chunkinfo").getInt("chunkid"))
+        r.port.glasses(20, 1, """{"action":1,"type":2,"chunkId":1}"""); runCurrent()       // other list requests: not answered
+        assertEquals(1, r.port.sent.size)
+        assertFalse(org.turboio.customai.protocol.Business.contentAllowed(20, 1, """{"action":2,"type":1,"total":1,"items":[{"title":"x"}]}"""))
+        assertNotNull(r.t.prepare("Texto", 120, Teleprompter.Look(gear = 5)))
+    }
+
+    @Test fun refusalCodesAreExplained() {
+        assertTrue(Teleprompter.refusal(18).contains("dobrados")); assertTrue(Teleprompter.refusal(9).contains("outro app"))
     }
 
     @Test fun glassesExitWithCodeEndsSession() = runTest {

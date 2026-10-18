@@ -24,9 +24,9 @@ object Business {
     val OUTBOUND: Map<Int, Set<Int>> = mapOf(
         // 162 = LifeLog A2 (start), 166 = A6 (exit), 168 = A8 (realtime page flag)
         AI_ASSISTANT to setOf(2, 5, 7, 12, 32, 162, 166, 168),
-        // 4 = read general settings; 5 = display_config / crown_config with evidence-backed values only;
+        // 4 = read general settings; 5 = display/crown/wakeup config and sync_time with the official ranges only;
         // 20 = life_log_guide / life_log_switch (see contentAllowed)
-        // 16 = set_ai_voice_wakeup (enable); 18 = weather / dashboard (see contentAllowed)
+        // 16 = set_ai_voice_wakeup (on/off); 18 = weather / dashboard (see contentAllowed)
         LAUNCHER to setOf(1, 4, 5, 16, 18, 20),
         SUBTITLE to setOf(3, 5, 7),
         // enable(14), start/ack(1), stop/ack(4), acks(8, 9, 11) — no delete/format/file commands
@@ -35,8 +35,8 @@ object Business {
         TODO to setOf(2),
         // 2 = card, 18 = master switch, 33 = suggestion card add/delete, 35 = suggestion answer ack
         NOTIFICATION to setOf(2, 18, 33, 35),
-        // 2 prepare, 3 start, 4 pause, 5 resume, 6 exit, 7 speed, 8 progress ack
-        TELEPROMPTER to setOf(2, 3, 4, 5, 6, 7, 8),
+        // 1 script list (empty answer only), 2 prepare, 3 start, 4 pause, 5 resume, 6 exit, 7 settings, 8 progress ack
+        TELEPROMPTER to setOf(1, 2, 3, 4, 5, 6, 7, 8),
     )
 
     fun outboundAllowed(business: Int, type: Int): Boolean = OUTBOUND[business]?.contains(type) == true
@@ -49,9 +49,10 @@ object Business {
         if (business == LAUNCHER && type == 20) return cmd in LAUNCHER_COMMANDS
         if (business == LAUNCHER && type == 4) return cmd == "request_general_settings"
         if (business == LAUNCHER && type == 5) return settingAllowed(cmd, json)
-        if (business == LAUNCHER && type == 16) return json == WAKEUP_ON
+        if (business == LAUNCHER && type == 16) return json == WAKEUP_ON || json == WAKEUP_OFF
         if (business == LAUNCHER && type == 18) return launcher18Allowed(cmd, json)
         if (business == NOTIFICATION) return notificationAllowed(type, json)
+        if (business == TELEPROMPTER && type == 1) return json == TELEPROMPTER_LIST_EMPTY
         if (business == TELEPROMPTER) return runCatching { org.json.JSONObject(json) }.getOrNull()?.let { j ->
             UUID.matches(j.optString("did")) && j.optInt("action") in 1..2
         } ?: false
@@ -61,7 +62,11 @@ object Business {
         return true
     }
 
+    /** 20/1 answer to the glasses' script-list request: no documents (the official app's reply when it has none). */
+    const val TELEPROMPTER_LIST_EMPTY = """{"action":2,"type":1,"total":0,"chunkinfo":{"chunkid":1,"total_items":0,"islast":true},"items":[]}"""
     const val WAKEUP_ON = """{"cmd":"set_ai_voice_wakeup","payload":{"value":0,"mode":1,"data":""}}"""
+    /** Off: the same command with mode 0 (official app 1.0.7). */
+    const val WAKEUP_OFF = """{"cmd":"set_ai_voice_wakeup","payload":{"value":0,"mode":0,"data":""}}"""
     private val UUID = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private val OWN_WIDGET = Regex("^turbo_ui_[a-z0-9_]{1,40}$")
 
@@ -96,22 +101,29 @@ object Business {
         }
     }
 
-    /** Settings writes accepted only with the value ranges the official app is known to use (RayNeoCompanion evidence). */
+    /** Settings writes accepted only with the keys and ranges of the official app 1.0.7's setters. */
     private fun settingAllowed(cmd: String?, json: String): Boolean {
         if (cmd == "head_gestures") return runCatching {
             val j = org.json.JSONObject(json); val p = j.getJSONObject("payload")
             j.keys().asSequence().toSet() == setOf("cmd", "payload") && p.keys().asSequence().toSet() == setOf("value", "mode", "data") &&
                 p.getInt("value") in 0..1 && p.getInt("mode") in 0..1 && p.getString("data").isEmpty()
         }.getOrDefault(false)
-        val data = runCatching { org.json.JSONObject(org.json.JSONObject(json).getJSONObject("payload").getString("data")) }.getOrNull() ?: return false
+        val payload = runCatching { org.json.JSONObject(json).getJSONObject("payload") }.getOrNull() ?: return false
+        val data = runCatching { org.json.JSONObject(payload.getString("data")) }.getOrNull() ?: return false
         val keys = data.keys().asSequence().toSet()
+        // Ranges of the official app 1.0.7's setters (glasses_commands.dart).
+        val crownActions = setOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
         return when (cmd) {
-            // Known levels plus values the glasses reported themselves and the experimental third depth (0–5 / 0–3).
-            "display_config" -> keys == setOf("height", "distance") && data.optInt("height", -1) in 0..5 && data.optInt("distance", -1) in 0..3
-            "wakeup_config" -> keys == setOf("headupSwitch", "headupDegree", "crownSwitch") && data.optInt("headupSwitch", -1) in 0..1 &&
-                data.optInt("crownSwitch", -1) in 0..1 && data.optInt("headupDegree", -1) in 0..60
-            "crown_config" -> (keys == setOf("double", "longPress") || (keys == setOf("direction", "double", "longPress") && data.optInt("direction", -1) in 0..8)) &&
-                data.optInt("double", -1) in setOf(0, 8) && data.optInt("longPress", -1) in 0..64
+            "display_config" -> keys == setOf("height", "distance") && data.optInt("height", -1) in 1..6 && data.optInt("distance", -1) in 1..3 &&
+                payload.optInt("value", -1) == 0
+            "wakeup_config" -> keys == setOf("headup_switch", "headup_degree", "crown_switch") && data.optInt("headup_switch", -1) in 0..1 &&
+                data.optInt("crown_switch", -1) in 0..3 && data.optInt("headup_degree", -1) in 0..90 && payload.optInt("value", -1) == 0
+            // value = rotation direction, sent back as read.
+            "crown_config" -> keys == setOf("double", "longPress") && payload.optInt("value", -1) in 0..8 &&
+                data.optInt("double", -1) in crownActions && data.optInt("longPress", -1) in crownActions - 6
+            "sync_time" -> keys == setOf("utc", "offset", "timezone") && data.optLong("utc", -1) in 1_600_000_000L..4_000_000_000L &&
+                data.optInt("offset", 99_999) in -14 * 3600..14 * 3600 && Regex("^[A-Za-z0-9_+/-]{1,40}$").matches(data.optString("timezone")) &&
+                payload.optInt("value", -1) == 0
             else -> false
         }
     }

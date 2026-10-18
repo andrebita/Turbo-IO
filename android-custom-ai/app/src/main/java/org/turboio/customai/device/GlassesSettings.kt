@@ -23,28 +23,39 @@ import org.turboio.customai.protocol.Json
  */
 object SettingsWire {
     const val READ = """{"cmd":"request_general_settings","payload":{"value":0,"mode":0,"data":""}}"""
-    fun display(height: Int, distance: Int) = command("display_config", """{"distance":$distance,"height":$height}""")
-    /** [direction] (Strix OS 1.0.5.5) is sent back exactly as read; omitted when the glasses do not report it. */
-    fun crown(double: Int, longPress: Int, direction: Int? = null) = command("crown_config",
-        if (direction == null) """{"double":$double,"longPress":$longPress}""" else """{"direction":$direction,"double":$double,"longPress":$longPress}""")
-    /** Screen wake: all three keys always sent, the ones not being changed exactly as read. */
-    fun wake(headup: Int, degree: Int, crown: Int) = command("wakeup_config", """{"headupSwitch":$headup,"headupDegree":$degree,"crownSwitch":$crown}""")
+    fun display(height: Int, distance: Int) = command("display_config", """{"height":$height,"distance":$distance}""")
+    /** Official app 1.0.7: the rotation [direction] goes in payload.value (sent back exactly as read), the actions in data. */
+    fun crown(double: Int, longPress: Int, direction: Int? = null) = command("crown_config", """{"double":$double,"longPress":$longPress}""", value = direction ?: 0)
+    /** Screen wake: read as camelCase (wakeupConfig), written in snake_case like the official app; all three keys always sent. */
+    fun wake(headup: Int, degree: Int, crown: Int) = command("wakeup_config", """{"headup_switch":$headup,"headup_degree":$degree,"crown_switch":$crown}""")
     /** Look-up angles offered (degrees); the value read from the glasses is always offered too. */
-    val WAKE_DEGREES = listOf(10, 15, 20, 25, 30, 35, 40)
-    val WAKE_DEGREE_RANGE = 0..60
+    val WAKE_DEGREES = listOf(10, 15, 20, 25, 30, 35, 40, 50, 60)
+    /** The official setter clamps the angle to 0–90. */
+    val WAKE_DEGREE_RANGE = 0..90
+    /** crown_switch of wakeup_config (official enum CrownWakeSwitch). */
+    val CROWN_WAKE = mapOf(0 to "desligado", 1 to "pelo giroscópio", 2 to "por toque", 3 to "modo 3 (marble)")
 
-    /** Head gestures on/off keeping the mode read from the glasses (iOS client form: value + mode, empty data). */
+    /** Head gestures on/off keeping the mode read from the glasses (value + mode, empty data). */
     fun head(enabled: Boolean, mode: Int) = "{\"cmd\":\"head_gestures\",\"payload\":{\"value\":${if (enabled) 1 else 0},\"mode\":$mode,\"data\":\"\"}}"
-    private fun command(cmd: String, data: String) = "{\"cmd\":\"$cmd\",\"payload\":{\"value\":0,\"mode\":0,\"data\":${Json.quote(data)}}}"
 
-    /** Values seen in the official app by other clients. */
-    val HEIGHTS = listOf(1, 3, 5)
-    val DISTANCES = listOf(1, 2)
-    /** Offered as an experiment (the official app shows a third depth level): written, read back, undone if not applied. */
-    const val TRY_DISTANCE = 3
-    /** Hard bounds for anything sent (also enforced by the outbound content gate). */
-    val HEIGHT_RANGE = 0..5
-    val DISTANCE_RANGE = 0..3
+    /** Glasses clock (15/5 sync_time): Unix seconds, UTC offset in seconds and the time-zone id, as the official app sends. */
+    fun syncTime(nowMs: Long, zone: java.time.ZoneId): String {
+        val offset = zone.rules.getOffset(java.time.Instant.ofEpochMilli(nowMs)).totalSeconds
+        return command("sync_time", "{\"utc\":${nowMs / 1000},\"offset\":$offset,\"timezone\":${Json.quote(zone.id)}}")
+    }
+
+    private fun command(cmd: String, data: String, value: Int = 0) = "{\"cmd\":\"$cmd\",\"payload\":{\"value\":$value,\"mode\":0,\"data\":${Json.quote(data)}}}"
+
+    /** Ranges of the official setter (display_config: height 1–6, distance 1–3). */
+    val HEIGHT_RANGE = 1..6
+    val DISTANCE_RANGE = 1..3
+    val HEIGHTS = HEIGHT_RANGE.toList()
+    val DISTANCES = DISTANCE_RANGE.toList()
+
+    /** Crown actions (official enums CrownDoubleTapAction / CrownLongPressAction); "Diário (LifeLog)" only for the double tap. */
+    val CROWN_ACTIONS = linkedMapOf(0 to "Perguntar à IA", 1 to "Painel", 2 to "Foco", 3 to "Gravador", 4 to "Legendas", 5 to "Teleprompter",
+        6 to "Diário (LifeLog)", 8 to "To-do", 9 to "Dicas ao vivo", 7 to "Nenhuma")
+    val LONG_PRESS_ACTIONS = CROWN_ACTIONS.filterKeys { it != 6 }
 }
 
 /** Height/distance values these glasses reported themselves (e.g. after the user picked a level in the official app). */
@@ -117,9 +128,9 @@ class GlassesSettings(
     private val clock: () -> Long = System::currentTimeMillis,
     private val learned: LearnedDisplay = LearnedDisplay.None,
 ) : BusinessListener {
-    /** Selectable values: known from the official app plus those these glasses reported. */
-    fun heights(): List<Int> = (SettingsWire.HEIGHTS + learned.heights()).filter { it in SettingsWire.HEIGHT_RANGE }.distinct().sorted()
-    fun distances(): List<Int> = (SettingsWire.DISTANCES + learned.distances()).filter { it in SettingsWire.DISTANCE_RANGE }.distinct().sorted()
+    /** Selectable values: the official app's ranges. */
+    fun heights(): List<Int> = SettingsWire.HEIGHTS
+    fun distances(): List<Int> = SettingsWire.DISTANCES
 
     private val _state = MutableStateFlow(SettingsState(original = originals.load()))
     val state: StateFlow<SettingsState> = _state
@@ -170,7 +181,7 @@ class GlassesSettings(
 
     /**
      * Height/distance: always both keys, the one not being changed sent back exactly as read. The result is read back;
-     * if the glasses did not apply it (e.g. the experimental depth 3), the previous values are written again.
+     * if the glasses did not apply it, the previous values are written again.
      */
     fun setDisplay(height: Int? = null, distance: Int? = null, done: (String?) -> Unit = {}) = scope.launch {
         var before: GlassesConfig? = null
@@ -178,9 +189,7 @@ class GlassesSettings(
             if (!c.hasDisplay) return@write null
             before = c
             val h = height ?: c.height!!; val d = distance ?: c.distance!!
-            val hOk = h in heights() || h == c.height
-            val dOk = d in distances() || d == c.distance || d == SettingsWire.TRY_DISTANCE
-            if (!hOk || !dOk) null else SettingsWire.display(h, d)
+            if (h !in SettingsWire.HEIGHT_RANGE || d !in SettingsWire.DISTANCE_RANGE) null else SettingsWire.display(h, d)
         }
         if (error != null) return@launch done(error)
         val after = _state.value.config; val prev = before
@@ -197,33 +206,44 @@ class GlassesSettings(
         note(msg); done(msg)
     }
 
-    /** Crown double-tap opens the native To-do (8); off restores the double-tap action read originally (or 0). */
+    /** Crown double-tap opens the native To-do (8); off restores the double-tap action read originally (or none, 7). */
     fun setDoubleTapTodo(on: Boolean, done: (String?) -> Unit = {}) = scope.launch {
-        // Only when the double-tap had no action (0) or already opened To-do (8): anything else could not be restored here.
         val original = _state.value.original?.crownDouble
-        if (original != null && original !in setOf(0, 8)) return@launch done("O duplo toque já tem outra função nos óculos; altere pelo app oficial")
-        done(write("crown_config") { c ->
-            if (!c.hasCrown || c.crownDouble !in setOf(0, 8)) return@write null
-            SettingsWire.crown(if (on) 8 else 0, c.crownLongPress!!, c.crownDirection)
-        })
+        done(writeCrown(if (on) 8 else original?.takeIf { it != 8 } ?: 7, null))
+    }
+
+    /** Crown actions (double tap / long press), from the official app's list; the direction is kept as read. */
+    fun setCrown(double: Int? = null, longPress: Int? = null, done: (String?) -> Unit = {}) = scope.launch { done(writeCrown(double, longPress)) }
+
+    private suspend fun writeCrown(double: Int?, longPress: Int?): String? {
+        if (double != null && double !in SettingsWire.CROWN_ACTIONS) return "Ação inválida"
+        if (longPress != null && longPress !in SettingsWire.LONG_PRESS_ACTIONS) return "Ação inválida"
+        val error = write("crown_config") { c ->
+            if (!c.hasCrown) return@write null
+            SettingsWire.crown(double ?: c.crownDouble!!, longPress ?: c.crownLongPress!!, c.crownDirection)
+        }
+        if (error != null) return error
+        val c = _state.value.config
+        val ok = (double == null || c.crownDouble == double) && (longPress == null || c.crownLongPress == longPress)
+        return if (ok) null else "Os óculos não aplicaram (relido: duplo toque ${c.crownDouble ?: "?"}, segurar ${c.crownLongPress ?: "?"})".also { note(it) }
     }
 
     /**
      * Screen wake (look up to wake, angle, button press). Experimental write of the group the glasses report
      * ("wakeupConfig" → "wakeup_config", same pattern as display_config/crown_config); read back to verify.
      */
-    fun setWake(headup: Boolean? = null, degree: Int? = null, crown: Boolean? = null, done: (String?) -> Unit = {}) = scope.launch {
+    fun setWake(headup: Boolean? = null, degree: Int? = null, crown: Int? = null, done: (String?) -> Unit = {}) = scope.launch {
         val error = write("wakeup_config") { c ->
             if (!c.hasWake) return@write null
             val h = headup?.let { if (it) 1 else 0 } ?: c.wakeHeadup!!
             val d = degree ?: c.wakeDegree!!
-            val k = crown?.let { if (it) 1 else 0 } ?: c.wakeCrown!!
-            if (d !in SettingsWire.WAKE_DEGREE_RANGE || h !in 0..1 || k !in 0..1) null else SettingsWire.wake(h, d, k)
+            val k = crown ?: c.wakeCrown!!
+            if (d !in SettingsWire.WAKE_DEGREE_RANGE || h !in 0..1 || k !in SettingsWire.CROWN_WAKE) null else SettingsWire.wake(h, d, k)
         }
         if (error != null) return@launch done(error)
         val c = _state.value.config
         val ok = (headup == null || c.wakeHeadup == (if (headup) 1 else 0)) && (degree == null || c.wakeDegree == degree) &&
-            (crown == null || c.wakeCrown == (if (crown) 1 else 0))
+            (crown == null || c.wakeCrown == crown)
         done(if (ok) null else "Os óculos não aplicaram (relido: olhar para cima ${c.wakeHeadup ?: "?"}, ângulo ${c.wakeDegree ?: "?"}°, botão ${c.wakeCrown ?: "?"})".also { note(it) })
     }
 
@@ -238,22 +258,35 @@ class GlassesSettings(
         done(if (after == enabled) null else "Os óculos não aplicaram (relido: ${when (after) { true -> "ligado"; false -> "desligado"; null -> "não informado" }})".also { note(it) })
     }
 
-    /**
-     * “Hey RayNeo”: the enable command the official app sends (15/16 set_ai_voice_wakeup, mode 1). No disable command is
-     * known, so this cannot be undone from this app (use the glasses' menu or the official app).
-     */
-    fun enableWakeWord(done: (String?) -> Unit = {}) = scope.launch {
+    /** “Hey RayNeo” on/off: 15/16 set_ai_voice_wakeup with mode 1 (on) or 0 (off), the official app's command; read back afterwards. */
+    fun setWakeWord(on: Boolean, done: (String?) -> Unit = {}) = scope.launch {
         if (!port.isReady) return@launch done("Conecte os óculos")
-        note("Ativando a palavra de ativação…", busy = true)
+        note(if (on) "Ativando a palavra de ativação…" else "Desligando a palavra de ativação…", busy = true)
         pendingCmd = "set_ai_voice_wakeup"
         val waiter = CompletableDeferred<Pair<Int, JSONObject>>().also { commandReply = it }
-        port.sendEnvelope(Business.LAUNCHER, 16, Business.WAKEUP_ON)?.let { pendingCmd = ""; return@launch done("Falha ao enviar: $it".also { m -> note(m) }) }
+        port.sendEnvelope(Business.LAUNCHER, 16, if (on) Business.WAKEUP_ON else Business.WAKEUP_OFF)?.let { pendingCmd = ""; return@launch done("Falha ao enviar: $it".also { m -> note(m) }) }
         val reply = withTimeoutOrNull(6000) { waiter.await() }
         pendingCmd = ""; commandReply = null
-        DiagnosticLog.i("AJUSTES", "palavra de ativação: resposta ${reply?.let { "${it.first} ${it.second.toString().take(160)}" } ?: "nenhuma"}")
+        DiagnosticLog.i("AJUSTES", "palavra de ativação ${if (on) "ligar" else "desligar"}: resposta ${reply?.let { "${it.first} ${it.second.toString().take(160)}" } ?: "nenhuma"}")
         readNow()
-        done(if (reply == null) "Enviado; os óculos não responderam. Diga “Hey RayNeo” para testar" else null)
-        note(if (reply == null) "Ativação enviada sem resposta; teste dizendo “Hey RayNeo”" else "Óculos responderam; teste dizendo “Hey RayNeo”")
+        val now = _state.value.config.wakeup
+        val msg = when {
+            now == on -> null
+            reply == null -> if (on) "Enviado; os óculos não responderam. Diga “Hey RayNeo” para testar" else "Enviado; os óculos não responderam"
+            else -> null
+        }
+        note(if (on) "Palavra de ativação: ${if (now == true) "ligada" else "pedido enviado"}" else "Palavra de ativação: ${if (now == false) "desligada" else "pedido enviado"}")
+        done(msg)
+    }
+
+    fun enableWakeWord(done: (String?) -> Unit = {}) = setWakeWord(true, done)
+
+    /** Glasses clock from the phone (sent after each connection, like the official app on time changes). */
+    fun syncTime(done: (String?) -> Unit = {}) = scope.launch {
+        if (!port.isReady) return@launch done("Conecte os óculos")
+        val error = port.sendEnvelope(Business.LAUNCHER, 5, SettingsWire.syncTime(clock(), java.time.ZoneId.systemDefault()))
+        DiagnosticLog.i("AJUSTES", if (error == null) "hora enviada aos óculos" else "hora não enviada: $error")
+        done(error)
     }
 
     fun restore(done: (String?) -> Unit = {}) = scope.launch {
@@ -263,8 +296,8 @@ class GlassesSettings(
             error = write("display_config") { c -> if (c.hasDisplay) SettingsWire.display(o.height!!, o.distance!!) else null }
         if (error == null && o.hasWake && o.wakeDegree in SettingsWire.WAKE_DEGREE_RANGE)
             error = write("wakeup_config") { c -> if (c.hasWake) SettingsWire.wake(o.wakeHeadup!!, o.wakeDegree!!, o.wakeCrown!!) else null }
-        if (error == null && o.hasCrown && o.crownDouble in setOf(0, 8))
-            error = write("crown_config") { c -> if (c.hasCrown) SettingsWire.crown(o.crownDouble!!, c.crownLongPress!!, c.crownDirection) else null }
+        if (error == null && o.hasCrown && o.crownDouble in SettingsWire.CROWN_ACTIONS && o.crownLongPress in SettingsWire.LONG_PRESS_ACTIONS)
+            error = write("crown_config") { c -> if (c.hasCrown) SettingsWire.crown(o.crownDouble!!, o.crownLongPress!!, c.crownDirection) else null }
         done(error)
     }
 

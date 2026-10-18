@@ -69,7 +69,7 @@ Dark interface with an emerald accent: a home screen with the glasses' status, s
 | Short pt-BR answers: Markdown/emoji cleanup, paging, optional accent stripping | implemented · tested |
 | Answers on the lenses (text session), with text size, position and line count | implemented · hardware pending |
 | Voice assistant triggered on the glasses. **Glasses mic:** Gemini (same key as the AI), Deepgram Nova-3 (same key as ambient recording), OpenAI (Whisper / gpt-4o-transcribe) or Google Cloud Speech-to-Text. **Phone mic:** Android's built-in recognizer, no key needed | implemented · flow tested with synthetic Opus audio · hardware pending |
-| "Hey RayNeo" wake word, enabled with the official app's command (turning it off requires the official app) | implemented · hardware pending |
+| "Hey RayNeo" wake word, turned on and off with the official app's command | implemented · hardware pending |
 | Free-phrase tasks: "I need to buy bread tomorrow" becomes a dated pending item | implemented · tested |
 
 ### Journal, insights and memory
@@ -97,12 +97,13 @@ Dark interface with an emerald accent: a home screen with the glasses' status, s
 | **Android notifications** from the apps you choose (WhatsApp, e-mail, …). Duplicates and bursts are filtered; content is never stored | implemented · hardware pending |
 | **Google Maps turn-by-turn** on the lenses ("200 m · Main St") | implemented · hardware pending |
 | Pending items in the glasses' native **To-do** app, two-way: completing an item there completes it on the phone | implemented · hardware pending |
-| **Teleprompter**: drive the glasses' built-in teleprompter from the phone. Paste text or open a `.txt`, then start, pause, resume, change speed and exit | implemented · the file is now sent the way the official app 1.0.7 does (business 17), with fallbacks · not working on 1.0.5.5 so far |
+| **Teleprompter**: drive the glasses' built-in teleprompter from the phone. Paste text or open a `.txt`, then start, pause, resume, change speed and exit; opening it from the glasses' menu no longer errors (empty script list) | implemented · now follows the official app 1.0.7 (settings in the prepare, file on business 17, with fallbacks) · not working on 1.0.5.5 so far |
 | **Dashboard card** with a short pending-items summary ("3 pend · 15:00 Call") | not supported by Strix OS 1.0.5.5 (no answer to `widget_install`); disabled there |
 | **Dashboard type** (simple/complete), with restore | ✅ change confirmed by read-back on the glasses |
+| **Dashboard cards**: choose the native cards (weather, To-do, calendar, stocks, e-mail, world clock) | implemented · hardware pending |
 | **Nod / shake cards**: confirm (nod) or discard (shake) items found in conversations | implemented · hardware pending |
 | **Weather** on the home screen, from Open-Meteo (free, no key) | implemented · hardware pending |
-| Display height/distance, double-tap-opens-To-do, and look-up-to-wake with its angle (`wakeupConfig`): read first, verified, restorable | implemented · hardware pending |
+| Display height (1–6) and depth (1–3), crown actions (double tap / hold), look-up-to-wake with its angle, “Hey RayNeo” on/off and the glasses' clock, in the official app's format: read first, verified, restorable | implemented · hardware pending |
 | Reacting to what you open on the glasses (opening To-do triggers a sync) | implemented · hardware pending |
 
 ### Diagnostics
@@ -133,7 +134,7 @@ export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 158 unit tests with no lint errors.
+Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 161 unit tests with no lint errors.
 
 ## Documentation
 

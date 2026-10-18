@@ -53,7 +53,7 @@ class NativeNotifierTest {
         assertFalse(Business.contentAllowed(21, 18, """{"notification":true,"x":1}"""))
         assertFalse(Business.contentAllowed(21, 17, """{"notification":true}"""))
         assertTrue(Business.contentAllowed(15, 16, Business.WAKEUP_ON))
-        assertFalse(Business.contentAllowed(15, 16, """{"cmd":"set_ai_voice_wakeup","payload":{"value":0,"mode":0,"data":""}}"""))
+        assertFalse(Business.contentAllowed(15, 16, """{"cmd":"set_ai_voice_wakeup","payload":{"value":0,"mode":2,"data":""}}"""))
         assertFalse(Business.outboundAllowed(21, 17)); assertFalse(Business.outboundAllowed(21, 1))
     }
 }

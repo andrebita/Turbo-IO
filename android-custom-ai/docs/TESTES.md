@@ -286,6 +286,26 @@ do painel e dos ajustes ficam no código Flutter (`libapp.so`) e na `libbusiness
 | Teleprompter pelo menu (20/1 `chunkid 0`) | não está no Java | — | precisa da `libapp.so` |
 | Painel, cartões de aceno, ajustes | não estão no Java | — | precisa da `libapp.so` |
 
+#### Rev. 13: análise do app oficial com o código Flutter (`libapp.so`)
+
+Com o pacote completo (splits incluídos), o outro agente leu o código Dart compilado do app oficial 1.0.7. Erros nossos
+que ele explica e o que mudou:
+
+| Recurso | O que estava errado | Mudança na rev. 13 |
+| --- | --- | --- |
+| Olhar para cima | escrevíamos `headupSwitch`/`headupDegree`/`crownSwitch`; o app oficial escreve `headup_switch`/`headup_degree`/`crown_switch` | escrita em snake_case; ângulo até 90°; botão com os 4 modos |
+| Botão (coroa) | sentido dentro de `data`; “sem ação” era 0 (na verdade 0 = perguntar à IA; nenhuma = 7) | sentido em `payload.value`; escolha de qualquer ação do app oficial para duplo toque e segurar |
+| Altura/profundidade | faixas 0–5 / 0–3 e só 1, 3, 5 / 1, 2 oferecidos | 1–6 / 1–3 (as faixas do app oficial) |
+| “Hey RayNeo” | sem comando para desligar | desligar = `mode 0` |
+| Hora | não enviada | `sync_time` a cada conexão |
+| Teleprompter pelo celular | 20/2 com `checksum` e sem as configurações de apresentação (os óculos devolveram `gear/depth/size = 0`); arquivo no 18 | 20/2 com `countdown, scroll, speed, gear, depth, size` e sem checksum (vai no 20/3); 20/7 com todas as configurações; arquivo primeiro no 17 (rev. 12); códigos de recusa explicados (18 = óculos dobrados, 8–10 = outro app em uso) |
+| Teleprompter pelo menu | 20/1 sem resposta → “Something went wrong” | resposta com a lista vazia, igual à do app oficial sem documentos |
+| Painel | ids numéricos desconhecidos | 1 tempo, 2 To-do, 3 agenda, 4 ações, 5 e-mail, 6 relógio mundial; escolha dos cartões |
+| Cartões de aceno | — | formato já igual ao oficial (confirmação com `code 0`) |
+
+Ainda em aberto: o fluxo das Legendas (19/1 → 19/2 antes do texto?), a falta de 21/34 no aceno (lado dos óculos),
+`width`/`leading` do teleprompter e o “canal rápido” que o app oficial prepara antes de enviar o arquivo.
+
 ### Recursos novos da 0.4.0 (conferir nas lentes)
 
 Cada item só conta como aprovado com o efeito visto nos óculos. Exporte o log (Diagnóstico) depois.

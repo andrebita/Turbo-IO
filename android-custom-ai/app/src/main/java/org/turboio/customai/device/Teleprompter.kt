@@ -30,8 +30,10 @@ import kotlin.coroutines.resume
  * file that the glasses pull chunk by chunk. Nothing is installed or changed on the glasses: the file channel is open
  * only while a session is active ([active] is the session's file lease).
  *
- * Flow: 20/2 prepare → glasses 20/2 action 2 code 1 → file info → glasses request chunks (3 → 4) → 5 success +
- * 20/2 code 7 → ready → 20/3 start, 20/4 pause, 20/5 resume, 20/7 speed → 20/6 exit.
+ * Flow (official app 1.0.7): 20/2 prepare (presentation settings, no checksum) → glasses 20/2 action 2 code 1 → file info →
+ * glasses request chunks (3 → 4) → 5 success + 20/2 code 7 → ready → 20/3 start (with the checksum), 20/4 pause, 20/5 resume,
+ * 20/7 settings (all of them) → 20/6 exit. When the Teleprompter is opened from the glasses' menu they ask for the script
+ * list (20/1 FullSync); it is answered with an empty list, as the official app does when it has no documents.
  *
  * Which file business the teleprompter listens on is not known for Strix OS 1.0.5.5 (18 with the session id as the name
  * was ignored). The info is therefore announced in [ROUTES] order, the next one only when the previous got no answer
@@ -53,7 +55,16 @@ class Teleprompter(
     }
 
     data class State(val phase: Phase = Phase.IDLE, val note: String = "Cole o roteiro e envie aos óculos",
-                     val progress: Int = 0, val offset: Int = 0, val speed: Int = 120)
+                     val progress: Int = 0, val offset: Int = 0, val speed: Int = 120, val look: Look = Look())
+
+    /**
+     * Presentation settings sent with prepare, start and 20/7 (official Settings): [countdown] seconds (0 = start at
+     * once), [gear] 1 low – 3 high, [depth] 1 shallow – 3 deep, [size] 18/20/24. Width and line spacing are not sent
+     * (their units are not known); the glasses then use their own.
+     */
+    data class Look(val countdown: Int = 3, val gear: Int = 2, val depth: Int = 2, val size: Int = 20) {
+        val valid get() = countdown in 0..10 && gear in 1..3 && depth in 1..3 && size in SIZES
+    }
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
@@ -99,25 +110,29 @@ class Teleprompter(
     }
 
     /** Validates and announces the script; null = request sent (the transfer then runs on the glasses' requests). */
-    suspend fun prepare(text: String, speed: Int): String? = withContext(here) { prepareHere(text, speed) }
+    suspend fun prepare(text: String, speed: Int, look: Look = Look()): String? = withContext(here) { prepareHere(text, speed, look) }
 
-    private suspend fun prepareHere(text: String, speed: Int): String? {
+    private fun JSONObject.settings(s: State, speed: Int = s.speed): JSONObject = put("countdown", s.look.countdown).put("scroll", SCROLL_LINEAR)
+        .put("speed", speed).put("gear", s.look.gear).put("depth", s.look.depth).put("size", s.look.size)
+
+    private suspend fun prepareHere(text: String, speed: Int, look: Look): String? {
         if (active) return "Já existe uma sessão; saia dela primeiro"
         if (!port.isReady) return "Conecte os óculos"
         busy()?.let { return it }
         if (speed !in SPEEDS || text.isBlank() || text.length > MAX_CHARS) return "Roteiro de até $MAX_CHARS caracteres; velocidade 60–240"
+        if (!look.valid) return "Ajustes de apresentação inválidos"
         val bytes = text.toByteArray(Charsets.UTF_8)
         if (bytes.size > FileTransfer.MAX_FILE) { bytes.fill(0); return "Roteiro grande demais (${bytes.size} bytes; máximo ${FileTransfer.MAX_FILE})" }
         val e = ++epoch
         did = uuid(); total = bytes.size; checksum = checksum(bytes); fileStarted = false; businessReady = false
         file = OutboundFile(did, bytes, md5(bytes)); bytes.fill(0)
         attempts.clear(); chosen = null
-        _state.value = State(Phase.PREPARING, "Pedindo aos óculos para abrir o teleprompter", 0, 0, speed)
+        _state.value = State(Phase.PREPARING, "Pedindo aos óculos para abrir o teleprompter", 0, 0, speed, look)
         deadline(prepareMs, "Os óculos não responderam ao preparo; saia e tente de novo")
         val error = lock.withLock {
             if (e != epoch) null
-            else command(2, JSONObject().put("did", did).put("action", 1).put("total", total).put("checksum", checksum).put("scroll", 2)
-                .put("speed", speed).put("pageOffset", 0).put("highLightOffset", 0))
+            else command(2, JSONObject().put("action", 1).put("did", did).put("total", total).settings(_state.value)
+                .put("pageOffset", 0).put("highLightOffset", 0))
         }
         if (error != null) { if (e == epoch) fail("Preparo não enviado: $error"); return error }
         if (e == epoch) note("Aguardando os óculos aceitarem o roteiro")
@@ -126,7 +141,22 @@ class Teleprompter(
     }
 
     override fun onBusiness(business: Int, envelope: Envelope) {
-        if (business == Business.TELEPROMPTER) receive(business, null, envelope)
+        if (business != Business.TELEPROMPTER) return
+        if (envelope.type == 1) { listRequest(envelope); return }
+        receive(business, null, envelope)
+    }
+
+    /** Glasses menu → 20/1 {"action":1,"type":1,…} (FullSync): answer the script list, empty (no documents are kept). */
+    private fun listRequest(envelope: Envelope) {
+        val j = runCatching { JSONObject(envelope.jsonText()) }.getOrNull() ?: return
+        if (j.optInt("action") != 1) return
+        val type = j.optInt("type")
+        DiagnosticLog.i(TAG, "óculos pediram a lista de roteiros (tipo $type)")
+        if (type != 1) return
+        scope.launch {
+            val error = port.sendEnvelope(Business.TELEPROMPTER, 1, Business.TELEPROMPTER_LIST_EMPTY)
+            DiagnosticLog.i(TAG, if (error == null) "lista vazia enviada aos óculos" else "lista não enviada: $error")
+        }
     }
 
     private fun receive(business: Int, payload: ByteArray?, envelope: Envelope?) {
@@ -182,7 +212,7 @@ class Teleprompter(
         }
         if (phase == Phase.ERROR || phase == Phase.CLOSING) return
         if (type == 2 && action == 2) {
-            if (code != 1 && code != 7) throw IllegalStateException("preparo recusado (código $code)")
+            if (code != 1 && code != 7) throw IllegalStateException(refusal(code))
             if (!fileStarted && code != 1) throw IllegalStateException("conclusão antes do arquivo")
             if (!fileStarted) {
                 if (file == null) throw IllegalStateException("arquivo indisponível")
@@ -193,7 +223,7 @@ class Teleprompter(
             } else if (code == 7) { businessReady = true; ready() }
         }
         if (type in setOf(3, 4, 5, 7) && action == 2 && phase == Phase.CONTROLLING && type == pendingControl) {
-            if (code != 1) throw IllegalStateException("comando recusado (código $code)")
+            if (code != 1) throw IllegalStateException("comando recusado: ${refusal(code)}")
             timer?.cancel(); timer = null
             val next = when (type) { 3, 5 -> Phase.RUNNING; 4 -> Phase.PAUSED; else -> beforeControl }
             pendingControl = 0
@@ -249,9 +279,9 @@ class Teleprompter(
         if (speed !in SPEEDS) return "Velocidade 60–240"
         val body = JSONObject().put("did", did).put("action", 1)
         when (type) {
-            3 -> body.put("total", total).put("checksum", checksum).put("scroll", 2).put("speed", _state.value.speed).put("pageOffset", 0).put("highLightOffset", 0)
+            3 -> body.put("total", total).settings(_state.value).put("checksum", checksum).put("pageOffset", 0).put("highLightOffset", 0)
             4 -> body.put("offset", _state.value.offset).put("code", 1).put("isCompleted", false)
-            7 -> { body.put("scroll", 2).put("speed", speed); update { it.copy(speed = speed) } }
+            7 -> { body.settings(_state.value, speed); update { it.copy(speed = speed) } }
         }
         beforeControl = phase; pendingControl = type
         update { it.copy(phase = Phase.CONTROLLING, note = "Aguardando os óculos confirmarem") }
@@ -317,6 +347,18 @@ class Teleprompter(
         private const val TAG = "PROMPTER"
         private var tasks = 0
         const val FILE_NAME = "roteiro.txt"
+        val SIZES = setOf(18, 20, 24)
+        private const val SCROLL_LINEAR = 2
+
+        /** Prepare/control refusal codes of the official app 1.0.7 (4 cancelled, 6 checksum, 8–10 conflict, 18 folded, 20+ fatal). */
+        fun refusal(code: Int): String = when (code) {
+            4 -> "transferência cancelada (código 4)"
+            6 -> "roteiro diferente do anunciado (código 6)"
+            8, 9, 10 -> "outro app está usando os óculos (código $code)"
+            18 -> "óculos dobrados; abra as hastes (código 18)"
+            in 20..28 -> "erro nos óculos (código $code)"
+            else -> "preparo recusado (código $code)"
+        }
         val ROUTES = listOf(
             FileRoute(Business.SMALL_FILE, true, "17 · task"),
             FileRoute(Business.SMALL_FILE, false, "17 · sessão"),

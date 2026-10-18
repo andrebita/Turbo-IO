@@ -83,7 +83,10 @@ intervalo configurável) → `type3` encerrar. `type3`/`type4` vindos dos óculo
 20/2 preparar (`did` UUID, total, checksum FNV-1a) → óculos 20/2 código 1 → informação do arquivo (MD5) → óculos pedem
 pedaços (tipo 3 → tipo 4) → tipo 5 sucesso + 20/2 código 7 → pronto → 20/3 iniciar, 20/4 pausar, 20/5 continuar, 20/7
 velocidade (cada um espera a confirmação igual) → 20/6 sair (cancela o arquivo antes). Prazos: 30 s preparo, 2 min
-transferência, 10 s comando. Um 20/6 dos óculos com outro código (ex.: 3) encerra a sessão.
+transferência, 10 s comando. Um 20/6 dos óculos com outro código (ex.: 3) encerra a sessão. O 20/2 leva as configurações de
+apresentação (`countdown`, `scroll`, `speed`, `gear` 1–3, `depth` 1–3, `size` 18/20/24) e não leva checksum; o checksum
+FNV-1a vai no 20/3; o 20/7 reenvia todas as configurações. Aberto pelo menu, os óculos pedem a lista de roteiros
+(20/1 tipo 1) e recebem a lista vazia do app oficial.
 
 **Endereço do arquivo (rev. 12).** A análise do app oficial 1.0.7 mostrou que a transferência de arquivos tem dois canais:
 17 (“SmallCore”) e 18 (“LargeCore”); o `busId` da informação repete o número do canal, e o envio exposto do app oficial
@@ -103,13 +106,13 @@ ler `dashboard_config` → `widget_install`/`widget_uninstall` ou `dashboard_upd
 ## Segurança
 
 * **Sem OTA:** o negócio 9 (MARS_FOTA) não existe no código de envio. A allow-list `Business.OUTBOUND` permite:
-  13/{2,5,7,12,32,162,166,168}, 14/{1,4,8,9,11,14}, 15/{1,4,5,16,18,20}, 19/{3,5,7}, 20/{2–8}, 21/{2,18,33,35} e 22/{2}.
+  13/{2,5,7,12,32,162,166,168}, 14/{1,4,8,9,11,14}, 15/{1,4,5,16,18,20}, 19/{3,5,7}, 20/{1–8}, 21/{2,18,33,35} e 22/{2}.
   Há ainda uma segunda trava no conteúdo (`contentAllowed`):
-  * 15/20 só aceita os comandos do LifeLog; 15/4 só a leitura de ajustes; 15/16 só o comando exato de ligar “Hey RayNeo”;
-  * 15/5 só aceita `display_config` e `crown_config`, com os valores observados no app oficial;
+  * 15/20 só aceita os comandos do LifeLog; 15/4 só a leitura de ajustes; 15/16 só os comandos exatos de ligar/desligar “Hey RayNeo”;
+  * 15/5 só aceita `display_config`, `crown_config`, `wakeup_config` e `sync_time`, com as chaves e faixas do app oficial 1.0.7;
   * 15/18 só aceita tempo, leitura do painel, instalar/remover cartão `turbo_ui_*` e atualização do painel com `widgets_v2`;
   * 21 só aceita cartão de notificação deste app, a chave geral e cartões de aceno com limites de tamanho;
-  * 20 exige id de sessão UUID; 22/2 só aceita uma pendência por mensagem.
+  * 20 exige id de sessão UUID; 20/1 só a lista vazia de roteiros; 22/2 só aceita uma pendência por mensagem.
 * **Negócios 17 e 18 (arquivo):** não usam envelopes e só passam por `GlassesSession.sendFile`, aberto apenas durante
   uma sessão de teleprompter (`fileLease`) e filtrado por `FileTransfer.outboundProblem`: só os canais 17 e 18; tipos 1,
   4 e 6; o `busId` anunciado tem de ser o do canal; nome = id da transferência ou `<letras/números>.txt`; ≤ 48 KB.
