@@ -69,6 +69,8 @@ object ProviderCodec {
                 if (config.systemPrompt.isNotBlank()) {
                     body.put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", config.systemPrompt))))
                 }
+                // Grounding with Google Search: the model decides when a search is needed (news, weather, prices…).
+                if (config.webSearch) body.put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
                 HttpRequestSpec("${ProviderKind.GEMINI.defaultEndpoint}/models/$id:generateContent", mapOf(
                     "x-goog-api-key" to apiKey, "Content-Type" to "application/json", "Accept" to "application/json",
                 ), body.toString())
@@ -78,6 +80,7 @@ object ProviderCodec {
                 turns.forEach { messages.put(JSONObject().put("role", it.role).put("content", it.content)) }
                 val body = JSONObject().put("model", model).put("max_tokens", config.maxTokens).put("messages", messages)
                 if (config.systemPrompt.isNotBlank()) body.put("system", config.systemPrompt)
+                if (config.webSearch) body.put("tools", JSONArray().put(JSONObject().put("type", "web_search_20250305").put("name", "web_search").put("max_uses", 3)))
                 HttpRequestSpec(ProviderKind.ANTHROPIC.defaultEndpoint, mapOf(
                     "x-api-key" to apiKey, "anthropic-version" to "2023-06-01",
                     "Content-Type" to "application/json", "Accept" to "application/json",

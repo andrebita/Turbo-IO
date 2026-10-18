@@ -141,4 +141,13 @@ class ProviderTest {
         assertTrue(runCatching { client.ask(AiConfig(), key, emptyList(), "  ") }.exceptionOrNull() is AiException)
         assertTrue(runCatching { client.ask(AiConfig(), "", emptyList(), "Oi") }.exceptionOrNull()!!.message!!.contains("chave"))
     }
+
+    @Test fun webSearchAddsTheProvidersSearchTool() {
+        val gemini = JSONObject(ProviderCodec.build(AiConfig(ProviderKind.GEMINI, webSearch = true), "k", emptyList(), "Vai chover hoje?").body)
+        assertTrue(gemini.getJSONArray("tools").getJSONObject(0).has("google_search"))
+        assertFalse(JSONObject(ProviderCodec.build(AiConfig(ProviderKind.GEMINI), "k", emptyList(), "x").body).has("tools"))
+        val claude = JSONObject(ProviderCodec.build(AiConfig(ProviderKind.ANTHROPIC, webSearch = true), "k", emptyList(), "x").body)
+        assertEquals("web_search", claude.getJSONArray("tools").getJSONObject(0).getString("name"))
+        assertFalse(JSONObject(ProviderCodec.build(AiConfig(ProviderKind.OPENAI, webSearch = true), "k", emptyList(), "x").body).has("tools"))
+    }
 }

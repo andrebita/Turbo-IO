@@ -30,6 +30,7 @@ class SettingsRepository(context: Context) {
             maxTokens = prefs.getInt("ai.maxTokens", 800),
             timeoutSeconds = prefs.getInt("ai.timeout", 30),
             historyTurns = prefs.getInt("ai.history", 3),
+            webSearch = prefs.getBoolean("ai.webSearch", true),
         )
     }
 
@@ -45,6 +46,7 @@ class SettingsRepository(context: Context) {
             .putInt("ai.maxTokens", config.maxTokens)
             .putInt("ai.timeout", config.timeoutSeconds)
             .putInt("ai.history", config.historyTurns)
+            .putBoolean("ai.webSearch", config.webSearch)
             .apply()
     }
 
@@ -85,6 +87,7 @@ class SettingsRepository(context: Context) {
         silenceMs = prefs.getInt("voice.silenceMs", 1200),
         maxSeconds = prefs.getInt("voice.maxSeconds", 15),
         displaySeconds = prefs.getInt("voice.displaySeconds", 12),
+        followUp = prefs.getBoolean("voice.followUp", false),
     )
 
     fun displaySettings(): DisplaySettings = DisplaySettings(
@@ -94,15 +97,17 @@ class SettingsRepository(context: Context) {
         fontSize = prefs.getInt("display.fontSize", 2).coerceIn(1, 3),
         position = prefs.getString("display.position", "center")?.takeIf { it in setOf("center", "top", "bottom") } ?: "center",
         maxLines = prefs.getInt("display.maxLines", 5).coerceIn(1, 5),
-        textFormat = prefs.getString("display.textFormat2", "legacy")?.takeIf { it in Commands.TEXT_FORMATS } ?: "legacy",
+        // Default: the official caption session (rev. 15: the only format that kept the text on the iO 1.0.5.5 lenses).
+        textFormat = prefs.getString("display.textFormat3", "session_classic")?.takeIf { it in Commands.TEXT_FORMATS } ?: "session_classic",
     )
 
-    fun setTextFormat(format: String) = prefs.edit().putString("display.textFormat2", format).apply()
+    fun setTextFormat(format: String) = prefs.edit().putString("display.textFormat3", format).apply()
 
     fun setDisplayLayout(fontSize: Int, position: String, maxLines: Int) =
         prefs.edit().putInt("display.fontSize", fontSize).putString("display.position", position).putInt("display.maxLines", maxLines).apply()
 
     fun setVoiceEnabled(value: Boolean) = prefs.edit().putBoolean("voice.enabled", value).apply()
+    fun setVoiceFollowUp(value: Boolean) = prefs.edit().putBoolean("voice.followUp", value).apply()
     fun setStripAccents(value: Boolean) = prefs.edit().putBoolean("display.stripAccents", value).apply()
     fun setPageSeconds(value: Int) = prefs.edit().putInt("display.pageSeconds", value.coerceIn(2, 20)).apply()
     var keepConnected: Boolean

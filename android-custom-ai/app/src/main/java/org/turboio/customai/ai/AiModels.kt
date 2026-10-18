@@ -38,6 +38,8 @@ data class AiConfig(
     val maxTokens: Int = 800,
     val timeoutSeconds: Int = 30,
     val historyTurns: Int = 3,
+    /** Lets the model search the web when it needs current facts (Gemini: Google Search; Claude: web search tool). */
+    val webSearch: Boolean = false,
 )
 
 data class ChatMessage(val role: String, val content: String) {

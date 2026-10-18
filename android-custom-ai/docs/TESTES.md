@@ -306,6 +306,20 @@ que ele explica e o que mudou:
 Ainda em aberto: o fluxo das Legendas (19/1 → 19/2 antes do texto?), a falta de 21/34 no aceno (lado dos óculos),
 `width`/`leading` do teleprompter e o “canal rápido” que o app oficial prepara antes de enviar o arquivo.
 
+#### Terceira rodada (2026-10-18, 08:45–09:03, rev. 14)
+
+| Etapa | Resultado | Evidência | Ação na rev. 15 |
+| --- | --- | --- | --- |
+| F1 texto | A (antigo) e B (sessão clássica) apareceram; B ficou na tela; C não | 19/1 → 19/2 `code 1` (B). Para C, 19/2 `code 4 "not_idle_state"`: a sessão B continuou aberta depois do 19/3. Antes de cada texto, a introdução do app Legendas | sessão vira o padrão; sem o 19/7 (prévia da configuração, que mostra a introdução); sessão aberta reaproveitada quando os óculos respondem `code 4` |
+| F2–F3, F8 | ✓, mas com a introdução “During conversations, live captions…” antes | todos abrem pelo 19/7 | idem |
+| F4/F5 voz | ✓ com “Hey RayNeo” (Gemini); a resposta ficou na tela até apertar a coroa | os óculos mandam 13/11 (nova rodada) 3 s depois; o app voltava a ouvir e nunca encerrava | 13/11 ignorado por padrão (o app oficial desliga a nova rodada no iO); se ligado e sem fala, a rodada termina |
+| F4 toque longo / duplo toque | não acionaram a IA | ajustes lidos: segurar = 1 (painel), duplo toque = 8 (To-do) | é a configuração dos óculos; mude “segurar” para “Perguntar à IA” na aba Óculos |
+| F6, F7, F9, F10, F11, F14, F16, F18–F20 | ✓ | — | — |
+| F12 teleprompter | ✗, mas o **arquivo chegou**: 17/1 → 17/2 → pedido de 163 bytes → envio → 17/5 sucesso | nenhum 20/2 código 7 depois; os óculos encerraram em 30 s (20/6 código 3) | nome do arquivo `<did>.txt`; roteiro tratado como pronto 1,5 s após o sucesso do arquivo (então o app manda 20/3) |
+| F13 teleprompter pelo menu | “No teleprompter scripts” (a lista vazia funcionou; sem erro) | 20/1 respondido | os roteiros enviados ficam salvos (até 8) e aparecem no menu; escolher um abre a sessão pelos óculos |
+| F15 cartão próprio | não suportado no 1.0.5.5 | — | — |
+| Perguntas sobre o tempo | o Gemini respondeu que não tinha dados atuais | — | data, hora e cidade vão com cada pergunta; previsão do Open-Meteo junto de perguntas sobre o tempo; busca na internet (Gemini: Pesquisa Google) |
+
 #### Rev. 14: auditoria por modelo (só o que vale para o RayNeo iO)
 
 O app oficial atende sete modelos. O iO é `deviceType` 6 (VENUS) ou 7 (VENUSINTL) no anúncio BLE (fabricante 0x5716) e usa

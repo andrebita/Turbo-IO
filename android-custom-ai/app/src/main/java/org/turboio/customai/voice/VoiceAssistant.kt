@@ -38,6 +38,8 @@ data class VoiceSettings(
     val silenceMs: Int = 1200,
     val maxSeconds: Int = 15,
     val displaySeconds: Int = 12,
+    /** Listen again when the glasses offer another round (13/11). Off by default: the official app disables it on the iO. */
+    val followUp: Boolean = false,
 )
 
 data class VoiceState(
@@ -102,7 +104,8 @@ class VoiceAssistant(
                 DiagnosticLog.i("VOZ", "despertar recebido dos óculos")
                 begin(followup = false)
             }
-            11 -> if (followupEligible && !capturing && displayDeadline?.isActive == true) {
+            11 -> if (!settings().followUp) DiagnosticLog.d("VOZ", "nova rodada oferecida pelos óculos; ignorada (como no app oficial do iO)")
+            else if (followupEligible && !capturing && displayDeadline?.isActive == true) {
                 DiagnosticLog.i("VOZ", "óculos ofereceram nova rodada")
                 begin(followup = true)
             }
@@ -139,7 +142,8 @@ class VoiceAssistant(
                 if (source.usesGlassesMic) captureFromGlasses(token, source) else captureFromPhone(token, source)
             } catch (e: Exception) {
                 if (token == epoch) {
-                    if (followup) { capturing = false; send(2, Commands.recorder(false)); update { it.copy(note = "Nova rodada sem fala; resposta anterior mantida") } }
+                    // No speech in the extra round: end it (the previous display deadline belonged to the old round).
+                    if (followup) endRound("Rodada concluída (nova rodada sem fala)", sendExit = true)
                     else endRound(e.message ?: "Falha no reconhecimento", sendExit = true, error = true)
                 }
                 return@launch

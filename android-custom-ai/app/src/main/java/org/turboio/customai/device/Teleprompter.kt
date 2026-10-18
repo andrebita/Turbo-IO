@@ -48,6 +48,10 @@ class Teleprompter(
     private val transferMs: Long = 120_000,
     private val controlMs: Long = 10_000,
     private val retryInfoMs: Long = 6_000,
+    /** Scripts listed in the glasses' Teleprompter menu; null = none kept (empty list). */
+    private val library: ScriptLibrary? = null,
+    /** After the glasses confirm the file (5 success), how long to wait for 20/2 code 7 before treating the script as ready. */
+    private val readyGraceMs: Long = 1_500,
 ) : BusinessListener {
     enum class Phase(val label: String) {
         IDLE("parado"), PREPARING("preparando"), TRANSFERRING("enviando roteiro"), READY("pronto"), CONTROLLING("aguardando óculos"),
@@ -125,6 +129,7 @@ class Teleprompter(
         if (bytes.size > FileTransfer.MAX_FILE) { bytes.fill(0); return "Roteiro grande demais (${bytes.size} bytes; máximo ${FileTransfer.MAX_FILE})" }
         val e = ++epoch
         did = uuid(); total = bytes.size; checksum = checksum(bytes); fileStarted = false; businessReady = false
+        runCatching { library?.save(did, text) }
         file = OutboundFile(did, bytes, md5(bytes)); bytes.fill(0)
         attempts.clear(); chosen = null
         _state.value = State(Phase.PREPARING, "Pedindo aos óculos para abrir o teleprompter", 0, 0, speed, look)
@@ -143,10 +148,11 @@ class Teleprompter(
     override fun onBusiness(business: Int, envelope: Envelope) {
         if (business != Business.TELEPROMPTER) return
         if (envelope.type == 1) { listRequest(envelope); return }
+        if (envelope.type == 2 && !active) { glassesStart(envelope); return }
         receive(business, null, envelope)
     }
 
-    /** Glasses menu → 20/1 {"action":1,"type":1,…} (FullSync): answer the script list, empty (no documents are kept). */
+    /** Glasses menu → 20/1 {"action":1,"type":1,…} (FullSync): answer with the scripts kept on the phone (official list format). */
     private fun listRequest(envelope: Envelope) {
         val j = runCatching { JSONObject(envelope.jsonText()) }.getOrNull() ?: return
         if (j.optInt("action") != 1) return
@@ -154,8 +160,45 @@ class Teleprompter(
         DiagnosticLog.i(TAG, "óculos pediram a lista de roteiros (tipo $type)")
         if (type != 1) return
         scope.launch {
-            val error = port.sendEnvelope(Business.TELEPROMPTER, 1, Business.TELEPROMPTER_LIST_EMPTY)
-            DiagnosticLog.i(TAG, if (error == null) "lista vazia enviada aos óculos" else "lista não enviada: $error")
+            val items = runCatching { library?.list() }.getOrNull().orEmpty()
+            val zone = java.time.ZoneId.systemDefault().rules.getOffset(java.time.Instant.now()).totalSeconds
+            val error = port.sendEnvelope(Business.TELEPROMPTER, 1, if (items.isEmpty()) Business.TELEPROMPTER_LIST_EMPTY else ScriptLibrary.listMessage(items, zone))
+            DiagnosticLog.i(TAG, if (error == null) "lista enviada aos óculos (${items.size} roteiro(s))" else "lista não enviada: $error")
+        }
+    }
+
+    /**
+     * A script picked in the glasses' menu: glasses 20/2 {action 1, did, total, settings} → phone 20/2 {action 2, code 1,
+     * settings, pageOffset, highLightOffset} → the file (same transfer as from the phone) → the glasses start it (20/3).
+     */
+    private fun glassesStart(envelope: Envelope) {
+        val j = runCatching { JSONObject(envelope.jsonText()) }.getOrNull() ?: return
+        if (j.optInt("action") != 1) return
+        val id = j.optString("did")
+        scope.launch {
+            lock.withLock {
+                if (active) return@withLock
+                val bytes = runCatching { library?.bytes(id) }.getOrNull()
+                if (bytes == null) {
+                    DiagnosticLog.w(TAG, "óculos pediram um roteiro que não está no celular")
+                    if (UUID_FORM.matches(id)) command(2, JSONObject().put("action", 2).put("did", id).put("code", 4))
+                    return@withLock
+                }
+                val asked = Look(j.optInt("countdown", 3), j.optInt("gear", 1), j.optInt("depth", 1), j.optInt("size", 18), j.optInt("width", 492), j.optInt("leading", 4))
+                val look = if (asked.valid) asked else Look()
+                val speed = j.optInt("speed", 120).takeIf { it in SPEEDS } ?: 120
+                val e = ++epoch
+                did = id; total = bytes.size; checksum = checksum(bytes); fileStarted = true; businessReady = false
+                file = OutboundFile(did, bytes, md5(bytes)); bytes.fill(0)
+                attempts.clear(); chosen = null
+                _state.value = State(Phase.TRANSFERRING, "Roteiro escolhido nos óculos; enviando", 0, 0, speed, look)
+                DiagnosticLog.i(TAG, "roteiro escolhido no menu dos óculos ($total bytes)")
+                deadline(transferMs, "Os óculos não confirmaram o roteiro em 2 minutos; saia e tente de novo")
+                val error = command(2, JSONObject().put("action", 2).put("did", did).put("code", 1).settings(_state.value)
+                    .put("pageOffset", 0).put("highLightOffset", 0))
+                if (error != null) { fail("Resposta aos óculos não enviada: $error"); return@withLock }
+                announce(0, e)
+            }
         }
     }
 
@@ -192,6 +235,12 @@ class Teleprompter(
                 f.committed(chunk)
             }
             if (e != epoch) return
+            if (f.complete && !businessReady) scope.launch {
+                // Strix OS 1.0.5.5 confirms the file (5 success) but sends no 20/2 code 7: carry on after a short wait.
+                delay(readyGraceMs)
+                if (e != epoch || businessReady || _state.value.phase != Phase.TRANSFERRING) return@launch
+                lock.withLock { if (e == epoch && !businessReady) { DiagnosticLog.i(TAG, "sem código 7 dos óculos; roteiro tratado como pronto"); businessReady = true; ready() } }
+            }
             val progress = if (total == 0) 0 else f.sentBytes * 100 / total
             update { it.copy(progress = progress, note = if (f.complete) "Roteiro recebido pelos óculos; aguardando o teleprompter" else "Enviando roteiro: $progress%") }
             ready()
@@ -229,6 +278,13 @@ class Teleprompter(
             pendingControl = 0
             update { it.copy(phase = next, note = when (next) { Phase.RUNNING -> "Rolando nos óculos"; Phase.PAUSED -> "Pausado"; else -> "Velocidade alterada" }) }
         }
+        if (type == 3 && action == 1) {
+            // Started on the glasses (touchpad / menu): answer like the official app and follow.
+            command(3, JSONObject().put("action", 2).put("did", did).put("code", 1).settings(_state.value).put("pageOffset", 0).put("highLightOffset", 0))
+            timer?.cancel(); timer = null; pendingControl = 0
+            update { it.copy(phase = Phase.RUNNING, note = "Iniciado nos óculos") }
+            return
+        }
         if (type in setOf(4, 5, 7, 8) && action == 1) {
             // Changes made on the glasses (touchpad) and reading position reports.
             if (type == 8) j.optInt("pageOffset", -1).takeIf { it in 0..total }?.let { o -> update { it.copy(offset = o) } }
@@ -244,7 +300,8 @@ class Teleprompter(
     private suspend fun announce(index: Int, e: Int) {
         val base = file ?: return
         val route = ROUTES[index]
-        val f = base.copy(if (route.taskId) taskId() else did, FILE_NAME, route.business)
+        // The glasses' Teleprompter keeps documents by id: the file is named after the session id ("<did>.txt").
+        val f = base.copy(if (route.taskId) taskId() else did, "$did.txt", route.business)
         attempts.add(route to f)
         val info = f.info()
         val error = sendFile(info, route.business); info.fill(0)
@@ -346,7 +403,8 @@ class Teleprompter(
     companion object {
         private const val TAG = "PROMPTER"
         private var tasks = 0
-        const val FILE_NAME = "roteiro.txt"
+        const val MAX_BYTES = FileTransfer.MAX_FILE
+        private val UUID_FORM = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
         val SIZES = setOf(18, 20, 24)
         private const val SCROLL_LINEAR = 2
 

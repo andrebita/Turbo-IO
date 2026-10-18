@@ -98,7 +98,7 @@ class TeleprompterTest {
         val info = FileTransfer.decode(r.port.files[0])
         // First form: as the official app uploads (business 17, busId 17, "task_" id, plain .txt name).
         assertEquals(1, info.type); assertEquals(17, r.port.fileBusinesses[0]); assertEquals(17L, info.busId)
-        assertTrue(info.uuid.startsWith("task_")); assertEquals(Teleprompter.FILE_NAME, info.fileName); assertEquals(Teleprompter.md5(text.toByteArray()), info.md5)
+        assertTrue(info.uuid.startsWith("task_")); assertEquals("${r.did}.txt", info.fileName); assertEquals(Teleprompter.md5(text.toByteArray()), info.md5)
         r.file(FileMessage(2, info.uuid)); r.file(FileMessage(3, info.uuid, chunkId = 0, start = 0, size = 51_200)); runCurrent()
         val chunk = FileTransfer.decode(r.port.files[1]); assertEquals(17, r.port.fileBusinesses[1])
         assertEquals(text, String(chunk.data, Charsets.UTF_8)); assertEquals(100, r.t.state.value.progress)
@@ -142,7 +142,7 @@ class TeleprompterTest {
         assertEquals(listOf(17), r.port.fileBusinesses)
         advanceTimeBy(6_100); runCurrent()
         val second = FileTransfer.decode(r.port.files[1])
-        assertEquals(17, r.port.fileBusinesses[1]); assertEquals(r.did, second.uuid); assertEquals(Teleprompter.FILE_NAME, second.fileName)
+        assertEquals(17, r.port.fileBusinesses[1]); assertEquals(r.did, second.uuid); assertEquals("${r.did}.txt", second.fileName)
         advanceTimeBy(6_100); runCurrent()
         val third = FileTransfer.decode(r.port.files[2])
         assertEquals(18, r.port.fileBusinesses[2]); assertEquals(18L, third.busId); assertTrue(third.uuid.startsWith("task_"))
@@ -201,6 +201,49 @@ class TeleprompterTest {
         advanceTimeBy(31_000); runCurrent()
         assertEquals(Phase.ERROR, slow.t.state.value.phase)
         slow.t.stop(); runCurrent(); assertEquals("20/6", slow.port.trace().last()); assertTrue(slow.port.files.isEmpty())
+    }
+
+    /** Strix OS 1.0.5.5: the file is confirmed (5 success) but no 20/2 code 7 follows; the script is ready after a short wait. */
+    @Test fun readyWithoutCode7AfterFileSuccess() = runTest {
+        val r = rig(); r.t.prepare("Texto curto", 120); runCurrent(); r.business(2); runCurrent()
+        val id = r.id()
+        r.file(FileMessage(2, id)); r.file(FileMessage(3, id, chunkId = 1, start = 0, size = 163)); r.file(FileMessage(5, id)); runCurrent()
+        assertEquals(Phase.TRANSFERRING, r.t.state.value.phase)
+        advanceTimeBy(1_600); runCurrent()
+        assertEquals(Phase.READY, r.t.state.value.phase)
+    }
+
+    /** Scripts sent are kept; the glasses' menu lists them and can open one (glasses 20/2 → phone 20/2 + file → glasses 20/3). */
+    @Test fun libraryListAndGlassesStartedScript() = runTest {
+        val dir = java.nio.file.Files.createTempDirectory("scripts").toFile()
+        val library = ScriptLibrary(dir, clock = { 1_792_281_600_000L })
+        val port = FakePort(); val t = Teleprompter(port, this, fixedRandom, library = library)
+        assertNull(t.prepare("Abertura do evento\nSegunda linha", 120)); runCurrent()
+        val did = JSONObject(port.sent.first { it.first == 20 }.second.jsonText()).getString("did")
+        t.disconnected(); port.sent.clear()
+        assertEquals(1, library.list().size); assertEquals("Abertura do evento", library.list()[0].title)
+        // Menu: list with the saved script, accepted by the outbound gate.
+        port.glasses(20, 1, """{"action":1,"type":1,"code":1,"chunkid":0}"""); runCurrent()
+        val list = JSONObject(port.sent.single().second.jsonText())
+        assertEquals(1, list.getInt("total")); val item = list.getJSONArray("items").getJSONObject(0)
+        assertEquals(did, item.getString("did")); assertEquals(1_792_281_600L, item.getLong("timestamp")); assertEquals(0, item.getInt("offset"))
+        // Picked on the glasses.
+        port.glasses(20, 2, """{"action":1,"did":"$did","total":31,"countdown":3,"scroll":1,"speed":120,"gear":1,"depth":1,"size":18,"width":492,"leading":4}"""); runCurrent()
+        assertTrue(t.active); assertEquals(Phase.TRANSFERRING, t.state.value.phase)
+        val answer = JSONObject(port.sent[1].second.jsonText())
+        assertEquals(2, answer.getInt("action")); assertEquals(1, answer.getInt("code")); assertEquals(0, answer.getInt("highLightOffset"))
+        val info = FileTransfer.decode(port.files[0]); assertEquals("$did.txt", info.fileName); assertEquals(17, port.fileBusinesses[0])
+        port.raw(17, FileTransfer.encode(FileMessage(2, info.uuid))); port.raw(17, FileTransfer.encode(FileMessage(3, info.uuid, chunkId = 1, start = 0, size = 100)))
+        port.raw(17, FileTransfer.encode(FileMessage(5, info.uuid))); runCurrent(); advanceTimeBy(1_600); runCurrent()
+        assertEquals(Phase.READY, t.state.value.phase)
+        port.glasses(20, 3, """{"action":1,"did":"$did","total":31}"""); runCurrent()
+        assertEquals(Phase.RUNNING, t.state.value.phase)
+        assertEquals(2, JSONObject(port.sent.last().second.jsonText()).getInt("action")); assertEquals("20/3", port.trace().last())
+        // A script that is not on the phone is refused (code 4) without starting a session.
+        t.disconnected(); port.sent.clear()
+        port.glasses(20, 2, """{"action":1,"did":"00000000-0000-4000-8000-000000000000","total":3}"""); runCurrent()
+        assertFalse(t.active); assertEquals(4, JSONObject(port.sent.single().second.jsonText()).getInt("code"))
+        dir.deleteRecursively()
     }
 
     @Test fun limitsBusyAndDisconnect() = runTest {

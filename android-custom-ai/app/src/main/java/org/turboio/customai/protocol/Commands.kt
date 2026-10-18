@@ -55,7 +55,7 @@ object Business {
         if (business == LAUNCHER && type == 18) return launcher18Allowed(cmd, json)
         if (business == NOTIFICATION) return notificationAllowed(type, json)
         if (business == AI_ASSISTANT && type == 9) return json in setOf("{\"rc\":1}", "{\"rc\":2}", "{\"rc\":3}")
-        if (business == TELEPROMPTER && type == 1) return json == TELEPROMPTER_LIST_EMPTY
+        if (business == TELEPROMPTER && type == 1) return json == TELEPROMPTER_LIST_EMPTY || scriptListAllowed(json)
         if (business == SUBTITLE && type == 1) return Regex("^\\{\"sid\":\"([0-9a-f]{32})\"").find(json)?.groupValues?.get(1)
             ?.let { json == Commands.captionStart(it) } ?: false
         if (business == TELEPROMPTER) return runCatching { org.json.JSONObject(json) }.getOrNull()?.let { j ->
@@ -74,6 +74,22 @@ object Business {
     const val WAKEUP_OFF = """{"cmd":"set_ai_voice_wakeup","payload":{"value":0,"mode":0,"data":""}}"""
     private val UUID = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
     private val OWN_WIDGET = Regex("^turbo_ui_[a-z0-9_]{1,40}$")
+
+    private val ITEM_KEYS = setOf("did", "pin", "title", "offset", "scroll", "total", "timestamp", "preview", "timezone")
+
+    /** 20/1 script list: one chunk, at most 8 items, each with exactly the official item keys and bounded text. */
+    private fun scriptListAllowed(json: String): Boolean = runCatching {
+        val j = org.json.JSONObject(json)
+        val items = j.getJSONArray("items"); val chunk = j.getJSONObject("chunkinfo")
+        j.keys().asSequence().toSet() == setOf("action", "type", "total", "chunkinfo", "items") && j.getInt("action") == 2 && j.getInt("type") == 1 &&
+            items.length() in 1..8 && j.getInt("total") == items.length() && chunk.getInt("chunkid") == 1 &&
+            chunk.getInt("total_items") == items.length() && chunk.getBoolean("islast") &&
+            (0 until items.length()).all { i ->
+                val it = items.getJSONObject(i)
+                it.keys().asSequence().toSet() == ITEM_KEYS && UUID.matches(it.getString("did")) && it.getString("title").length in 1..40 &&
+                    it.getString("preview").length <= 60 && it.getInt("total") in 1..48_000 && it.getInt("offset") == 0 && it.getInt("scroll") in 1..3
+            }
+    }.getOrDefault(false)
 
     private fun launcher18Allowed(cmd: String?, json: String): Boolean {
         val j = runCatching { org.json.JSONObject(json) }.getOrNull() ?: return false

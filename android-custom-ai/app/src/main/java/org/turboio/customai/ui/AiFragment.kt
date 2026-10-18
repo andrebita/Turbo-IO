@@ -30,6 +30,7 @@ class AiFragment : Fragment() {
     private lateinit var tokens: TextInputEditText
     private lateinit var timeout: TextInputEditText
     private lateinit var history: TextInputEditText
+    private var webSearch = true
     private lateinit var sttKey: TextInputEditText
     private lateinit var sttKeyState: TextView
     private lateinit var sttModel: TextInputEditText
@@ -63,6 +64,11 @@ class AiFragment : Fragment() {
         tokens = g2.field("Limite de tokens da resposta", config.maxTokens.toString(), number = true)
         timeout = g2.field("Tempo máximo de resposta (segundos)", config.timeoutSeconds.toString(), number = true)
         history = g2.field("Rodadas de contexto mantidas (0–10)", config.historyTurns.toString(), number = true)
+        webSearch = config.webSearch
+        g2.switch("Buscar na internet quando precisar (tempo, notícias, preços)", webSearch) { webSearch = it }
+        g2.hint("Gemini usa a Pesquisa Google; Claude usa a busca na web da Anthropic (ative-a no console da Anthropic). A busca só acontece " +
+            "quando a pergunta pede, e o provedor pode cobrar por consulta. OpenAI: use um modelo com busca (ex.: gpt-4o-search-preview). " +
+            "Data, hora e a cidade do tempo (aba Óculos) vão sempre junto da pergunta.")
 
         ui.section("Reconhecimento de voz (pt-BR)")
         val g3 = ui.card()
@@ -75,6 +81,7 @@ class AiFragment : Fragment() {
             "Android nativo: usa o microfone do telefone; nenhuma chave é necessária.")
         val voice = settings.voiceSettings()
         g3.switch("Assistente de voz ativo (ao acionar nos óculos)", voice.enabled) { settings.setVoiceEnabled(it) }
+        g3.switch("Continuar a conversa depois da resposta (os óculos voltam a ouvir)", voice.followUp) { settings.setVoiceFollowUp(it) }
         g3.switch("Remover acentos no display (use se aparecerem quadrados)", voice.stripAccents) { settings.setStripAccents(it) }
         val formats = listOf("legacy" to "Formato antigo, repetido (padrão)", "official" to "Formato do app oficial", "bilingual" to "Oficial com linha de tradução",
             "caption" to "Legenda do app oficial 1.0.7 (título)", "classic" to "Legenda do app oficial 1.0.7 (clássica)",
@@ -147,6 +154,7 @@ class AiFragment : Fragment() {
             maxTokens = tokens.text.toString().toIntOrNull() ?: 800,
             timeoutSeconds = timeout.text.toString().toIntOrNull() ?: 30,
             historyTurns = (history.text.toString().toIntOrNull() ?: 3).coerceIn(0, 10),
+            webSearch = webSearch,
         )
         val newKey = key.text.toString().trim()
         val effectiveKey = newKey.ifEmpty { settings.apiKey(provider) }

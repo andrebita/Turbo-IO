@@ -212,9 +212,10 @@ class VoiceAndLensTest {
         val display = LensDisplay(port, this, fixedRandom)
         val sid = "5a".repeat(16); val theirs = "0123456789abcdef".repeat(2)
         display.show("Olá", DisplaySettings(lingerSeconds = 2, textFormat = "session_classic"))
-        runCurrent(); port.glasses(19, 8, "{\"sid\":\"$sid\",\"code\":1}"); runCurrent()
-        assertEquals(listOf("19/7", "19/1"), port.trace())
-        val start = JSONObject(port.sent[1].second.jsonText())
+        runCurrent()
+        assertEquals(listOf("19/1"), port.trace())                   // no 19/7 preview: that one shows the Subtitles intro
+        val start = JSONObject(port.sent[0].second.jsonText())
+        assertEquals(sid, start.getString("sid"))
         assertEquals("phone", start.getString("audio_source")); assertEquals("classic", start.getJSONObject("settings").getString("mode"))
         port.glasses(19, 2, "{\"sid\":\"$theirs\",\"code\":1,\"final_settings\":{}}"); runCurrent()
         advanceTimeBy(5_000); runCurrent()
@@ -222,6 +223,27 @@ class VoiceAndLensTest {
         assertTrue(text.isNotEmpty()); assertTrue(text.all { it.getString("sid") == theirs && it.getInt("mode") == 1 })
         assertEquals(theirs, JSONObject(port.sent.last().second.jsonText()).getString("sid"))     // 19/3 closes their session
         assertFalse(org.turboio.customai.protocol.Business.contentAllowed(19, 1, "{\"sid\":\"$sid\",\"trigger\":1}"))
+    }
+
+    /** 1.0.5.5 keeps the session open after 19/3: the next 19/1 gets code 4 "not_idle_state" and the open session is reused. */
+    @Test fun lensDisplayReusesOpenSessionAndFallsBack() = runTest {
+        val port = FakePort()
+        val display = LensDisplay(port, this, fixedRandom)
+        val sid = "5a".repeat(16)
+        display.show("Um", DisplaySettings(lingerSeconds = 2, textFormat = "session_classic")); runCurrent()
+        port.glasses(19, 2, "{\"sid\":\"$sid\",\"code\":1}"); advanceTimeBy(5_000); runCurrent()
+        port.sent.clear()
+        display.show("Dois", DisplaySettings(lingerSeconds = 2, textFormat = "session_classic")); runCurrent()
+        port.glasses(19, 2, "{\"sid\":\"$sid\",\"code\":4,\"text\":\"not_idle_state\"}"); advanceTimeBy(5_000); runCurrent()
+        val text = port.sent.filter { it.second.type == 5 }.map { JSONObject(it.second.jsonText()) }
+        assertTrue(text.isNotEmpty()); assertTrue(text.all { it.getString("sid") == sid && it.getInt("mode") == 1 })
+        // Glasses close it; a refused start then falls back to the preview path (19/7) with the old text format.
+        port.glasses(19, 3, "{\"sid\":\"$sid\"}"); runCurrent(); port.sent.clear()
+        display.show("Três", DisplaySettings(lingerSeconds = 2, textFormat = "session_classic")); runCurrent()
+        port.glasses(19, 2, "{\"sid\":\"$sid\",\"code\":4}"); runCurrent()
+        assertEquals("19/7", port.trace().last())
+        port.glasses(19, 8, "{\"sid\":\"$sid\",\"code\":1}"); advanceTimeBy(5_000); runCurrent()
+        assertEquals(3, JSONObject(port.sent.first { it.second.type == 5 }.second.jsonText()).getInt("mode"))
     }
 
     @Test fun voiceSpeechStatusGate() {

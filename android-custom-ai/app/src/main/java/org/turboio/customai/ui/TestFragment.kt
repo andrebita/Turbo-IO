@@ -89,6 +89,11 @@ class TestFragment : Fragment() {
             "Continuar" to { prompter { app.teleprompter.control(5) } })
         g5.buttons("Aplicar velocidade" to { prompter { app.teleprompter.control(7, prompterSpeed) } },
             "Sair" to { prompter { app.teleprompter.stop(); null } })
+        g5.hint("Os roteiros enviados (até ${org.turboio.customai.device.ScriptLibrary.MAX}) ficam salvos neste celular e aparecem no menu " +
+            "Teleprompter dos óculos; escolha um lá para abrir.")
+        g5.button("Apagar roteiros salvos", filled = false) {
+            app.scripts.clear(); android.widget.Toast.makeText(requireContext(), "Roteiros apagados", android.widget.Toast.LENGTH_SHORT).show()
+        }
         prompterStatus = g5.text(size = 13f)
         return ui.scroll()
     }

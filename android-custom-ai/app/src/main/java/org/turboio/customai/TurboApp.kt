@@ -59,6 +59,8 @@ class TurboApp : Application() {
     lateinit var probe: org.turboio.customai.probe.HardwareProbe; private set
     lateinit var suite: org.turboio.customai.probe.TestSuite; private set
     lateinit var glassesSettings: org.turboio.customai.device.GlassesSettings; private set
+    /** Teleprompter scripts kept for the glasses' menu. */
+    lateinit var scripts: org.turboio.customai.device.ScriptLibrary; private set
     lateinit var glassesTodo: org.turboio.customai.memory.GlassesTodoSync; private set
     lateinit var nativeNotifier: org.turboio.customai.device.NativeNotifier; private set
     lateinit var weather: org.turboio.customai.device.GlassesWeather; private set
@@ -123,7 +125,8 @@ class TurboApp : Application() {
         dashboard = org.turboio.customai.device.Dashboard(session, random)
         suggestions = org.turboio.customai.device.SuggestionCards(session, random)
         nativeNotifier.suggestionListener = suggestions::onAnswer
-        teleprompter = org.turboio.customai.device.Teleprompter(session, scope, random, busy = {
+        scripts = org.turboio.customai.device.ScriptLibrary(java.io.File(filesDir, "teleprompter"))
+        teleprompter = org.turboio.customai.device.Teleprompter(session, scope, random, library = scripts, busy = {
             when {
                 voice.busy -> "O assistente de voz está em uso"
                 display.active -> "Há texto do app nas lentes; aguarde terminar"
@@ -247,6 +250,20 @@ class TurboApp : Application() {
         return ai.ask(config, settings.apiKey(base.provider), emptyList(), user.take(60_000)).text
     }
 
+    /** Date, time and place for every question; today's forecast for weather questions (free, any provider). */
+    private suspend fun context(question: String, now: Long): String {
+        val zone = java.time.ZoneId.systemDefault()
+        val at = java.time.Instant.ofEpochMilli(now).atZone(zone)
+        val date = at.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM 'de' yyyy, HH:mm", java.util.Locale("pt", "BR")))
+        val city = settings.weatherCity.trim()
+        var out = "\n\nAgora: $date (fuso ${zone.id})." + if (city.isNotEmpty()) " Cidade do usuário: $city." else ""
+        if (city.isNotEmpty() && WEATHER_QUESTION.containsMatchIn(question.lowercase())) {
+            val line = withContext(Dispatchers.IO) { kotlinx.coroutines.withTimeoutOrNull(6000) { runCatching { kotlinx.coroutines.runInterruptible { org.turboio.customai.device.OpenMeteo.forecastLine(city) } }.getOrNull() } }
+            if (line != null) { out += " $line Use esses dados para perguntas sobre o tempo."; DiagnosticLog.i("AI", "previsão do tempo anexada à pergunta") }
+        }
+        return out
+    }
+
     /**
      * Shared by the test screen and voice turns. Keeps a short history for follow-up questions and records
      * the exchange in the journal (option 2).
@@ -257,7 +274,8 @@ class TurboApp : Application() {
         val snapshot = synchronized(history) { history.toList() }
         val started = System.currentTimeMillis()
         val tasks = record && settings.memorySettings().enabled
-        val base = if (tasks) config.copy(systemPrompt = config.systemPrompt + TaskMarker.instruction(started)) else config
+        val withTasks = if (tasks) config.copy(systemPrompt = config.systemPrompt + TaskMarker.instruction(started)) else config
+        val base = withTasks.copy(systemPrompt = withTasks.systemPrompt + context(question, started))
         val effective = if (DisplayText.wantsDetail(question)) base.copy(maxTokens = maxOf(base.maxTokens, 1500)) else base
         val raw = ai.ask(effective, key, snapshot, question)
         // The assistant itself flags requests to remember something; the marker becomes an item and is never shown.
@@ -466,6 +484,7 @@ class TurboApp : Application() {
     }
 
     companion object {
+        private val WEATHER_QUESTION = Regex("chuv|chover|temperatura|clima|previs|frio|calor|nublad|guarda-chuva|\\btempo (hoje|amanh|agora|para|em|no|na)")
         lateinit var instance: TurboApp; private set
         fun friendly(e: Throwable): String = when (e) {
             is AiException, is SttException -> e.message ?: "Erro"

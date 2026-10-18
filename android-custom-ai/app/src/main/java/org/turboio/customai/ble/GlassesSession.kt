@@ -198,6 +198,8 @@ class GlassesSession(
         if (frame.size > status.mtu - 3) {
             // Home-screen configuration (15/18, e.g. a dashboard snapshot) may exceed one write: split like file frames.
             if (business == Business.LAUNCHER && EnvelopeCodec.decode(envelope).type == 18) { enqueueSplit(frame, 16, done); return@post }
+            // The teleprompter's script list (20/1) can also be longer than one write.
+            if (business == Business.TELEPROMPTER && EnvelopeCodec.decode(envelope).type == 1) { enqueueSplit(frame, 16, done); return@post }
             done("Conteúdo excede o quadro BLE atual (MTU ${status.mtu}); encurte o texto"); return@post
         }
         if (txQueue.size >= 32) { done("Fila de envio cheia; tente novamente"); return@post }

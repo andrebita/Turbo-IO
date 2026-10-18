@@ -147,13 +147,15 @@ object FeatureSteps {
             ready(app)?.let { return@FeatureStep it }
             teleprompter(app, run)
         },
-        FeatureStep("F13", "Teleprompter pelo menu dos óculos (observação)",
-            "Depois de Iniciar, abra o Teleprompter pelo menu dos óculos e tente usar por uns 40 s. O app só registra o que os óculos pedem " +
-                "(para entendermos o erro que aparece). Anote a mensagem de erro, se houver.",
-            "Qual mensagem apareceu nos óculos? (escreva na observação)", timeoutSeconds = 90) { run ->
+        FeatureStep("F13", "Teleprompter pelo menu dos óculos",
+            "Abra o Teleprompter pelo menu dos óculos: devem aparecer os roteiros salvos no celular (o da etapa F12 inclusive). " +
+                "Escolha um e tente iniciá-lo nos óculos. Até 60 s.",
+            "A lista apareceu? O roteiro escolhido abriu e rolou? (escreva na observação)", timeoutSeconds = 100) { run ->
             ready(app)?.let { return@FeatureStep it }
-            run.countdown(45, "Abra o Teleprompter no menu dos óculos")
-            "Observação concluída: o tráfego dos óculos está no arquivo trafego.txt desta etapa"
+            val saved = app.scripts.list().size
+            run.countdown(60, "Abra o Teleprompter no menu dos óculos ($saved roteiro(s) salvo(s))")
+            val t = app.teleprompter.state.value
+            "Roteiros salvos no celular: $saved\nTeleprompter no app: ${t.phase.label} · ${t.note}"
         },
         FeatureStep("F14", "Painel: leitura",
             "O app lê a configuração do painel dos óculos (nada é alterado).",
