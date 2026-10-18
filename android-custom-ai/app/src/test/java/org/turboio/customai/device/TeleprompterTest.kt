@@ -90,7 +90,9 @@ class TeleprompterTest {
         assertEquals(1, prep.getInt("action")); assertEquals(text.toByteArray().size, prep.getInt("total"))
         // Official AppStartRequest: presentation settings, no checksum (that goes with 20/3).
         assertFalse(prep.has("checksum")); assertEquals(2, prep.getInt("scroll"))
-        assertEquals(3, prep.getInt("countdown")); assertEquals(2, prep.getInt("gear")); assertEquals(2, prep.getInt("depth")); assertEquals(20, prep.getInt("size"))
+        // The official app's defaults for the iO.
+        assertEquals(3, prep.getInt("countdown")); assertEquals(1, prep.getInt("gear")); assertEquals(1, prep.getInt("depth")); assertEquals(18, prep.getInt("size"))
+        assertEquals(492, prep.getInt("width")); assertEquals(4, prep.getInt("leading"))
         assertTrue(r.port.files.isEmpty())                                      // no file before the glasses accept
         r.business(2); runCurrent()
         val info = FileTransfer.decode(r.port.files[0])
@@ -111,12 +113,12 @@ class TeleprompterTest {
         assertNull(r.t.control(3)); runCurrent()
         val start = JSONObject(r.port.sent.last().second.jsonText())
         assertEquals(Teleprompter.checksum(text.toByteArray()), start.getString("checksum")); assertEquals(prep.getInt("total"), start.getInt("total"))
-        assertEquals(20, start.getInt("size"))
+        assertEquals(18, start.getInt("size"))
         r.business(4); runCurrent(); assertEquals(Phase.CONTROLLING, r.t.state.value.phase)
         r.business(3); runCurrent(); assertEquals(Phase.RUNNING, r.t.state.value.phase)
         assertNull(r.t.control(7, 200))
         val settings = JSONObject(r.port.sent.last().second.jsonText())
-        assertEquals(200, settings.getInt("speed")); assertEquals(2, settings.getInt("depth"))   // 20/7 carries every setting
+        assertEquals(200, settings.getInt("speed")); assertEquals(1, settings.getInt("depth")); assertEquals(492, settings.getInt("width"))   // 20/7 carries every setting
         r.business(7); runCurrent()
         assertEquals(Phase.RUNNING, r.t.state.value.phase); assertEquals(200, r.t.state.value.speed)
         assertNull(r.t.control(4)); r.business(4); runCurrent(); assertEquals(Phase.PAUSED, r.t.state.value.phase)

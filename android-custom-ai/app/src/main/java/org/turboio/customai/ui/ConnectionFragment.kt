@@ -105,6 +105,11 @@ class ConnectionFragment : Fragment() {
         c.text("Botão (coroa): segurar", size = 13f)
         c.spinner(longActions, longActions.indexOfFirst { it.key == longAction }.coerceAtLeast(0), { it.value }) { longAction = it.key }
         c.button("Aplicar segurar", filled = false) { app.glassesSettings.setCrown(longPress = longAction) { done(it) } }
+        val directions = org.turboio.customai.device.SettingsWire.CROWN_DIRECTIONS.entries.toList()
+        var direction = app.glassesSettings.state.value.config.crownDirection ?: 0
+        c.text("Sentido de giro da coroa", size = 13f)
+        c.spinner(directions, directions.indexOfFirst { it.key == direction }.coerceAtLeast(0), { it.value.replaceFirstChar { ch -> ch.uppercase() } }) { direction = it.key }
+        c.button("Aplicar sentido", filled = false) { app.glassesSettings.setCrown(direction = direction) { done(it) } }
         c.text("Acender a tela ao olhar para cima", size = 13f)
         c.buttons("Ligar" to { app.glassesSettings.setWake(headup = true) { done(it ?: "Ligado — olhe para cima para acender a tela") } },
             "Desligar" to { app.glassesSettings.setWake(headup = false) { done(it ?: "Desligado") } })
@@ -112,7 +117,7 @@ class ConnectionFragment : Fragment() {
         c.button("Aplicar ângulo", filled = false) { app.glassesSettings.setWake(degree = wakeDegree) { done(it ?: "Ângulo de $wakeDegree° aplicado — confira olhando para cima") } }
         val crownWake = org.turboio.customai.device.SettingsWire.CROWN_WAKE.entries.toList()
         var crownWakeValue = app.glassesSettings.state.value.config.wakeCrown ?: 0
-        c.text("Acender a tela pelo botão", size = 13f)
+        c.text("Acender a tela girando a coroa", size = 13f)
         c.spinner(crownWake, crownWake.indexOfFirst { it.key == crownWakeValue }.coerceAtLeast(0), { it.value.replaceFirstChar { ch -> ch.uppercase() } }) { crownWakeValue = it.key }
         c.button("Aplicar", filled = false) { app.glassesSettings.setWake(crown = crownWakeValue) { done(it) } }
         c.hint("Mesmo grupo de ajustes que os óculos informam (wakeupConfig). O app relê depois de mudar; se os óculos não aplicarem, avisa. " +
@@ -274,6 +279,7 @@ class ConnectionFragment : Fragment() {
             if (c.hasWake) append("\nOlhar para cima acende a tela: ${if (c.wakeHeadup == 1) "ligado" else "desligado"} · ângulo ${c.wakeDegree}° · " +
                 "botão: ${org.turboio.customai.device.SettingsWire.CROWN_WAKE[c.wakeCrown] ?: "modo ${c.wakeCrown}"}")
             if (c.headEnabled != null) append("\nGestos de cabeça: ${if (c.headEnabled == true) "ligados" else "desligados"} (modo ${c.headMode ?: "?"})")
+            if (c.identity.isNotEmpty()) append("\nIdentificação: ${c.identity}")
             if (s.details.isNotEmpty()) append("\nValores lidos: ${s.details}")
             s.original?.let { o -> append("\nOriginais: altura ${o.height ?: "?"} · distância ${o.distance ?: "?"} · duplo toque ${o.crownDouble ?: "?"}") }
             append("\n").append(s.note)
@@ -328,7 +334,9 @@ class ConnectionFragment : Fragment() {
             candidates.removeAllViews()
             val column = Column(requireContext())
             list.sortedByDescending { it.rssi }.forEach { c ->
-                column.button("${c.name} · sinal ${c.rssi} dBm${if (c.serviceMatched) " · serviço RayNeo" else ""}", filled = false) {
+                val other = c.deviceType != null && !org.turboio.customai.ble.RayNeoModel.isIo(c.deviceType)
+                column.button("${c.name} · ${c.model}${if (other) " — este app é só para o iO" else ""} · sinal ${c.rssi} dBm", filled = false) {
+                    if (other) { android.widget.Toast.makeText(requireContext(), "Este app foi feito só para o RayNeo iO; ${c.model} não é suportado", android.widget.Toast.LENGTH_LONG).show(); return@button }
                     s.stop(); app.connect(c.address, c.name)
                 }
             }

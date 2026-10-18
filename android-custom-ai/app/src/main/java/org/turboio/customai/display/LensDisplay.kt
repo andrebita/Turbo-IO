@@ -60,6 +60,8 @@ class LensDisplay(
     val state: StateFlow<DisplayState> = _state
     private var sid = ""
     private var ack: CompletableDeferred<Int>? = null
+    /** Waiting for the glasses' 19/2 (start result): code and the session id they use. */
+    private var started: CompletableDeferred<Pair<Int, String>>? = null
     private var closedByGlasses = false
     private var job: Job? = null
     val active: Boolean get() = sid.isNotEmpty()
@@ -70,6 +72,8 @@ class LensDisplay(
         if (business != Business.SUBTITLE) return
         scope.launch {
             val body = try { JSONObject(envelope.jsonText()) } catch (_: Exception) { return@launch }
+            // The start result may carry the glasses' own protocol session id.
+            if (envelope.type == 2) { started?.let { w -> DiagnosticLog.i("LENS", "19/2 código ${body.optInt("code", -1)}"); w.complete(body.optInt("code", -1) to body.optString("sid")) }; return@launch }
             if (sid.isEmpty() || body.optString("sid") != sid) return@launch
             when (envelope.type) {
                 8 -> ack?.complete(body.optInt("code", -1))
@@ -106,6 +110,18 @@ class LensDisplay(
         }
         if (code == -1) { closeSession(); return fail("Os óculos não confirmaram a exibição (10 s)") }
         if (code != 1 && code != 2) { closeSession(); return fail("Os óculos recusaram a exibição (código $code)") }
+        var format = settings.textFormat
+        if (Commands.isSession(format)) {
+            // Official phone-started session: 19/1 → glasses 19/2 (code 1) → text. Without it the glasses show the intro screen.
+            val waiter = CompletableDeferred<Pair<Int, String>>().also { started = it }
+            port.sendEnvelope(Business.SUBTITLE, 1, Commands.captionStart(sid))?.let { started = null; closeSession(); return fail("Falha ao iniciar a sessão: $it") }
+            val result = withTimeoutOrNull(10_000) { waiter.await() }
+            started = null
+            DiagnosticLog.i("LENS", "início da sessão de legendas: ${result?.let { "código ${it.first}" } ?: "sem resposta (10 s)"}")
+            if (result?.first == 1) { if (Regex("^[0-9a-f]{32}$").matches(result.second)) sid = result.second }
+            else DiagnosticLog.w("LENS", "sessão não iniciada; o texto vai mesmo assim")
+            format = Commands.sessionTextFormat(format)
+        }
         delay(1200)  // the glasses open their Subtitles app at the same moment; text sent at once may be lost
         for ((index, page) in pages.withIndex()) {
             if (closedByGlasses) { sid = ""; return fail("Exibição encerrada nos óculos") }
@@ -114,7 +130,7 @@ class LensDisplay(
             while (shown < total) {
                 if (closedByGlasses) { sid = ""; return fail("Exibição encerrada nos óculos") }
                 // Caption formats: the page first as a sentence in progress (status 0), then final on every re-send.
-                port.sendEnvelope(Business.SUBTITLE, 5, Commands.displayText(sid, page, settings.textFormat, final = shown > 0 || !settings.resend))
+                port.sendEnvelope(Business.SUBTITLE, 5, Commands.displayText(sid, page, format, final = shown > 0 || !settings.resend))
                     ?.let { closeSession(); return fail("Falha ao enviar texto: $it") }
                 if (shown == 0L) _state.value = DisplayState.Showing(index + 1, pages.size, page)
                 val step = if (settings.resend) minOf(2000L, total - shown) else total - shown

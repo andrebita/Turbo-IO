@@ -78,7 +78,8 @@ class GlassesSettingsTest {
         assertFalse(Business.contentAllowed(15, 5, SettingsWire.display(3, 4)))
         assertFalse(Business.contentAllowed(15, 5, SettingsWire.display(7, 1)))
         assertFalse(Business.contentAllowed(15, 5, SettingsWire.display(0, 1)))
-        assertTrue(Business.contentAllowed(15, 5, SettingsWire.crown(4, 1, 2)))
+        assertTrue(Business.contentAllowed(15, 5, SettingsWire.crown(4, 1, 1)))
+        assertFalse(Business.contentAllowed(15, 5, SettingsWire.crown(4, 1, 2)))   // direction: standard 0 / natural 1 only
         assertFalse(Business.contentAllowed(15, 5, SettingsWire.crown(10, 1)))
         assertFalse(Business.contentAllowed(15, 5, SettingsWire.crown(4, 6)))      // LifeLog is a double-tap action only
         // Clock: seconds, offset in seconds, zone id.
@@ -145,7 +146,7 @@ class GlassesSettingsTest {
 
     /** The groups Strix OS 1.0.5.5 reported in the feature test (2026-10-17). */
     private fun strix(headup: Int, degree: Int) = """{"generalSettings":{"displayConfig":{"height":1,"distance":2},""" +
-        """"crownConfig":{"direction":2,"double":8,"longPress":1},"headGestures":{"enabled":1,"mode":0},""" +
+        """"crownConfig":{"direction":1,"double":8,"longPress":1},"headGestures":{"enabled":1,"mode":0},""" +
         """"wakeupConfig":{"headupSwitch":$headup,"headupDegree":$degree,"crownSwitch":0}}}"""
 
     @Test fun lookUpAngleWrittenVerifiedAndCrownDirectionKept() = runTest {
@@ -175,7 +176,7 @@ class GlassesSettingsTest {
         s.setCrown(longPress = 5) { result = it }
         runCurrent(); port.glasses(15, 4, strix(1, 35)); runCurrent()
         val crown = JSONObject(port.sent.last().second.jsonText()).getJSONObject("payload")
-        assertEquals(2, crown.getInt("value"))
+        assertEquals(1, crown.getInt("value"))                                     // natural, as read
         assertEquals(setOf("double", "longPress"), data(port.sent.lastIndex).keys().asSequence().toSet())
         assertEquals(8, data(port.sent.lastIndex).getInt("double")); assertEquals(5, data(port.sent.lastIndex).getInt("longPress"))
         // Gate: angle 0–90, button wake 0–3.

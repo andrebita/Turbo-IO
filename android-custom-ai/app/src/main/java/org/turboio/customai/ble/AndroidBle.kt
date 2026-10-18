@@ -261,7 +261,20 @@ class AndroidBondManager(private val context: Context) : BondManager {
     private fun unregister(receiver: BroadcastReceiver) { runCatching { context.unregisterReceiver(receiver) } }
 }
 
-data class Candidate(val address: String, val name: String, val rssi: Int, val serviceMatched: Boolean)
+data class Candidate(val address: String, val name: String, val rssi: Int, val serviceMatched: Boolean,
+                     /** Product type from the manufacturer data (company 0x5716, first byte); null when not advertised. */
+                     val deviceType: Int? = null) {
+    val model get() = RayNeoModel.name(deviceType)
+}
+
+/** RayNeo product types (official SDK table j4/L); this app is made for the iO only (6 = VENUS, 7 = VENUSINTL). */
+object RayNeoModel {
+    const val COMPANY = 0x5716
+    private val NAMES = mapOf(1 to "RayNeo X2", 2 to "RayNeo V3", 3 to "RayNeo X3", 4 to "RayNeo V3 Slim", 5 to "RayNeo V4",
+        6 to "RayNeo iO", 7 to "RayNeo iO (internacional)")
+    fun isIo(type: Int?) = type == 6 || type == 7
+    fun name(type: Int?): String = when (type) { null -> "modelo não anunciado"; else -> NAMES[type] ?: "RayNeo tipo $type (desconhecido)" }
+}
 
 /** 15 s low-power scan filtered by the RayNeo 16-bit service (B81D) or name; never connects. */
 @SuppressLint("MissingPermission")
@@ -284,8 +297,9 @@ class GlassesScanner(private val context: Context) {
                 if (!Advertisement.candidateName(name) && (!info.hasRayNeoService || info.malformed)) return
                 if (found.size >= 32 && !found.containsKey(result.device.address)) return
                 val previous = found[result.device.address]
+                val type = result.scanRecord?.getManufacturerSpecificData(RayNeoModel.COMPANY)?.firstOrNull()?.toInt()?.and(0xff)
                 found[result.device.address] = Candidate(result.device.address, name.ifEmpty { previous?.name ?: "RayNeo (sem nome)" },
-                    result.rssi, (previous?.serviceMatched ?: false) || (!info.malformed && info.hasRayNeoService))
+                    result.rssi, (previous?.serviceMatched ?: false) || (!info.malformed && info.hasRayNeoService), type ?: previous?.deviceType)
                 onUpdate(found.values.toList(), true)
             }
             override fun onScanFailed(errorCode: Int) {

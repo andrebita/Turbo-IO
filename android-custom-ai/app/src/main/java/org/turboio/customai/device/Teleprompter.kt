@@ -58,12 +58,12 @@ class Teleprompter(
                      val progress: Int = 0, val offset: Int = 0, val speed: Int = 120, val look: Look = Look())
 
     /**
-     * Presentation settings sent with prepare, start and 20/7 (official Settings): [countdown] seconds (0 = start at
-     * once), [gear] 1 low – 3 high, [depth] 1 shallow – 3 deep, [size] 18/20/24. Width and line spacing are not sent
-     * (their units are not known); the glasses then use their own.
+     * Presentation settings sent with prepare, start and 20/7 (official Settings; defaults are the official app's):
+     * [countdown] seconds (0 = start at once), [gear] 1 low – 3 high, [depth] 1 shallow – 3 deep, [size] 18/20/24,
+     * [width] 348–492 and [leading] (line spacing) 0/4/8 in layout units.
      */
-    data class Look(val countdown: Int = 3, val gear: Int = 2, val depth: Int = 2, val size: Int = 20) {
-        val valid get() = countdown in 0..10 && gear in 1..3 && depth in 1..3 && size in SIZES
+    data class Look(val countdown: Int = 3, val gear: Int = 1, val depth: Int = 1, val size: Int = 18, val width: Int = 492, val leading: Int = 4) {
+        val valid get() = countdown in 0..10 && gear in 1..3 && depth in 1..3 && size in SIZES && width in 348..492 && leading in setOf(0, 4, 8)
     }
 
     private val _state = MutableStateFlow(State())
@@ -113,13 +113,13 @@ class Teleprompter(
     suspend fun prepare(text: String, speed: Int, look: Look = Look()): String? = withContext(here) { prepareHere(text, speed, look) }
 
     private fun JSONObject.settings(s: State, speed: Int = s.speed): JSONObject = put("countdown", s.look.countdown).put("scroll", SCROLL_LINEAR)
-        .put("speed", speed).put("gear", s.look.gear).put("depth", s.look.depth).put("size", s.look.size)
+        .put("speed", speed).put("gear", s.look.gear).put("depth", s.look.depth).put("size", s.look.size).put("width", s.look.width).put("leading", s.look.leading)
 
     private suspend fun prepareHere(text: String, speed: Int, look: Look): String? {
         if (active) return "Já existe uma sessão; saia dela primeiro"
         if (!port.isReady) return "Conecte os óculos"
         busy()?.let { return it }
-        if (speed !in SPEEDS || text.isBlank() || text.length > MAX_CHARS) return "Roteiro de até $MAX_CHARS caracteres; velocidade 60–240"
+        if (speed !in SPEEDS || text.isBlank() || text.length > MAX_CHARS) return "Roteiro de até $MAX_CHARS caracteres; velocidade 80–260 palavras por minuto"
         if (!look.valid) return "Ajustes de apresentação inválidos"
         val bytes = text.toByteArray(Charsets.UTF_8)
         if (bytes.size > FileTransfer.MAX_FILE) { bytes.fill(0); return "Roteiro grande demais (${bytes.size} bytes; máximo ${FileTransfer.MAX_FILE})" }
@@ -276,7 +276,7 @@ class Teleprompter(
         val phase = _state.value.phase
         if (type !in setOf(3, 4, 5, 7) || phase !in setOf(Phase.READY, Phase.RUNNING, Phase.PAUSED)) return "Aguarde o roteiro ficar pronto ou a resposta anterior"
         if ((type == 3 && phase != Phase.READY) || (type == 4 && phase != Phase.RUNNING) || (type == 5 && phase != Phase.PAUSED)) return "Não disponível agora (${phase.label})"
-        if (speed !in SPEEDS) return "Velocidade 60–240"
+        if (speed !in SPEEDS) return "Velocidade 80–260"
         val body = JSONObject().put("did", did).put("action", 1)
         when (type) {
             3 -> body.put("total", total).settings(_state.value).put("checksum", checksum).put("pageOffset", 0).put("highLightOffset", 0)
@@ -365,7 +365,8 @@ class Teleprompter(
             FileRoute(Business.FILE, true, "18 · task"),
         )
         const val MAX_CHARS = 12_000
-        val SPEEDS = 60..240
+        /** Words per minute, the official app's range. */
+        val SPEEDS = 80..260
 
         /** UTF-8 FNV-1a, 8 hex digits (same contract as the iOS and HarmonyOS clients; distinct from the file MD5). */
         fun checksum(bytes: ByteArray): String {

@@ -32,8 +32,10 @@ object SettingsWire {
     val WAKE_DEGREES = listOf(10, 15, 20, 25, 30, 35, 40, 50, 60)
     /** The official setter clamps the angle to 0–90. */
     val WAKE_DEGREE_RANGE = 0..90
-    /** crown_switch of wakeup_config (official enum CrownWakeSwitch). */
-    val CROWN_WAKE = mapOf(0 to "desligado", 1 to "pelo giroscópio", 2 to "por toque", 3 to "modo 3 (marble)")
+    /** crown_switch of wakeup_config: the official "wake on crown rotation" page offers off, marble (3) and poke (2). */
+    val CROWN_WAKE = linkedMapOf(0 to "desligado", 3 to "modo marble", 2 to "modo poke")
+    /** Rotation direction of the crown (payload.value of crown_config): standard 0, natural 1. */
+    val CROWN_DIRECTIONS = linkedMapOf(0 to "padrão", 1 to "natural")
 
     /** Head gestures on/off keeping the mode read from the glasses (value + mode, empty data). */
     fun head(enabled: Boolean, mode: Int) = "{\"cmd\":\"head_gestures\",\"payload\":{\"value\":${if (enabled) 1 else 0},\"mode\":$mode,\"data\":\"\"}}"
@@ -52,10 +54,13 @@ object SettingsWire {
     val HEIGHTS = HEIGHT_RANGE.toList()
     val DISTANCES = DISTANCE_RANGE.toList()
 
-    /** Crown actions (official enums CrownDoubleTapAction / CrownLongPressAction); "Diário (LifeLog)" only for the double tap. */
+    /**
+     * Crown actions of the official app's common screen (CrownDoubleTapAction / CrownLongPressAction). Double-tap
+     * LifeLog (6) exists in the enum but is not confirmed for the iO, so it is not offered (a value read is kept).
+     */
     val CROWN_ACTIONS = linkedMapOf(0 to "Perguntar à IA", 1 to "Painel", 2 to "Foco", 3 to "Gravador", 4 to "Legendas", 5 to "Teleprompter",
-        6 to "Diário (LifeLog)", 8 to "To-do", 9 to "Dicas ao vivo", 7 to "Nenhuma")
-    val LONG_PRESS_ACTIONS = CROWN_ACTIONS.filterKeys { it != 6 }
+        8 to "To-do", 9 to "Dicas ao vivo", 7 to "Nenhuma")
+    val LONG_PRESS_ACTIONS = CROWN_ACTIONS
 }
 
 /** Height/distance values these glasses reported themselves (e.g. after the user picked a level in the official app). */
@@ -73,7 +78,9 @@ data class GlassesConfig(val height: Int? = null, val distance: Int? = null, val
                          val headEnabled: Boolean? = null, val headMode: Int? = null,
                          /** Screen wake (Strix OS 1.0.5.5 "wakeupConfig"): look up to wake, its angle in degrees, button press wakes. */
                          val wakeHeadup: Int? = null, val wakeDegree: Int? = null, val wakeCrown: Int? = null,
-                         val crownDirection: Int? = null) {
+                         val crownDirection: Int? = null,
+                         /** Identity fields of generalSettings (firmwareVersion, deviceType, osVersion, productModel, productCode). */
+                         val identity: String = "") {
     val hasWake get() = wakeHeadup != null && wakeDegree != null && wakeCrown != null
     val hasDisplay get() = height != null && distance != null
     val hasCrown get() = crownDouble != null && crownLongPress != null
@@ -94,9 +101,11 @@ data class GlassesConfig(val height: Int? = null, val distance: Int? = null, val
             return GlassesConfig(int(display, "height"), int(display, "distance"), int(crown, "double"), int(crown, "longPress"), at,
                 wakeup(root), root.keys().asSequence().toList().sorted().joinToString(","),
                 int(head, "enabled")?.let { it != 0 }, int(head, "mode"),
-                int(wake, "headupSwitch"), int(wake, "headupDegree"), int(wake, "crownSwitch"), int(crown, "direction"))
+                int(wake, "headupSwitch"), int(wake, "headupDegree"), int(wake, "crownSwitch"), int(crown, "direction"),
+                IDENTITY.mapNotNull { k -> root.optString(k).takeIf { it.isNotBlank() }?.let { "$k=${it.take(40)}" } }.joinToString(" · "))
         }
 
+        private val IDENTITY = listOf("productModel", "productCode", "deviceType", "osVersion", "firmwareVersion")
         private val WAKE_KEYS = setOf("voiceWakeup", "voice_wakeup", "ai_voice_wakeup", "voiceWakeUp", "aiVoiceWakeup", "wakeup", "wakeUp")
 
         /** First boolean-ish value under a wake-up key, searched one level deep. */
@@ -175,6 +184,7 @@ class GlassesSettings(
         _state.value = _state.value.copy(config = config, original = original, details = details)
         DiagnosticLog.i("AJUSTES", "chaves dos ajustes: ${config.keys.take(300)}")
         DiagnosticLog.i("AJUSTES", "valores: $details")
+        if (config.identity.isNotEmpty()) DiagnosticLog.i("AJUSTES", "identificação: ${config.identity}")
         note(if (config.hasDisplay || config.hasCrown) "Ajustes lidos" else "Os óculos não informaram altura/distância nem o duplo toque")
         return null
     }
@@ -212,19 +222,22 @@ class GlassesSettings(
         done(writeCrown(if (on) 8 else original?.takeIf { it != 8 } ?: 7, null))
     }
 
-    /** Crown actions (double tap / long press), from the official app's list; the direction is kept as read. */
-    fun setCrown(double: Int? = null, longPress: Int? = null, done: (String?) -> Unit = {}) = scope.launch { done(writeCrown(double, longPress)) }
+    /** Crown actions (double tap / long press) and rotation direction; what is not changed is sent back as read. */
+    fun setCrown(double: Int? = null, longPress: Int? = null, direction: Int? = null, done: (String?) -> Unit = {}) =
+        scope.launch { done(writeCrown(double, longPress, direction)) }
 
-    private suspend fun writeCrown(double: Int?, longPress: Int?): String? {
+    private suspend fun writeCrown(double: Int?, longPress: Int?, direction: Int? = null): String? {
         if (double != null && double !in SettingsWire.CROWN_ACTIONS) return "Ação inválida"
         if (longPress != null && longPress !in SettingsWire.LONG_PRESS_ACTIONS) return "Ação inválida"
+        if (direction != null && direction !in SettingsWire.CROWN_DIRECTIONS) return "Sentido inválido"
         val error = write("crown_config") { c ->
             if (!c.hasCrown) return@write null
-            SettingsWire.crown(double ?: c.crownDouble!!, longPress ?: c.crownLongPress!!, c.crownDirection)
+            SettingsWire.crown(double ?: c.crownDouble!!, longPress ?: c.crownLongPress!!, direction ?: c.crownDirection)
         }
         if (error != null) return error
         val c = _state.value.config
-        val ok = (double == null || c.crownDouble == double) && (longPress == null || c.crownLongPress == longPress)
+        val ok = (double == null || c.crownDouble == double) && (longPress == null || c.crownLongPress == longPress) &&
+            (direction == null || c.crownDirection == direction)
         return if (ok) null else "Os óculos não aplicaram (relido: duplo toque ${c.crownDouble ?: "?"}, segurar ${c.crownLongPress ?: "?"})".also { note(it) }
     }
 
@@ -296,7 +309,7 @@ class GlassesSettings(
             error = write("display_config") { c -> if (c.hasDisplay) SettingsWire.display(o.height!!, o.distance!!) else null }
         if (error == null && o.hasWake && o.wakeDegree in SettingsWire.WAKE_DEGREE_RANGE)
             error = write("wakeup_config") { c -> if (c.hasWake) SettingsWire.wake(o.wakeHeadup!!, o.wakeDegree!!, o.wakeCrown!!) else null }
-        if (error == null && o.hasCrown && o.crownDouble in SettingsWire.CROWN_ACTIONS && o.crownLongPress in SettingsWire.LONG_PRESS_ACTIONS)
+        if (error == null && o.hasCrown && (o.crownDouble in SettingsWire.CROWN_ACTIONS || o.crownDouble == 6) && o.crownLongPress in SettingsWire.LONG_PRESS_ACTIONS)
             error = write("crown_config") { c -> if (c.hasCrown) SettingsWire.crown(o.crownDouble!!, o.crownLongPress!!, c.crownDirection) else null }
         done(error)
     }

@@ -33,9 +33,9 @@ Formato e faixas conferidos no código do app oficial 1.0.7 (`glasses_commands.d
 | --- | --- | --- |
 | Ler | 15/4 `request_general_settings` | — |
 | Altura do texto e profundidade | 15/5 `display_config`, `data = {"height":h,"distance":d}` | altura 1–6, profundidade 1–3 (faixas do app oficial) |
-| Olhar para cima acende a tela, ângulo, botão | 15/5 `wakeup_config`, `data = {"headup_switch":0\|1,"headup_degree":g,"crown_switch":c}` | ângulo 0–90°; `crown_switch` 0 desligado, 1 giroscópio, 2 toque, 3 “marble”. A leitura vem em camelCase (`wakeupConfig.headupSwitch`), a escrita em snake_case: até a rev. 12 o app escrevia em camelCase, o que provavelmente não funcionava |
+| Olhar para cima acende a tela, ângulo, coroa | 15/5 `wakeup_config`, `data = {"headup_switch":0\|1,"headup_degree":g,"crown_switch":c}` | ângulo 0–90°; `crown_switch` (acender girando a coroa) 0 desligado, 3 marble, 2 poke — as opções da tela oficial (1 só é lido). A leitura vem em camelCase (`wakeupConfig.headupSwitch`), a escrita em snake_case: até a rev. 12 o app escrevia em camelCase, o que provavelmente não funcionava |
 | Gestos de cabeça | 15/5 `head_gestures`, `payload = {"value":1\|0,"mode":<lido>,"data":""}` | liga/desliga |
-| Botão (coroa) | 15/5 `crown_config`, `payload.value = sentido` (como foi lido), `data = {"double":a,"longPress":b}` | ações: 0 perguntar à IA, 1 painel, 2 foco, 3 gravador, 4 legendas, 5 teleprompter, 6 diário (só duplo toque), 7 nenhuma, 8 To-do, 9 dicas ao vivo. Até a rev. 12 o sentido ia dentro de `data` |
+| Botão (coroa) | 15/5 `crown_config`, `payload.value = sentido` (0 padrão, 1 natural), `data = {"double":a,"longPress":b}` | ações: 0 perguntar à IA, 1 painel, 2 foco, 3 gravador, 4 legendas, 5 teleprompter, 7 nenhuma, 8 To-do, 9 dicas ao vivo. O 6 (diário) existe no app oficial, mas não está confirmado no iO: só é mantido se já estiver configurado. Até a rev. 12 o sentido ia dentro de `data` |
 | “Hey RayNeo” | 15/16 `set_ai_voice_wakeup`, `mode` 1 liga, 0 desliga | — |
 | Hora dos óculos | 15/5 `sync_time`, `data = {"utc":segundos,"offset":segundos,"timezone":"America/Sao_Paulo"}` | enviado a cada conexão |
 

@@ -197,6 +197,7 @@ class VoiceAssistant(
         send(2, Commands.recorder(false))
         if (CLOSE.matches(question.trim().lowercase())) { endRound("Comando de encerramento reconhecido", sendExit = true); return }
         followupEligible = true
+        send(9, Commands.SPEECH_THINKING)   // "thinking" on the glasses while the model answers
         val reply = try { answer(question) } catch (e: Exception) {
             if (token == epoch) {
                 val reason = e.message ?: "Falha na IA"
@@ -221,6 +222,7 @@ class VoiceAssistant(
 
     private suspend fun sendAnswer(token: Long, text: String, question: String): Boolean {
         val query = Commands.chunks(question, 16)[0]
+        send(9, Commands.SPEECH_RESPONDING)
         for (chunk in Commands.chunks(text, 24)) {
             if (token != epoch) return false
             send(32, Commands.answerChunk(chunk, sid, query, System.currentTimeMillis()))?.let {

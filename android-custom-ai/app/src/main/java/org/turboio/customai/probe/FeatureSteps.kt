@@ -31,12 +31,12 @@ object FeatureSteps {
 
     fun all(app: TurboApp): List<FeatureStep> = listOf(
         FeatureStep("F1", "Texto nas lentes (3 formatos)",
-            "O app mostra o texto de teste três vezes: A (formato antigo, repetido a cada 2 s — o padrão atual), B (legenda do app oficial 1.0.7, " +
-                "layout título) e C (legenda do app oficial 1.0.7, layout clássico). Anote quais apareceram nas lentes e se ficaram na tela.",
+            "O app mostra o texto de teste três vezes: A (formato antigo, repetido a cada 2 s — o padrão atual), B (sessão de legendas do app " +
+                "oficial: 19/1 → 19/2 → texto, layout clássico) e C (a mesma sessão, layout título). Anote quais apareceram nas lentes e se ficaram na tela.",
             "Quais letras apareceram (A, B, C)? Os acentos (ã, ç, é) apareceram certos? Escreva na observação.", timeoutSeconds = 120) { run ->
             ready(app)?.let { return@FeatureStep it }
             val base = app.settings.displaySettings().copy(fontSize = 2, position = "center", maxLines = 5, lingerSeconds = 6)
-            val variants = listOf(Triple("A", "legacy", true), Triple("B", "caption", true), Triple("C", "classic", true))
+            val variants = listOf(Triple("A", "legacy", true), Triple("B", "session_classic", true), Triple("C", "session_title", true))
             val results = variants.map { (letter, format, resend) ->
                 run.cue("Formato $letter: olhe as lentes")
                 "$letter ($format${if (resend) ", repetido" else ", uma vez"}): " +

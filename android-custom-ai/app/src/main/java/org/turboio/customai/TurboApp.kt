@@ -153,6 +153,14 @@ class TurboApp : Application() {
         probe.addFinishedListener { if (settings.ambientSettings().glassesMenu) ambient.armGlassesMenu() }
         session.addBusinessListener { business, envelope ->
             if (business == org.turboio.customai.protocol.Business.LAUNCHER || business == org.turboio.customai.protocol.Business.AI_ASSISTANT) ambient.onGlasses(business, envelope)
+            // The glasses ask for the weather (15/19 current_weather_request / weather_request): answered with a fresh reading.
+            if (business == org.turboio.customai.protocol.Business.LAUNCHER && envelope.type == 19 && settings.weatherOn) {
+                val cmd = runCatching { org.json.JSONObject(envelope.jsonText()).optString("cmd") }.getOrDefault("")
+                if (cmd == "current_weather_request" || cmd == "weather_request") {
+                    DiagnosticLog.i("TEMPO", "óculos pediram o tempo ($cmd)")
+                    runCatching { org.turboio.customai.device.WeatherWorker.now(this) }
+                }
+            }
         }
         voice = VoiceAssistant(session, scope, random, ::speechInput, { q -> voiceAnswer(q) }, settings::voiceSettings, { !display.active && !probe.busy && !teleprompter.active })
         var wasReady = false

@@ -58,7 +58,7 @@ Dark interface with an emerald accent: a home screen with the glasses' status, s
 
 | Feature | Status |
 | --- | --- |
-| BLE discovery, guest authentication, system bond, battery and state readout | ✅ proven on hardware |
+| BLE discovery (shows the advertised RayNeo model; only the iO is accepted), guest authentication, system bond, battery and state readout | ✅ proven on hardware |
 | Automatic reconnection with backoff, foreground service | ✅ on hardware: stable for 30 min after one early reconnect |
 
 ### AI assistant and lens display
@@ -67,7 +67,7 @@ Dark interface with an emerald accent: a home screen with the glasses' status, s
 | --- | --- |
 | Providers: OpenAI, Gemini, Anthropic, any OpenAI-compatible endpoint (model, endpoint, instructions, token limit, timeout, conversation context) | implemented · request formats and real endpoints tested |
 | Short pt-BR answers: Markdown/emoji cleanup, paging, optional accent stripping | implemented · tested |
-| Answers on the lenses (text session), with text size, position and line count | implemented · hardware pending |
+| Answers on the lenses, with text size, position and line count; optional official caption session (19/1 → 19/2 → text) | implemented · text shows once with the legacy format; session format hardware pending |
 | Voice assistant triggered on the glasses. **Glasses mic:** Gemini (same key as the AI), Deepgram Nova-3 (same key as ambient recording), OpenAI (Whisper / gpt-4o-transcribe) or Google Cloud Speech-to-Text. **Phone mic:** Android's built-in recognizer, no key needed | implemented · flow tested with synthetic Opus audio · hardware pending |
 | "Hey RayNeo" wake word, turned on and off with the official app's command | implemented · hardware pending |
 | Free-phrase tasks: "I need to buy bread tomorrow" becomes a dated pending item | implemented · tested |
@@ -134,7 +134,7 @@ export ANDROID_HOME=/path/to/Android/sdk
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 161 unit tests with no lint errors.
+Requirements: JDK 17, Android SDK 35 (minSdk 26). The current build passes 163 unit tests with no lint errors.
 
 ## Documentation
 

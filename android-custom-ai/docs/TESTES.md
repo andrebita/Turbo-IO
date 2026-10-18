@@ -306,6 +306,23 @@ que ele explica e o que mudou:
 Ainda em aberto: o fluxo das Legendas (19/1 → 19/2 antes do texto?), a falta de 21/34 no aceno (lado dos óculos),
 `width`/`leading` do teleprompter e o “canal rápido” que o app oficial prepara antes de enviar o arquivo.
 
+#### Rev. 14: auditoria por modelo (só o que vale para o RayNeo iO)
+
+O app oficial atende sete modelos. O iO é `deviceType` 6 (VENUS) ou 7 (VENUSINTL) no anúncio BLE (fabricante 0x5716) e usa
+o perfil de voz “RayNeoS3” (sem leitura em voz alta, sem nova rodada automática). Câmera, foto, VQA e Live AI ficam fora.
+
+| Recurso | Mudança |
+| --- | --- |
+| Identificação | a busca mostra o modelo anunciado; outro modelo RayNeo não é conectado; a leitura de ajustes registra `productModel`, `productCode`, `deviceType`, `osVersion` e `firmwareVersion` |
+| Texto nas lentes | formatos “sessão de legendas”: 19/1 (início pelo celular, áudio do celular) → óculos 19/2 código 1 → 19/5 com o `sid` dos óculos. Sem esse início, 19/7 só configura e os óculos mostram a introdução. F1 compara A antigo × B sessão clássica × C sessão título |
+| Teleprompter | padrões do app oficial (contagem 3 s, nível 1, profundidade 1, texto 18, largura 492, entrelinha 4); velocidade 80–260 palavras/min |
+| Botão | sentido padrão/natural (`payload.value` 0/1); “diário” no duplo toque não é oferecido (não confirmado no iO); acender girando a coroa: desligado, marble (3) ou poke (2), como a tela oficial |
+| Voz | 13/9 “pensando” enquanto a IA responde e “respondendo” antes da resposta, como o app oficial faz no iO; 13/6 (voz alta) não é usado, porque o iO não tem |
+| Tempo | os óculos podem pedir o tempo (15/19 `current_weather_request`); o app responde com uma leitura nova |
+
+Ainda não verificado: se o iO 1.0.5.5 aceita o roteiro pelo BLE no canal 17 (o app oficial usa Bluetooth clássico/SPP,
+com BLE só como reserva) e se os outros cartões do painel e os estilos minimalistas 1/2 aparecem no iO.
+
 ### Recursos novos da 0.4.0 (conferir nas lentes)
 
 Cada item só conta como aprovado com o efeito visto nos óculos. Exporte o log (Diagnóstico) depois.

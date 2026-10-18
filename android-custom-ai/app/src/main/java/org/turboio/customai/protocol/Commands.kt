@@ -23,12 +23,14 @@ object Business {
     /** Outbound allow-list: business -> envelope types we may send. Everything else is refused. */
     val OUTBOUND: Map<Int, Set<Int>> = mapOf(
         // 162 = LifeLog A2 (start), 166 = A6 (exit), 168 = A8 (realtime page flag)
-        AI_ASSISTANT to setOf(2, 5, 7, 12, 32, 162, 166, 168),
+        // 9 = speech status (1 listening, 2 responding, 3 thinking), as the official app sends to the iO
+        AI_ASSISTANT to setOf(2, 5, 7, 9, 12, 32, 162, 166, 168),
         // 4 = read general settings; 5 = display/crown/wakeup config and sync_time with the official ranges only;
         // 20 = life_log_guide / life_log_switch (see contentAllowed)
         // 16 = set_ai_voice_wakeup (on/off); 18 = weather / dashboard (see contentAllowed)
         LAUNCHER to setOf(1, 4, 5, 16, 18, 20),
-        SUBTITLE to setOf(3, 5, 7),
+        // 1 = start a phone-captured caption session (exact form only), 3 stop, 5 text, 7 display config
+        SUBTITLE to setOf(1, 3, 5, 7),
         // enable(14), start/ack(1), stop/ack(4), acks(8, 9, 11) — no delete/format/file commands
         RECORDING to setOf(1, 4, 8, 9, 11, 14),
         // 2 = add/modify ONE to-do (eventType 1); no batch, delete, schedule or binary types
@@ -52,7 +54,10 @@ object Business {
         if (business == LAUNCHER && type == 16) return json == WAKEUP_ON || json == WAKEUP_OFF
         if (business == LAUNCHER && type == 18) return launcher18Allowed(cmd, json)
         if (business == NOTIFICATION) return notificationAllowed(type, json)
+        if (business == AI_ASSISTANT && type == 9) return json in setOf("{\"rc\":1}", "{\"rc\":2}", "{\"rc\":3}")
         if (business == TELEPROMPTER && type == 1) return json == TELEPROMPTER_LIST_EMPTY
+        if (business == SUBTITLE && type == 1) return Regex("^\\{\"sid\":\"([0-9a-f]{32})\"").find(json)?.groupValues?.get(1)
+            ?.let { json == Commands.captionStart(it) } ?: false
         if (business == TELEPROMPTER) return runCatching { org.json.JSONObject(json) }.getOrNull()?.let { j ->
             UUID.matches(j.optString("did")) && j.optInt("action") in 1..2
         } ?: false
@@ -119,7 +124,7 @@ object Business {
             "wakeup_config" -> keys == setOf("headup_switch", "headup_degree", "crown_switch") && data.optInt("headup_switch", -1) in 0..1 &&
                 data.optInt("crown_switch", -1) in 0..3 && data.optInt("headup_degree", -1) in 0..90 && payload.optInt("value", -1) == 0
             // value = rotation direction, sent back as read.
-            "crown_config" -> keys == setOf("double", "longPress") && payload.optInt("value", -1) in 0..8 &&
+            "crown_config" -> keys == setOf("double", "longPress") && payload.optInt("value", -1) in 0..1 &&
                 data.optInt("double", -1) in crownActions && data.optInt("longPress", -1) in crownActions - 6
             "sync_time" -> keys == setOf("utc", "offset", "timezone") && data.optLong("utc", -1) in 1_600_000_000L..4_000_000_000L &&
                 data.optInt("offset", 99_999) in -14 * 3600..14 * 3600 && Regex("^[A-Za-z0-9_+/-]{1,40}$").matches(data.optString("timezone")) &&
@@ -190,7 +195,15 @@ object Commands {
 
     /** Text formats for 19/5: "legacy" (HarmonyOS client, older firmware), "official" (template of the official app's
      *  own subtitle preview on 1.0.5.5/1.0.6: final text, mode 0), "bilingual" (official with the translation line). */
-    val TEXT_FORMATS = listOf("legacy", "official", "bilingual", "caption", "classic")
+    val TEXT_FORMATS = listOf("legacy", "official", "bilingual", "caption", "classic", "session_classic", "session_title")
+
+    /** "session_*": the official app's phone-started caption session (19/1 → glasses 19/2 → 19/5), classic or title layout. */
+    fun isSession(format: String) = format.startsWith("session_")
+    fun sessionTextFormat(format: String) = if (format == "session_title") "caption" else "classic"
+
+    /** 19/1 requestStartTranslate as the official app sends it when the phone captures the audio (no glasses microphone). */
+    fun captionStart(sid: String): String = "{\"sid\":${sid(sid)},\"trigger\":0,\"code\":1,\"audio_source\":\"phone\",\"settings\":" +
+        "{\"mode\":\"classic\",\"source_language\":\"pt-BR\",\"target_language\":\"en-US\",\"save_audio\":false,\"direction\":\"around\"}}"
 
     /**
      * "caption" / "classic": the official app 1.0.7's caption message (mode 3 = title layout, 1 = classic), status 0
@@ -212,6 +225,9 @@ object Commands {
     // --- AI_ASSISTANT(13): voice turn ---
     fun recorder(start: Boolean): String = if (start) "{\"rc\":1}" else "{\"rc\":2}"
     const val EXIT = "{\"rc\":1}"
+    /** 13/9 speech status of the official app (SpeechStatus): 3 thinking, 2 responding. */
+    const val SPEECH_THINKING = "{\"rc\":3}"
+    const val SPEECH_RESPONDING = "{\"rc\":2}"
     const val EOF = "{}"
 
     fun transcript(value: String, final: Boolean): String {

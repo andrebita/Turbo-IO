@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.turboio.customai.ble.BusinessListener
@@ -203,6 +204,29 @@ class VoiceAndLensTest {
         assertEquals("Olá, tudo bem?", content.getString("source_transcript")); assertEquals("", content.getString("target_translation"))
         assertEquals(1, content.getInt("label")); assertEquals("", content.getString("keyword_info"))
         assertEquals(1, JSONObject(org.turboio.customai.protocol.Commands.displayText(sid, "x", "classic")).getInt("mode"))
+    }
+
+    /** Official phone-started session: 19/7 → 19/8, 19/1 → glasses 19/2 (code 1, their sid) → 19/5 with that sid, mode 1. */
+    @Test fun lensDisplaySessionFormatStartsCaptionSession() = runTest {
+        val port = FakePort()
+        val display = LensDisplay(port, this, fixedRandom)
+        val sid = "5a".repeat(16); val theirs = "0123456789abcdef".repeat(2)
+        display.show("Olá", DisplaySettings(lingerSeconds = 2, textFormat = "session_classic"))
+        runCurrent(); port.glasses(19, 8, "{\"sid\":\"$sid\",\"code\":1}"); runCurrent()
+        assertEquals(listOf("19/7", "19/1"), port.trace())
+        val start = JSONObject(port.sent[1].second.jsonText())
+        assertEquals("phone", start.getString("audio_source")); assertEquals("classic", start.getJSONObject("settings").getString("mode"))
+        port.glasses(19, 2, "{\"sid\":\"$theirs\",\"code\":1,\"final_settings\":{}}"); runCurrent()
+        advanceTimeBy(5_000); runCurrent()
+        val text = port.sent.filter { it.second.type == 5 }.map { JSONObject(it.second.jsonText()) }
+        assertTrue(text.isNotEmpty()); assertTrue(text.all { it.getString("sid") == theirs && it.getInt("mode") == 1 })
+        assertEquals(theirs, JSONObject(port.sent.last().second.jsonText()).getString("sid"))     // 19/3 closes their session
+        assertFalse(org.turboio.customai.protocol.Business.contentAllowed(19, 1, "{\"sid\":\"$sid\",\"trigger\":1}"))
+    }
+
+    @Test fun voiceSpeechStatusGate() {
+        assertTrue(org.turboio.customai.protocol.Business.contentAllowed(13, 9, org.turboio.customai.protocol.Commands.SPEECH_THINKING))
+        assertFalse(org.turboio.customai.protocol.Business.contentAllowed(13, 9, "{\"rc\":4}"))
     }
 
     @Test fun lensDisplayReportsMissingAck() = runTest {
